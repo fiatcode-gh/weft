@@ -268,7 +268,9 @@ func (s *SearchView) View() string {
 	}
 	b.WriteString("\n")
 	b.WriteString(searchFaint.Render("↑/↓ select · enter search/open · esc cancel"))
-	return searchBorder.Render(b.String())
+	// Width includes horizontal padding (2 cells each side) but excludes the
+	// border, so adding 4 keeps the text area at exactly `inner` cells.
+	return searchBorder.Width(inner + 4).Render(b.String())
 }
 
 func shortPath(p string) string {

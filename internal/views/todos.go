@@ -139,5 +139,5 @@ func (t *Todos) View() string {
 	}
 	sb.WriteString("\n")
 	sb.WriteString(todosFaint.Render("↑/↓ select · t cycle filter · enter open · esc back"))
-	return todosBorder.Render(sb.String())
+	return todosBorder.Width(todosInnerWidth + 4).Render(sb.String())
 }

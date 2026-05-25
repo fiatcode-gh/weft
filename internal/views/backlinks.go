@@ -99,5 +99,5 @@ func (b *Backlinks) View() string {
 	}
 	sb.WriteString("\n")
 	sb.WriteString(blFaint.Render("↑/↓ select · enter open · b or esc close"))
-	return blBorder.Render(sb.String())
+	return blBorder.Width(inner + 4).Render(sb.String())
 }

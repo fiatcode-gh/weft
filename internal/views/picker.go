@@ -235,7 +235,7 @@ func (p *Picker) View() string {
 		b.WriteString("\n")
 		b.WriteString("\n")
 		b.WriteString(pickerFaint.Render("↑/↓ select · enter open · esc cancel"))
-		return pickerBorder.Render(b.String())
+		return pickerBorder.Width(inner + 4).Render(b.String())
 	}
 
 	start, end := p.scrollWindow()
@@ -270,7 +270,9 @@ func (p *Picker) View() string {
 	}
 	b.WriteString("\n")
 	b.WriteString(pickerFaint.Render("↑/↓ select · enter open · esc cancel"))
-	return pickerBorder.Render(b.String())
+	// Width(inner) locks the panel so the rounded border doesn't resize when
+	// a longer match scrolls into view.
+	return pickerBorder.Width(inner + 4).Render(b.String())
 }
 
 // layoutPickerRow returns the plain (unstyled) row layout used for the
