@@ -5,12 +5,18 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime/debug"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"git.fiatcode.dev/fiatcode/peekseq/internal/render"
 	"git.fiatcode.dev/fiatcode/peekseq/internal/views"
 )
+
+// Version is set at build time via -ldflags "-X main.Version=...". For users
+// installing via `go install`, the actual module version is read from
+// runtime/debug.BuildInfo and overrides this default.
+var Version = "dev"
 
 // debugLogPath returns the path Bubble Tea should write debug output to, or
 // empty to disable. Enabled by setting PEEKSEQ_DEBUG=1 (writes to ./peekseq.log).
@@ -21,10 +27,32 @@ func debugLogPath() string {
 	return ""
 }
 
+// resolvedVersion returns the version to print for -version. Prefers an
+// ldflags-injected value; falls back to the module version captured by `go
+// install` / `go build`; falls back to "dev" for raw local builds.
+func resolvedVersion() string {
+	if Version != "dev" {
+		return Version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok {
+		v := info.Main.Version
+		if v != "" && v != "(devel)" {
+			return v
+		}
+	}
+	return Version
+}
+
 func main() {
 	defaultGraph := os.ExpandEnv("$HOME/Documents/fiat-codex")
 	graphFlag := flag.String("graph", "", "path to Logseq graph (overrides $PEEKSEQ_GRAPH and default)")
+	versionFlag := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Println(resolvedVersion())
+		return
+	}
 
 	graphPath := resolveGraphPath(*graphFlag, os.Getenv("PEEKSEQ_GRAPH"), defaultGraph)
 

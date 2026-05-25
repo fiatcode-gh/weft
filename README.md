@@ -23,7 +23,8 @@ go build ./cmd/peekseq
 ```bash
 peekseq                              # uses ~/Documents/fiat-codex by default
 peekseq --graph /path/to/graph       # explicit path
-PEEKSEQ_GRAPH=/path/to/graph peekseq   # via env var
+PEEKSEQ_GRAPH=/path/to/graph peekseq # via env var
+peekseq -version                     # print version and exit
 ```
 
 Graph path resolution: `--graph` flag > `$PEEKSEQ_GRAPH` > `~/Documents/fiat-codex`.

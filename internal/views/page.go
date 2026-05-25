@@ -60,7 +60,8 @@ func (p *PageView) SetSize(w, h int) {
 	}
 }
 
-// CycleLink moves the cursor to the next/previous wiki-link.
+// CycleLink moves the cursor to the next/previous wiki-link, scrolling the
+// viewport so the new cursor target is visible.
 // dir=+1 forwards, dir=-1 backwards.
 func (p *PageView) CycleLink(dir int) {
 	if len(p.result.Links) == 0 {
@@ -75,6 +76,31 @@ func (p *PageView) CycleLink(dir int) {
 	} else {
 		p.cursor = (p.cursor + dir + len(p.result.Links)) % len(p.result.Links)
 	}
+	p.scrollToCursor()
+}
+
+// scrollToCursor adjusts the viewport's YOffset so the link at p.cursor is
+// inside the visible window. Links already in view leave the offset
+// untouched; off-screen links are centred vertically in the viewport.
+func (p *PageView) scrollToCursor() {
+	if p.cursor < 0 || p.cursor >= len(p.result.Links) {
+		return
+	}
+	l := p.result.Links[p.cursor]
+	if l.Start < 0 || l.Start > len(p.result.Styled) {
+		return
+	}
+	row := strings.Count(p.result.Styled[:l.Start], "\n")
+	top := p.vp.YOffset
+	bottom := top + p.vp.Height - 1
+	if row >= top && row <= bottom {
+		return
+	}
+	target := row - p.vp.Height/2
+	if target < 0 {
+		target = 0
+	}
+	p.vp.SetYOffset(target)
 }
 
 // FollowCursor returns the link target under the cursor, or "" if none.
