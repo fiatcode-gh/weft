@@ -106,9 +106,10 @@ func (p *PageView) View() string {
 }
 
 func (p *PageView) load() {
+	p.err = nil
+	p.result = render.Result{}
 	meta, ok := p.idx.ByName[p.page]
 	if !ok {
-		p.result = render.Result{}
 		return
 	}
 	b, err := os.ReadFile(meta.Path)
@@ -123,11 +124,4 @@ func (p *PageView) load() {
 	}
 	p.result = res
 	p.vp.SetContent(p.result.Styled)
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
