@@ -1,4 +1,4 @@
-module github.com/fiatcode/logseq-tui
+module github.com/fiatcode/peekseq
 
 go 1.26.3
 

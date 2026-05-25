@@ -60,7 +60,7 @@ func BuildIndex(graphPath string) (*Index, error) {
 	for _, p := range idx.Pages {
 		body, err := os.ReadFile(p.Path)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "lstui: skipping %s: %v\n", p.Path, err)
+			fmt.Fprintf(os.Stderr, "peekseq: skipping %s: %v\n", p.Path, err)
 			continue
 		}
 		s := string(body)

@@ -1,4 +1,4 @@
-# lstui — a read-only Logseq TUI
+# peekseq — a read-only Logseq TUI
 
 A terminal browser for a local Logseq graph. Recency-sorted page picker, ripgrep-backed full-text search, backlinks, and a TODO dashboard. Renders pages with hanging-indent bullets, coloured workflow markers (TODO/DOING/LATER/WAITING/DONE/CANCELED/NOW), and highlighted wiki-links you can step through. Never writes to the graph.
 
@@ -7,26 +7,26 @@ A terminal browser for a local Logseq graph. Recency-sorted page picker, ripgrep
 Requires Go 1.22+ and [ripgrep](https://github.com/BurntSushi/ripgrep) on PATH.
 
 ```bash
-go install github.com/fiatcode/logseq-tui/cmd/lstui@latest
+go install github.com/fiatcode/peekseq/cmd/peekseq@latest
 ```
 
 Or from source:
 
 ```bash
-git clone https://github.com/fiatcode/logseq-tui
-cd logseq-tui
-go build ./cmd/lstui
+git clone https://github.com/fiatcode/peekseq
+cd peekseq
+go build ./cmd/peekseq
 ```
 
 ## Usage
 
 ```bash
-lstui                              # uses ~/Documents/fiat-codex by default
-lstui --graph /path/to/graph       # explicit path
-LSTUI_GRAPH=/path/to/graph lstui   # via env var
+peekseq                              # uses ~/Documents/fiat-codex by default
+peekseq --graph /path/to/graph       # explicit path
+PEEKSEQ_GRAPH=/path/to/graph peekseq   # via env var
 ```
 
-Graph path resolution: `--graph` flag > `$LSTUI_GRAPH` > `~/Documents/fiat-codex`.
+Graph path resolution: `--graph` flag > `$PEEKSEQ_GRAPH` > `~/Documents/fiat-codex`.
 
 ## Keys
 
@@ -58,10 +58,10 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 
 | Variable        | Effect                                                                            |
 |-----------------|-----------------------------------------------------------------------------------|
-| `LSTUI_GRAPH`   | Default graph path (overridden by `--graph`).                                     |
-| `LSTUI_STYLE`   | Force a Glamour markdown style (`dark`, `light`, `ascii`, `notty`). Default `dark`. |
+| `PEEKSEQ_GRAPH`   | Default graph path (overridden by `--graph`).                                     |
+| `PEEKSEQ_STYLE`   | Force a Glamour markdown style (`dark`, `light`, `ascii`, `notty`). Default `dark`. |
 | `NO_COLOR`      | Honoured: forces `notty` rendering, no ANSI styling anywhere.                     |
-| `LSTUI_DEBUG=1` | Mirror Bubble Tea events to `./lstui.log`. Useful when reporting bugs.            |
+| `PEEKSEQ_DEBUG=1` | Mirror Bubble Tea events to `./peekseq.log`. Useful when reporting bugs.            |
 
 ## Scope
 

@@ -10,7 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sahilm/fuzzy"
 
-	"github.com/fiatcode/logseq-tui/internal/graph"
+	"github.com/fiatcode/peekseq/internal/graph"
 )
 
 type pickerChoice struct {
@@ -50,7 +50,7 @@ func (p *Picker) SetSize(w, h int) { p.width, p.height = w, h }
 
 // pickerChoices returns the picker candidate list sorted with the most
 // recently modified files first. Only real on-disk pages and journals
-// appear; the picker is read-only just like the rest of lstui and won't
+// appear; the picker is read-only just like the rest of peekseq and won't
 // invent rows for files that don't exist yet.
 func pickerChoices(idx *graph.Index) []pickerChoice {
 	seen := make(map[string]struct{}, len(idx.Pages))

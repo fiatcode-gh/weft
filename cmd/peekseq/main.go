@@ -8,37 +8,37 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/fiatcode/logseq-tui/internal/render"
-	"github.com/fiatcode/logseq-tui/internal/views"
+	"github.com/fiatcode/peekseq/internal/render"
+	"github.com/fiatcode/peekseq/internal/views"
 )
 
 // debugLogPath returns the path Bubble Tea should write debug output to, or
-// empty to disable. Enabled by setting LSTUI_DEBUG=1 (writes to ./lstui.log).
+// empty to disable. Enabled by setting PEEKSEQ_DEBUG=1 (writes to ./peekseq.log).
 func debugLogPath() string {
-	if os.Getenv("LSTUI_DEBUG") != "" {
-		return "lstui.log"
+	if os.Getenv("PEEKSEQ_DEBUG") != "" {
+		return "peekseq.log"
 	}
 	return ""
 }
 
 func main() {
 	defaultGraph := os.ExpandEnv("$HOME/Documents/fiat-codex")
-	graphFlag := flag.String("graph", "", "path to Logseq graph (overrides $LSTUI_GRAPH and default)")
+	graphFlag := flag.String("graph", "", "path to Logseq graph (overrides $PEEKSEQ_GRAPH and default)")
 	flag.Parse()
 
-	graphPath := resolveGraphPath(*graphFlag, os.Getenv("LSTUI_GRAPH"), defaultGraph)
+	graphPath := resolveGraphPath(*graphFlag, os.Getenv("PEEKSEQ_GRAPH"), defaultGraph)
 
 	if _, err := exec.LookPath("rg"); err != nil {
-		fmt.Fprintln(os.Stderr, "lstui: ripgrep (rg) not found on PATH — install it (https://github.com/BurntSushi/ripgrep) and try again.")
+		fmt.Fprintln(os.Stderr, "peekseq: ripgrep (rg) not found on PATH — install it (https://github.com/BurntSushi/ripgrep) and try again.")
 		os.Exit(2)
 	}
 	if _, err := os.Stat(graphPath); err != nil {
-		fmt.Fprintf(os.Stderr, "lstui: graph path %q is not accessible: %v\n", graphPath, err)
+		fmt.Fprintf(os.Stderr, "peekseq: graph path %q is not accessible: %v\n", graphPath, err)
 		os.Exit(2)
 	}
 
 	if path := debugLogPath(); path != "" {
-		if f, err := tea.LogToFile(path, "lstui"); err == nil {
+		if f, err := tea.LogToFile(path, "peekseq"); err == nil {
 			defer f.Close()
 		}
 	}
@@ -50,7 +50,7 @@ func main() {
 	app := views.New(graphPath)
 
 	if _, err := tea.NewProgram(app, tea.WithAltScreen()).Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "lstui: %v\n", err)
+		fmt.Fprintf(os.Stderr, "peekseq: %v\n", err)
 		os.Exit(1)
 	}
 }

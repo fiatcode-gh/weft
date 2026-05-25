@@ -8,7 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/fiatcode/logseq-tui/internal/graph"
+	"github.com/fiatcode/peekseq/internal/graph"
 )
 
 var (
@@ -236,12 +236,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (a *App) View() string {
 	if a.loadErr != nil {
-		return splashBold.Render(fmt.Sprintf("lstui — failed to index %s", a.graphPath)) +
+		return splashBold.Render(fmt.Sprintf("peekseq — failed to index %s", a.graphPath)) +
 			"\n\n" + a.loadErr.Error() +
 			"\n\n" + splashFaint.Render("R to retry · q to quit")
 	}
 	if a.page == nil {
-		return splashBold.Render("lstui") +
+		return splashBold.Render("peekseq") +
 			"\n\n" + splashFaint.Render(fmt.Sprintf("Loading %s ...", a.graphPath)) +
 			"\n\n" + splashFaint.Render("q to quit")
 	}

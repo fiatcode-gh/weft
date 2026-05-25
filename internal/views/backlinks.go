@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/fiatcode/logseq-tui/internal/graph"
+	"github.com/fiatcode/peekseq/internal/graph"
 )
 
 type Backlinks struct {
