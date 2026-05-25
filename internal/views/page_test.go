@@ -149,6 +149,8 @@ func TestPageViewScrollIndicatorMid(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
 	idx := loadFixture(t)
+	// Small viewport against Alpha's ~10 styled lines so a single
+	// HalfPageDown from the top lands at a non-boundary scroll position.
 	pv := NewPageView(idx, "Alpha", 80, 5)
 
 	pv.GotoTop()
@@ -161,5 +163,9 @@ func TestPageViewScrollIndicatorMid(t *testing.T) {
 	}
 	if !matched {
 		t.Errorf("mid-scroll: want NN%% (1-2 digits), got %q", got)
+	}
+	// Belt-and-braces: it should be a real mid-scroll value, not a boundary.
+	if got == "0%" || got == "100%" {
+		t.Errorf("mid-scroll landed on a boundary: %q", got)
 	}
 }
