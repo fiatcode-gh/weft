@@ -7,13 +7,13 @@ A terminal browser for a local Logseq graph. Recency-sorted page picker, ripgrep
 Requires Go 1.22+ and [ripgrep](https://github.com/BurntSushi/ripgrep) on PATH.
 
 ```bash
-go install github.com/fiatcode/peekseq/cmd/peekseq@latest
+go install git.fiatcode.dev/fiatcode/peekseq/cmd/peekseq@latest
 ```
 
 Or from source:
 
 ```bash
-git clone https://github.com/fiatcode/peekseq
+git clone https://git.fiatcode.dev/fiatcode/peekseq
 cd peekseq
 go build ./cmd/peekseq
 ```

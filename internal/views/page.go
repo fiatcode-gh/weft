@@ -8,8 +8,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/fiatcode/peekseq/internal/graph"
-	"github.com/fiatcode/peekseq/internal/render"
+	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
+	"git.fiatcode.dev/fiatcode/peekseq/internal/render"
 )
 
 // PageView renders a single page with a wiki-link cursor.

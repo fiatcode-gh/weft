@@ -8,8 +8,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/fiatcode/peekseq/internal/render"
-	"github.com/fiatcode/peekseq/internal/views"
+	"git.fiatcode.dev/fiatcode/peekseq/internal/render"
+	"git.fiatcode.dev/fiatcode/peekseq/internal/views"
 )
 
 // debugLogPath returns the path Bubble Tea should write debug output to, or

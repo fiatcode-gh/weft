@@ -1,4 +1,4 @@
-module github.com/fiatcode/peekseq
+module git.fiatcode.dev/fiatcode/peekseq
 
 go 1.26.3
 

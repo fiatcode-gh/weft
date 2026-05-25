@@ -8,7 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/fiatcode/peekseq/internal/graph"
+	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
 )
 
 var (
