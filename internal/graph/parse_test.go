@@ -26,13 +26,18 @@ func TestExtractTodos(t *testing.T) {
 		"- DONE Should be ignored\n" +
 		"- regular bullet\n" +
 		"- DOING Write the parser\n" +
-		"- WAITING [#B] Vendor response"
+		"- WAITING [#B] Vendor response\n" +
+		"```\n" +
+		"- TODO Inside fence should be ignored\n" +
+		"```\n" +
+		"- TODO After fence"
 	got := ExtractTodos(body)
 	want := []TodoHit{
 		{Marker: "TODO", Priority: "", Text: "Buy milk", Line: 1},
 		{Marker: "LATER", Priority: "A", Text: "Review the doc", Line: 2},
 		{Marker: "DOING", Priority: "", Text: "Write the parser", Line: 5},
 		{Marker: "WAITING", Priority: "B", Text: "Vendor response", Line: 6},
+		{Marker: "TODO", Priority: "", Text: "After fence", Line: 10},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("ExtractTodos mismatch:\nwant %#v\ngot  %#v", want, got)

@@ -27,6 +27,8 @@ var (
 
 // ExtractWikiLinks returns every [[link]] in body, skipping fenced code blocks.
 // Targets like [[A|alias]] are recorded as "A".
+// An unterminated fence in body causes following lines to be skipped — that
+// matches how a markdown renderer would treat the rest of the page as code.
 func ExtractWikiLinks(body string) []LinkHit {
 	var out []LinkHit
 	inFence := false
@@ -47,6 +49,8 @@ func ExtractWikiLinks(body string) []LinkHit {
 
 // ExtractTodos returns open TODO/LATER/DOING/WAITING bullets in body.
 // DONE and CANCELED are intentionally ignored (we only surface open tasks).
+// An unterminated fence in body causes following lines to be skipped — that
+// matches how a markdown renderer would treat the rest of the page as code.
 func ExtractTodos(body string) []TodoHit {
 	var out []TodoHit
 	inFence := false
