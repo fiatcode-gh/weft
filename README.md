@@ -21,13 +21,12 @@ go build ./cmd/peekseq
 ## Usage
 
 ```bash
-peekseq                              # uses ~/Documents/fiat-codex by default
 peekseq --graph /path/to/graph       # explicit path
 PEEKSEQ_GRAPH=/path/to/graph peekseq # via env var
 peekseq -version                     # print version and exit
 ```
 
-Graph path resolution: `--graph` flag > `$PEEKSEQ_GRAPH` > `~/Documents/fiat-codex`.
+A graph path is required — either pass `--graph` or set `$PEEKSEQ_GRAPH`. The flag wins when both are set. Drop the env var into your shell config for the zero-arg invocation.
 
 ## Keys
 

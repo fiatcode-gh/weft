@@ -44,8 +44,7 @@ func resolvedVersion() string {
 }
 
 func main() {
-	defaultGraph := os.ExpandEnv("$HOME/Documents/fiat-codex")
-	graphFlag := flag.String("graph", "", "path to Logseq graph (overrides $PEEKSEQ_GRAPH and default)")
+	graphFlag := flag.String("graph", "", "path to Logseq graph (overrides $PEEKSEQ_GRAPH)")
 	versionFlag := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
@@ -54,7 +53,11 @@ func main() {
 		return
 	}
 
-	graphPath := resolveGraphPath(*graphFlag, os.Getenv("PEEKSEQ_GRAPH"), defaultGraph)
+	graphPath := resolveGraphPath(*graphFlag, os.Getenv("PEEKSEQ_GRAPH"))
+	if graphPath == "" {
+		fmt.Fprintln(os.Stderr, "peekseq: no graph path — pass --graph or set $PEEKSEQ_GRAPH")
+		os.Exit(2)
+	}
 
 	if _, err := exec.LookPath("rg"); err != nil {
 		fmt.Fprintln(os.Stderr, "peekseq: ripgrep (rg) not found on PATH — install it (https://github.com/BurntSushi/ripgrep) and try again.")
@@ -83,12 +86,9 @@ func main() {
 	}
 }
 
-func resolveGraphPath(flagVal, envVal, defaultVal string) string {
+func resolveGraphPath(flagVal, envVal string) string {
 	if flagVal != "" {
 		return flagVal
 	}
-	if envVal != "" {
-		return envVal
-	}
-	return defaultVal
+	return envVal
 }
