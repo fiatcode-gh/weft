@@ -109,31 +109,51 @@ func (s *SearchView) Update(key string, graphPath string) (hit *SearchHit, accep
 }
 
 var (
-	searchBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
-	searchSel    = lipgloss.NewStyle().Reverse(true)
+	searchBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(1, 2)
+	searchTitle  = lipgloss.NewStyle().Bold(true)
+	searchPrompt = lipgloss.NewStyle().Faint(true)
+	searchSel    = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("12")).Bold(true)
+	searchFaint  = lipgloss.NewStyle().Faint(true)
+	searchHitPos = lipgloss.NewStyle().Foreground(lipgloss.Color("12"))
 )
+
+const searchInnerWidth = 72
 
 func (s *SearchView) View() string {
 	var b strings.Builder
-	state := ""
+	b.WriteString(searchTitle.Render("Search the graph"))
+	b.WriteString("\n\n")
+	b.WriteString(searchPrompt.Render("/ "))
+	b.WriteString(s.query)
 	switch {
 	case s.err != nil:
-		state = fmt.Sprintf(" [error: %v]", s.err)
+		b.WriteString(searchFaint.Render(fmt.Sprintf("   error: %v", s.err)))
 	case s.running:
-		state = " [searching…]"
+		b.WriteString(searchFaint.Render("   searching…"))
 	case len(s.hits) == 0 && s.query != "":
-		state = " [enter to search]"
+		b.WriteString(searchFaint.Render("   press enter to search"))
 	}
-	fmt.Fprintf(&b, "/ %s%s\n\n", s.query, state)
+	b.WriteString("\n")
+	b.WriteString(searchFaint.Render(strings.Repeat("─", searchInnerWidth)))
+	b.WriteString("\n")
+	if len(s.hits) == 0 && s.query == "" {
+		b.WriteString(searchFaint.Render("  type a query and press enter"))
+		b.WriteString("\n")
+	}
 	for i, h := range s.hits {
-		line := fmt.Sprintf("%s:%d — %s", shortPath(h.FilePath), h.Line, h.Context)
+		marker := "  "
+		pos := searchHitPos.Render(fmt.Sprintf("%s:%d", shortPath(h.FilePath), h.Line))
+		line := pos + searchFaint.Render("  · ") + h.Context
 		if i == s.sel {
-			line = searchSel.Render("▶ " + line)
-		} else {
-			line = "  " + line
+			marker = searchSel.Render(" ▶ ")
+			line = searchSel.Render(fmt.Sprintf("%s:%d  · %s", shortPath(h.FilePath), h.Line, h.Context))
 		}
-		b.WriteString(line + "\n")
+		b.WriteString(marker)
+		b.WriteString(line)
+		b.WriteString("\n")
 	}
+	b.WriteString("\n")
+	b.WriteString(searchFaint.Render("↑/↓ select · enter search/open · esc cancel"))
 	return searchBorder.Render(b.String())
 }
 

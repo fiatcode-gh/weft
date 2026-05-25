@@ -1,7 +1,6 @@
 package views
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -142,21 +141,43 @@ func consumeKey(ti textinput.Model, key string) (textinput.Model, bool) {
 }
 
 var (
-	pickerBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
-	pickerSel    = lipgloss.NewStyle().Reverse(true)
+	pickerBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(1, 2)
+	pickerTitle  = lipgloss.NewStyle().Bold(true)
+	pickerPrompt = lipgloss.NewStyle().Faint(true)
+	pickerSel    = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("12")).Bold(true)
+	pickerFaint  = lipgloss.NewStyle().Faint(true)
 )
+
+// pickerInnerWidth is the column width of the picker body (between the
+// border + padding). Picks a comfortable fixed size that fits standard
+// terminals; the rounded border auto-expands to fit if a result is wider.
+const pickerInnerWidth = 56
 
 func (p *Picker) View() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "> %s\n\n", p.input.Value())
+	b.WriteString(pickerTitle.Render("Find a page"))
+	b.WriteString("\n\n")
+	b.WriteString(pickerPrompt.Render("> "))
+	b.WriteString(p.input.Value())
+	b.WriteString("\n")
+	b.WriteString(pickerFaint.Render(strings.Repeat("─", pickerInnerWidth)))
+	b.WriteString("\n")
+	if len(p.matches) == 0 {
+		b.WriteString(pickerFaint.Render("  no matches"))
+		b.WriteString("\n")
+	}
 	for i, m := range p.matches {
+		marker := "  "
 		line := m.Str
 		if i == p.sel {
-			line = pickerSel.Render("▶ " + line)
-		} else {
-			line = "  " + line
+			marker = pickerSel.Render(" ▶ ")
+			line = pickerSel.Render(line)
 		}
-		b.WriteString(line + "\n")
+		b.WriteString(marker)
+		b.WriteString(line)
+		b.WriteString("\n")
 	}
+	b.WriteString("\n")
+	b.WriteString(pickerFaint.Render("↑/↓ select · enter open · esc cancel"))
 	return pickerBorder.Render(b.String())
 }
