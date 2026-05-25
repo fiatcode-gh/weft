@@ -117,6 +117,25 @@ func (p *PageView) LineUp()       { p.vp.LineUp(1) }
 func (p *PageView) HalfPageDown() { p.vp.HalfViewDown() }
 func (p *PageView) HalfPageUp()   { p.vp.HalfViewUp() }
 
+// Offset returns the viewport's current scroll position (YOffset).
+func (p *PageView) Offset() int { return p.vp.YOffset }
+
+// Cursor returns the current link cursor index. -1 means no link selected.
+func (p *PageView) Cursor() int { return p.cursor }
+
+// Restore sets the viewport scroll offset and link cursor in one shot. The
+// viewport's SetYOffset clamps offset against the current content height.
+// Cursor is clamped to a valid link index; anything outside [0, len(Links))
+// falls back to -1 (no link selected). Use after SetPage to recover
+// scroll/cursor state captured before a navigation.
+func (p *PageView) Restore(offset, cursor int) {
+	p.vp.SetYOffset(offset)
+	if cursor < 0 || cursor >= len(p.result.Links) {
+		cursor = -1
+	}
+	p.cursor = cursor
+}
+
 var (
 	// Bright background + dark foreground + bold + underline so the cursored
 	// link still reads as a link (underline) while standing out from the
