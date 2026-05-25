@@ -1,16 +1,19 @@
-Open todos — filter: all (5)
-
-2026-05-24
-▶  TODO Ship the TUI MVP
-
-Alpha
-   TODO Buy milk
-   LATER [#A] Review the design doc
-
-Beta
-   DOING Write the parser
-
-proj/nested
-   WAITING [#B] Vendor response on quote
-
-[t] cycle filter  [enter] open  [esc] back
+╭──────────────────────────────────────────╮
+│ Open todos — filter: all (5)             │
+│                                          │
+│ 2026-05-24                               │
+│ ▶  TODO Ship the TUI MVP                 │
+│                                          │
+│ Alpha                                    │
+│    TODO Buy milk                         │
+│    LATER [#A] Review the design doc      │
+│                                          │
+│ Beta                                     │
+│    DOING Write the parser                │
+│                                          │
+│ proj/nested                              │
+│    WAITING [#B] Vendor response on quote │
+│                                          │
+│ t cycle filter · enter open · esc back   │
+│                                          │
+╰──────────────────────────────────────────╯

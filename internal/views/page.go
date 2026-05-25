@@ -91,23 +91,41 @@ func (p *PageView) LineUp()       { p.vp.LineUp(1) }
 func (p *PageView) HalfPageDown() { p.vp.HalfViewDown() }
 func (p *PageView) HalfPageUp()   { p.vp.HalfViewUp() }
 
-var cursorStyle = lipgloss.NewStyle().Reverse(true)
+var (
+	cursorStyle = lipgloss.NewStyle().Reverse(true)
+	titleStyle  = lipgloss.NewStyle().Bold(true)
+	metaStyle   = lipgloss.NewStyle().Faint(true)
+)
 
 func (p *PageView) View() string {
 	if p.err != nil {
 		return fmt.Sprintf("error: %v", p.err)
 	}
-	header := fmt.Sprintf("# %s\n", p.page)
+	meta := ""
+	if n := len(p.result.Links); n > 0 {
+		if p.cursor >= 0 {
+			meta = fmt.Sprintf("  ·  link %d/%d", p.cursor+1, n)
+		} else {
+			meta = fmt.Sprintf("  ·  %d links", n)
+		}
+	}
+	header := titleStyle.Render(p.page) + metaStyle.Render(meta)
+	ruleW := p.width
+	if ruleW < 8 {
+		ruleW = 8
+	}
+	rule := metaStyle.Render(strings.Repeat("─", ruleW))
+
 	body := p.result.Styled
 	if body == "" {
-		body = "(no entry yet for this page)"
+		body = metaStyle.Render("(no entry yet for this page)")
 	}
 	if p.cursor >= 0 && p.cursor < len(p.result.Links) {
 		l := p.result.Links[p.cursor]
 		body = body[:l.Start] + cursorStyle.Render(body[l.Start:l.End]) + body[l.End:]
 	}
 	p.vp.SetContent(body)
-	return header + "\n" + p.vp.View()
+	return header + "\n" + rule + "\n" + p.vp.View()
 }
 
 func (p *PageView) load() {

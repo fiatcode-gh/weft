@@ -77,9 +77,11 @@ func (t *Todos) Update(key string) (page string, accept, cancel bool) {
 }
 
 var (
-	todosHdr  = lipgloss.NewStyle().Bold(true)
-	todosSel  = lipgloss.NewStyle().Reverse(true)
-	todosMark = map[string]lipgloss.Style{
+	todosBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
+	todosHdr    = lipgloss.NewStyle().Bold(true)
+	todosFaint  = lipgloss.NewStyle().Faint(true)
+	todosSel    = lipgloss.NewStyle().Reverse(true)
+	todosMark   = map[string]lipgloss.Style{
 		"TODO":    lipgloss.NewStyle().Foreground(lipgloss.Color("9")),  // red
 		"DOING":   lipgloss.NewStyle().Foreground(lipgloss.Color("11")), // yellow
 		"LATER":   lipgloss.NewStyle().Foreground(lipgloss.Color("12")), // blue
@@ -121,6 +123,8 @@ func (t *Todos) View() string {
 		}
 		sb.WriteString(row + "\n")
 	}
-	sb.WriteString("\n[t] cycle filter  [enter] open  [esc] back\n")
-	return sb.String()
+	sb.WriteString("\n")
+	sb.WriteString(todosFaint.Render("t cycle filter · enter open · esc back"))
+	sb.WriteString("\n")
+	return todosBorder.Render(sb.String())
 }

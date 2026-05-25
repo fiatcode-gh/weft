@@ -5,9 +5,12 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/fiatcode/logseq-tui/internal/graph"
 )
+
+var footerStyle = lipgloss.NewStyle().Faint(true)
 
 type modeT int
 
@@ -167,7 +170,8 @@ func (a *App) View() string {
 	case modeTodos:
 		return a.todos.View()
 	}
-	return a.page.View() + "\n[ctrl-p] palette  [/] search  [b] backlinks  [T] todos  [R] refresh  [n/N] link  [enter] follow  [q] quit"
+	keys := "ctrl-p palette · / search · b backlinks · T todos · R refresh · n/N link · enter follow · q quit"
+	return a.page.View() + "\n" + footerStyle.Render(keys)
 }
 
 func pageNameFromHitPath(idx *graph.Index, abs string) string {
