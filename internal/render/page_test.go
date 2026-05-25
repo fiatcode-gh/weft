@@ -22,6 +22,12 @@ func TestRenderPageReturnsLinksWithTargets(t *testing.T) {
 	if out.Styled == "" {
 		t.Error("Styled output empty")
 	}
+	if len(out.Links) >= 2 {
+		span := out.Styled[out.Links[1].Start:out.Links[1].End]
+		if !strings.Contains(span, "the second") {
+			t.Errorf("aliased link span: want substring %q, got %q", "the second", span)
+		}
+	}
 }
 
 func TestRenderPageHandlesEmptyBody(t *testing.T) {

@@ -2,6 +2,7 @@ package render
 
 import (
 	"regexp"
+	"strings"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
@@ -79,19 +80,8 @@ func indexFrom(s, sub string, from int) int {
 	if from < 0 || from >= len(s) {
 		return -1
 	}
-	rel := -1
-	if i := indexOf(s[from:], sub); i >= 0 {
-		rel = from + i
-	}
-	return rel
-}
-
-func indexOf(s, sub string) int {
-	// thin wrapper to keep the call site readable and avoid strings import name clash
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return i
-		}
+	if i := strings.Index(s[from:], sub); i >= 0 {
+		return from + i
 	}
 	return -1
 }
