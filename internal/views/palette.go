@@ -33,27 +33,34 @@ func NewPalette(idx *graph.Index) *Palette {
 }
 
 func paletteChoices(idx *graph.Index) []string {
-	seen := make(map[string]struct{}, len(idx.Pages)+60)
-	out := make([]string, 0, len(idx.Pages)+60)
+	// Real pages, sorted alphabetically. Listed first so the no-query view
+	// shows the actual catalog instead of a wall of date strings (which sort
+	// before letter-starting names lexicographically).
+	seen := make(map[string]struct{}, len(idx.Pages)+61)
+	pages := make([]string, 0, len(idx.Pages))
 	for _, p := range idx.Pages {
 		if _, ok := seen[p.Name]; ok {
 			continue
 		}
 		seen[p.Name] = struct{}{}
-		out = append(out, p.Name)
+		pages = append(pages, p.Name)
 	}
-	// Virtual journal dates ±30 days around today
+	sort.Strings(pages)
+
+	// Virtual journal dates ±30 days around today, in chronological order
+	// (oldest to newest) so the user can scroll forward through time.
 	today := time.Now()
+	dates := make([]string, 0, 61)
 	for d := -30; d <= 30; d++ {
 		name := today.AddDate(0, 0, d).Format("2006-01-02")
 		if _, ok := seen[name]; ok {
 			continue
 		}
 		seen[name] = struct{}{}
-		out = append(out, name)
+		dates = append(dates, name)
 	}
-	sort.Strings(out)
-	return out
+
+	return append(pages, dates...)
 }
 
 func (p *Palette) search(q string) {
