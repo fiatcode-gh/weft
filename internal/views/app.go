@@ -10,7 +10,11 @@ import (
 	"github.com/fiatcode/logseq-tui/internal/graph"
 )
 
-var footerStyle = lipgloss.NewStyle().Faint(true)
+var (
+	footerStyle = lipgloss.NewStyle().Faint(true)
+	splashBold  = lipgloss.NewStyle().Bold(true)
+	splashFaint = lipgloss.NewStyle().Faint(true)
+)
 
 type modeT int
 
@@ -22,34 +26,64 @@ const (
 	modeTodos
 )
 
+// indexLoadedMsg carries the result of an asynchronous graph.BuildIndex run.
+type indexLoadedMsg struct {
+	idx *graph.Index
+	err error
+}
+
 type App struct {
-	idx       *graph.Index
-	page      *PageView
+	graphPath string
+
+	idx     *graph.Index
+	loadErr error
+	page    *PageView
+
 	palette   *Palette
 	search    *SearchView
 	backlinks *Backlinks
 	todos     *Todos
-	mode      modeT
-	width     int
-	height    int
+
+	mode   modeT
+	width  int
+	height int
 }
 
-func New(graphPath string) (*App, error) {
-	idx, err := graph.BuildIndex(graphPath)
-	if err != nil {
-		return nil, fmt.Errorf("index %s: %w", graphPath, err)
-	}
-	a := &App{idx: idx, mode: modePage}
-	a.page = NewPageView(idx, todayJournalName(), 80, 24)
-	return a, nil
+// New returns an App that has not yet built its index. The index is built
+// asynchronously in Init so the first frame can render a "loading" splash
+// instead of freezing the terminal while a large graph is walked.
+func New(graphPath string) *App {
+	return &App{graphPath: graphPath, mode: modePage}
 }
 
 func todayJournalName() string { return time.Now().Format("2006-01-02") }
 
-func (a *App) Init() tea.Cmd { return nil }
+func (a *App) Init() tea.Cmd { return a.buildIndexCmd() }
+
+func (a *App) buildIndexCmd() tea.Cmd {
+	path := a.graphPath
+	return func() tea.Msg {
+		idx, err := graph.BuildIndex(path)
+		return indexLoadedMsg{idx: idx, err: err}
+	}
+}
+
+// tryInitPage constructs PageView the first time both the index and a real
+// terminal size are available. Constructing at the real width avoids the
+// "flash from 80 cols to actual width" the previous synchronous path showed.
+func (a *App) tryInitPage() {
+	if a.page == nil && a.idx != nil && a.loadErr == nil && a.width > 0 {
+		a.page = NewPageView(a.idx, todayJournalName(), a.width, a.height)
+	}
+}
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m := msg.(type) {
+	case indexLoadedMsg:
+		a.idx = m.idx
+		a.loadErr = m.err
+		a.tryInitPage()
+		return a, nil
 	case searchDoneMsg:
 		if a.search != nil {
 			a.search.Apply(m)
@@ -57,9 +91,21 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 	case tea.WindowSizeMsg:
 		a.width, a.height = m.Width, m.Height
-		a.page.SetSize(m.Width, m.Height)
+		if a.page != nil {
+			a.page.SetSize(m.Width, m.Height)
+		} else {
+			a.tryInitPage()
+		}
+		return a, nil
 	case tea.KeyMsg:
 		key := m.String()
+		// While loading or in an error state, only quit is honoured.
+		if a.page == nil {
+			if key == "q" || key == "ctrl+c" {
+				return a, tea.Quit
+			}
+			return a, nil
+		}
 		switch a.mode {
 		case modePalette:
 			sel, accept, cancel := a.palette.Update(key)
@@ -160,6 +206,16 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (a *App) View() string {
+	if a.loadErr != nil {
+		return splashBold.Render(fmt.Sprintf("lstui — failed to index %s", a.graphPath)) +
+			"\n\n" + a.loadErr.Error() +
+			"\n\n" + splashFaint.Render("q to quit")
+	}
+	if a.page == nil {
+		return splashBold.Render("lstui") +
+			"\n\n" + splashFaint.Render(fmt.Sprintf("Loading %s ...", a.graphPath)) +
+			"\n\n" + splashFaint.Render("q to quit")
+	}
 	switch a.mode {
 	case modePalette:
 		return a.palette.View()

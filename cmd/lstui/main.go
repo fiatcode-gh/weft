@@ -27,11 +27,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	app, err := views.New(graphPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "lstui: %v\n", err)
-		os.Exit(1)
-	}
+	app := views.New(graphPath)
 
 	if _, err := tea.NewProgram(app, tea.WithAltScreen()).Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "lstui: %v\n", err)

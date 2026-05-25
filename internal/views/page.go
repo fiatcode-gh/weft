@@ -92,9 +92,15 @@ func (p *PageView) HalfPageDown() { p.vp.HalfViewDown() }
 func (p *PageView) HalfPageUp()   { p.vp.HalfViewUp() }
 
 var (
-	cursorStyle = lipgloss.NewStyle().Reverse(true)
-	titleStyle  = lipgloss.NewStyle().Bold(true)
-	metaStyle   = lipgloss.NewStyle().Faint(true)
+	// Bright background + dark foreground + bold makes the cursor pop on top
+	// of an already-styled (blue, underlined) wiki-link. Pure Reverse(true)
+	// flips the link's own colors and disappears into the surrounding text.
+	cursorStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("11")). // bright yellow
+			Foreground(lipgloss.Color("0")).  // black
+			Bold(true)
+	titleStyle = lipgloss.NewStyle().Bold(true)
+	metaStyle  = lipgloss.NewStyle().Faint(true)
 )
 
 func (p *PageView) View() string {
