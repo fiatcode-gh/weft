@@ -39,14 +39,15 @@ type SearchView struct {
 	running bool
 	err     error
 	width   int // terminal width snapshot, for layout
+	height  int // terminal height snapshot, for scroll-window sizing
 }
 
-func NewSearchView(idx *graph.Index, width int) *SearchView {
-	return &SearchView{idx: idx, width: width}
+func NewSearchView(idx *graph.Index, width, height int) *SearchView {
+	return &SearchView{idx: idx, width: width, height: height}
 }
 
-// SetSize updates the cached terminal width.
-func (s *SearchView) SetSize(w, _ int) { s.width = w }
+// SetSize updates the cached terminal dimensions.
+func (s *SearchView) SetSize(w, h int) { s.width, s.height = w, h }
 
 func (s *SearchView) Query() string { return s.query }
 
@@ -156,8 +157,10 @@ func highlightMatches(ctx string, spans []SearchSpan) string {
 }
 
 const (
-	searchInnerWidthMax = 80 // ceiling — never wider than this even on huge terminals
-	searchInnerWidthMin = 30 // floor — collapse gracefully on tiny terminals
+	searchInnerWidthMax  = 80
+	searchInnerWidthMin  = 30
+	searchVisibleRowsMax = 14
+	searchVisibleRowsMin = 6
 )
 
 // searchInnerWidth returns the column width to budget for content lines,
@@ -173,6 +176,42 @@ func (s *SearchView) innerWidth() int {
 		w = searchInnerWidthMin
 	}
 	return w
+}
+
+// visibleRows returns how many hit rows the search overlay renders at once.
+// Hits scroll within this window when there are more of them.
+func (s *SearchView) visibleRows() int {
+	// Chrome: 2 (border) + 2 (padding) + 1 (title) + 1 (blank) + 1 (prompt)
+	// + 1 (divider) + 1 (blank) + 1 (hint) ≈ 10 lines.
+	const chrome = 10
+	r := s.height - chrome
+	if r > searchVisibleRowsMax {
+		r = searchVisibleRowsMax
+	}
+	if r < searchVisibleRowsMin {
+		r = searchVisibleRowsMin
+	}
+	return r
+}
+
+// scrollWindow returns the [start, end) slice indices of hits to render
+// such that s.sel is always visible.
+func (s *SearchView) scrollWindow() (start, end int) {
+	rows := s.visibleRows()
+	if rows >= len(s.hits) {
+		return 0, len(s.hits)
+	}
+	half := rows / 2
+	start = s.sel - half
+	if start < 0 {
+		start = 0
+	}
+	end = start + rows
+	if end > len(s.hits) {
+		end = len(s.hits)
+		start = end - rows
+	}
+	return start, end
 }
 
 func (s *SearchView) View() string {
@@ -197,8 +236,14 @@ func (s *SearchView) View() string {
 		b.WriteString(searchFaint.Render("  type a query and press enter"))
 		b.WriteString("\n")
 	}
-	rowBudget := inner - 3 // leave room for the leading "  " or " ▶ " marker
-	for i, h := range s.hits {
+	rowBudget := inner - 3 // leave room for the leading "   " or " ▶ " marker
+	start, end := s.scrollWindow()
+	if start > 0 {
+		b.WriteString(searchFaint.Render(fmt.Sprintf("   ↑ %d more above", start)))
+		b.WriteString("\n")
+	}
+	for i := start; i < end; i++ {
+		h := s.hits[i]
 		marker := "   " // 3-cell so unselected rows align with " ▶ " width
 		var line string
 		if i == s.sel {
@@ -215,6 +260,10 @@ func (s *SearchView) View() string {
 		}
 		b.WriteString(marker)
 		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	if end < len(s.hits) {
+		b.WriteString(searchFaint.Render(fmt.Sprintf("   ↓ %d more below", len(s.hits)-end)))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")

@@ -196,7 +196,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.picker = NewPicker(a.idx, a.width, a.height)
 				a.mode = modePicker
 			case "/":
-				a.search = NewSearchView(a.idx, a.width)
+				a.search = NewSearchView(a.idx, a.width, a.height)
 				a.mode = modeSearch
 			case "b":
 				a.backlinks = NewBacklinks(a.idx, a.page.Page(), a.width)
