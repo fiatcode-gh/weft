@@ -21,7 +21,7 @@ func bootApp(t *testing.T) *App {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(abs)
+	a := New(abs, "test")
 	// Drive the deferred index build synchronously.
 	cmd := a.Init()
 	if cmd == nil {

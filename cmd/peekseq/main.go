@@ -78,7 +78,7 @@ func main() {
 	// init cost is paid before the TUI takes over the screen.
 	render.Warmup()
 
-	app := views.New(graphPath)
+	app := views.New(graphPath, resolvedVersion())
 
 	if _, err := tea.NewProgram(app, tea.WithAltScreen()).Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "peekseq: %v\n", err)

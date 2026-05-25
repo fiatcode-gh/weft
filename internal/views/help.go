@@ -7,9 +7,11 @@ import (
 )
 
 // Help is a stateless overlay listing the keymap. ? or esc toggles it off.
-type Help struct{}
+type Help struct {
+	version string
+}
 
-func NewHelp() *Help { return &Help{} }
+func NewHelp(version string) *Help { return &Help{version: version} }
 
 // Update reports whether the overlay should close. There's no state to mutate.
 func (h *Help) Update(key string) (cancel bool) {
@@ -88,7 +90,33 @@ func (h *Help) View() string {
 			b.WriteString("\n")
 		}
 	}
+	// Footer: close hint on the left, version on the right, padded to the
+	// max line width of the body built so far. Version segment is omitted
+	// when h.version is empty.
+	body := b.String()
+	contentWidth := 0
+	for _, line := range strings.Split(body, "\n") {
+		if w := lipgloss.Width(line); w > contentWidth {
+			contentWidth = w
+		}
+	}
+
+	left := "? or esc to close"
+	var footer string
+	if h.version == "" {
+		footer = left
+	} else {
+		right := "peekseq " + h.version
+		gap := contentWidth - lipgloss.Width(left) - lipgloss.Width(right)
+		if gap < 2 {
+			// Version too long to fit inline alongside the close hint.
+			footer = left + "\n" + right
+		} else {
+			footer = left + strings.Repeat(" ", gap) + right
+		}
+	}
+
 	b.WriteString("\n")
-	b.WriteString(helpFaint.Render("? or esc to close"))
+	b.WriteString(helpFaint.Render(footer))
 	return helpBorder.Render(b.String())
 }

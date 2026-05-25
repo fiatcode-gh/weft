@@ -56,6 +56,10 @@ type App struct {
 	// screen. histIdx == -1 before the first page is shown.
 	hist    []historyEntry
 	histIdx int
+
+	// version is the binary version string shown in the help overlay
+	// footer. Empty hides the version segment.
+	version string
 }
 
 type historyEntry struct {
@@ -67,8 +71,8 @@ type historyEntry struct {
 // New returns an App that has not yet built its index. The index is built
 // asynchronously in Init so the first frame can render a "loading" splash
 // instead of freezing the terminal while a large graph is walked.
-func New(graphPath string) *App {
-	return &App{graphPath: graphPath, mode: modePage, histIdx: -1}
+func New(graphPath, version string) *App {
+	return &App{graphPath: graphPath, mode: modePage, histIdx: -1, version: version}
 }
 
 func todayJournalName() string { return time.Now().Format("2006-01-02") }
@@ -263,7 +267,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.todos = NewTodos(a.idx, a.width)
 				a.mode = modeTodos
 			case "?":
-				a.help = NewHelp()
+				a.help = NewHelp(a.version)
 				a.mode = modeHelp
 			case "[":
 				a.historyBack()
