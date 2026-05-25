@@ -14,12 +14,14 @@ type modeT int
 const (
 	modePage modeT = iota
 	modePalette
+	modeSearch
 )
 
 type App struct {
 	idx     *graph.Index
 	page    *PageView
 	palette *Palette
+	search  *SearchView
 	mode    modeT
 	width   int
 	height  int
@@ -41,12 +43,18 @@ func (a *App) Init() tea.Cmd { return nil }
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m := msg.(type) {
+	case searchDoneMsg:
+		if a.search != nil {
+			a.search.Apply(m)
+		}
+		return a, nil
 	case tea.WindowSizeMsg:
 		a.width, a.height = m.Width, m.Height
 		a.page.SetSize(m.Width, m.Height)
 	case tea.KeyMsg:
 		key := m.String()
-		if a.mode == modePalette {
+		switch a.mode {
+		case modePalette:
 			sel, accept, cancel := a.palette.Update(key)
 			if cancel {
 				a.mode = modePage
@@ -59,37 +67,69 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.palette = nil
 			}
 			return a, nil
-		}
-		switch key {
-		case "q", "ctrl+c":
-			return a, tea.Quit
-		case "ctrl+p":
-			a.palette = NewPalette(a.idx)
-			a.mode = modePalette
-		case "n":
-			a.page.CycleLink(+1)
-		case "N":
-			a.page.CycleLink(-1)
-		case "enter":
-			if t := a.page.FollowCursor(); t != "" {
-				a.page.SetPage(t)
+		case modeSearch:
+			hit, accept, cancel, cmd := a.search.Update(key, a.idx.GraphPath)
+			if cancel {
+				a.mode = modePage
+				a.search = nil
+				return a, nil
 			}
-		case "j", "down":
-			a.page.LineDown()
-		case "k", "up":
-			a.page.LineUp()
-		case "ctrl+d":
-			a.page.HalfPageDown()
-		case "ctrl+u":
-			a.page.HalfPageUp()
+			if accept && hit != nil {
+				if name := pageNameFromHitPath(a.idx, hit.FilePath); name != "" {
+					a.page.SetPage(name)
+				}
+				a.mode = modePage
+				a.search = nil
+				return a, nil
+			}
+			return a, cmd
+		case modePage:
+			switch key {
+			case "q", "ctrl+c":
+				return a, tea.Quit
+			case "ctrl+p":
+				a.palette = NewPalette(a.idx)
+				a.mode = modePalette
+			case "/":
+				a.search = NewSearchView(a.idx)
+				a.mode = modeSearch
+			case "n":
+				a.page.CycleLink(+1)
+			case "N":
+				a.page.CycleLink(-1)
+			case "enter":
+				if t := a.page.FollowCursor(); t != "" {
+					a.page.SetPage(t)
+				}
+			case "j", "down":
+				a.page.LineDown()
+			case "k", "up":
+				a.page.LineUp()
+			case "ctrl+d":
+				a.page.HalfPageDown()
+			case "ctrl+u":
+				a.page.HalfPageUp()
+			}
 		}
 	}
 	return a, nil
 }
 
 func (a *App) View() string {
-	if a.mode == modePalette {
+	switch a.mode {
+	case modePalette:
 		return a.palette.View()
+	case modeSearch:
+		return a.search.View()
 	}
-	return a.page.View() + "\n[ctrl-p] palette  [n/N] link  [enter] follow  [q] quit"
+	return a.page.View() + "\n[ctrl-p] palette  [/] search  [n/N] link  [enter] follow  [q] quit"
+}
+
+func pageNameFromHitPath(idx *graph.Index, abs string) string {
+	for _, p := range idx.Pages {
+		if p.Path == abs {
+			return p.Name
+		}
+	}
+	return ""
 }
