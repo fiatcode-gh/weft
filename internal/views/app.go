@@ -9,11 +9,20 @@ import (
 	"github.com/fiatcode/logseq-tui/internal/graph"
 )
 
+type modeT int
+
+const (
+	modePage modeT = iota
+	modePalette
+)
+
 type App struct {
-	idx    *graph.Index
-	page   *PageView
-	width  int
-	height int
+	idx     *graph.Index
+	page    *PageView
+	palette *Palette
+	mode    modeT
+	width   int
+	height  int
 }
 
 func New(graphPath string) (*App, error) {
@@ -21,7 +30,7 @@ func New(graphPath string) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("index %s: %w", graphPath, err)
 	}
-	a := &App{idx: idx}
+	a := &App{idx: idx, mode: modePage}
 	a.page = NewPageView(idx, todayJournalName(), 80, 24)
 	return a, nil
 }
@@ -36,9 +45,27 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.width, a.height = m.Width, m.Height
 		a.page.SetSize(m.Width, m.Height)
 	case tea.KeyMsg:
-		switch m.String() {
+		key := m.String()
+		if a.mode == modePalette {
+			sel, accept, cancel := a.palette.Update(key)
+			if cancel {
+				a.mode = modePage
+				a.palette = nil
+				return a, nil
+			}
+			if accept {
+				a.page.SetPage(sel)
+				a.mode = modePage
+				a.palette = nil
+			}
+			return a, nil
+		}
+		switch key {
 		case "q", "ctrl+c":
 			return a, tea.Quit
+		case "ctrl+p":
+			a.palette = NewPalette(a.idx)
+			a.mode = modePalette
 		case "n":
 			a.page.CycleLink(+1)
 		case "N":
@@ -61,5 +88,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (a *App) View() string {
-	return a.page.View() + "\n[n/N] link  [enter] follow  [j/k] scroll  [q] quit"
+	if a.mode == modePalette {
+		return a.palette.View()
+	}
+	return a.page.View() + "\n[ctrl-p] palette  [n/N] link  [enter] follow  [q] quit"
 }
