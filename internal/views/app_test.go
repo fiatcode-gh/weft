@@ -130,3 +130,109 @@ func TestNavigateTruncatesForwardHistory(t *testing.T) {
 		}
 	}
 }
+
+func TestHistoryBackForward(t *testing.T) {
+	a := bootApp(t)
+	startPage := a.page.Page()
+
+	a.navigate("Alpha")
+	a.navigate("Beta")
+
+	// Press '['
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("[")})
+	if got := a.page.Page(); got != "Alpha" {
+		t.Errorf("after [: want Alpha, got %q", got)
+	}
+
+	// '[' again -> startPage
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("[")})
+	if got := a.page.Page(); got != startPage {
+		t.Errorf("after second [: want %q, got %q", startPage, got)
+	}
+
+	// ']' -> Alpha
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("]")})
+	if got := a.page.Page(); got != "Alpha" {
+		t.Errorf("after ]: want Alpha, got %q", got)
+	}
+}
+
+func TestHistoryBackAtStartNoop(t *testing.T) {
+	a := bootApp(t)
+	startPage := a.page.Page()
+	startIdx := a.histIdx
+
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("[")})
+
+	if got := a.page.Page(); got != startPage {
+		t.Errorf("page should be unchanged: want %q, got %q", startPage, got)
+	}
+	if a.histIdx != startIdx {
+		t.Errorf("histIdx should be unchanged: want %d, got %d", startIdx, a.histIdx)
+	}
+}
+
+func TestHistoryForwardAtTailNoop(t *testing.T) {
+	a := bootApp(t)
+	a.navigate("Alpha")
+	tailIdx := a.histIdx
+
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("]")})
+
+	if got := a.page.Page(); got != "Alpha" {
+		t.Errorf("page should be unchanged: want Alpha, got %q", got)
+	}
+	if a.histIdx != tailIdx {
+		t.Errorf("histIdx should be unchanged: want %d, got %d", tailIdx, a.histIdx)
+	}
+}
+
+func TestHistoryBranchTruncatesForward(t *testing.T) {
+	a := bootApp(t)
+	a.navigate("Alpha")
+	a.navigate("Beta")
+
+	// Back to Alpha; forward stack still has Beta.
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("[")})
+	if a.page.Page() != "Alpha" {
+		t.Fatalf("setup: want Alpha, got %q", a.page.Page())
+	}
+
+	// Branch: navigate to a different page. Forward (Beta) must be dropped.
+	a.navigate("proj/nested")
+
+	if a.page.Page() != "proj/nested" {
+		t.Errorf("after branch: want proj/nested, got %q", a.page.Page())
+	}
+	if a.histIdx != len(a.hist)-1 {
+		t.Errorf("after branch: histIdx should be at tail, got %d (len %d)",
+			a.histIdx, len(a.hist))
+	}
+
+	// ']' is now a no-op — there is no forward history.
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("]")})
+	if a.page.Page() != "proj/nested" {
+		t.Errorf("forward after branch should be no-op: got %q", a.page.Page())
+	}
+}
+
+func TestHistoryRestoresScrollAndCursor(t *testing.T) {
+	a := bootApp(t)
+	a.navigate("Alpha")
+
+	// On Alpha: scroll + select a link.
+	a.page.CycleLink(+1)
+	a.page.CycleLink(+1)
+	wantCursor := a.page.Cursor()
+
+	a.navigate("Beta")
+
+	// Back to Alpha — cursor should be restored.
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("[")})
+	if a.page.Page() != "Alpha" {
+		t.Fatalf("after [: want Alpha, got %q", a.page.Page())
+	}
+	if got := a.page.Cursor(); got != wantCursor {
+		t.Errorf("restored cursor: want %d, got %d", wantCursor, got)
+	}
+}

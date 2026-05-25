@@ -109,6 +109,36 @@ func (a *App) navigate(name string) {
 	a.page.SetPage(name)
 }
 
+// historyBack walks one step backward in the history stack, restoring the
+// stored offset/cursor for that entry. The departing page's current
+// offset/cursor are saved into the current entry so a subsequent forward
+// step lands where the user left off. No-op at the start of history.
+func (a *App) historyBack() {
+	if a.histIdx <= 0 {
+		return
+	}
+	a.hist[a.histIdx].offset = a.page.Offset()
+	a.hist[a.histIdx].cursor = a.page.Cursor()
+	a.histIdx--
+	target := a.hist[a.histIdx]
+	a.page.SetPage(target.page)
+	a.page.Restore(target.offset, target.cursor)
+}
+
+// historyForward walks one step forward in the history stack. Mirrors
+// historyBack. No-op at the tail of history.
+func (a *App) historyForward() {
+	if a.histIdx < 0 || a.histIdx >= len(a.hist)-1 {
+		return
+	}
+	a.hist[a.histIdx].offset = a.page.Offset()
+	a.hist[a.histIdx].cursor = a.page.Cursor()
+	a.histIdx++
+	target := a.hist[a.histIdx]
+	a.page.SetPage(target.page)
+	a.page.Restore(target.offset, target.cursor)
+}
+
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m := msg.(type) {
 	case indexLoadedMsg:
@@ -235,6 +265,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "?":
 				a.help = NewHelp()
 				a.mode = modeHelp
+			case "[":
+				a.historyBack()
+			case "]":
+				a.historyForward()
 			case "R":
 				// Async reindex — the response lands as indexLoadedMsg and
 				// rebuilds PageView for the current page. Errors surface in
