@@ -5,7 +5,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -144,12 +146,22 @@ func shortPath(p string) string {
 }
 
 func runRipgrep(graphPath, query string) ([]byte, error) {
-	cmd := exec.Command("rg", "--json", "--", query, graphPath)
+	args := []string{"--json", "--", query}
+	for _, sub := range []string{"pages", "journals"} {
+		p := filepath.Join(graphPath, sub)
+		if _, err := os.Stat(p); err == nil {
+			args = append(args, p)
+		}
+	}
+	if len(args) == 3 {
+		// No pages/ or journals/ dir — nothing to search.
+		return nil, nil
+	}
+	cmd := exec.Command("rg", args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
-	// rg exits 1 when no matches — that's not an error for us.
 	if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
 		return stdout.Bytes(), nil
 	}
