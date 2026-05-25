@@ -40,6 +40,7 @@ var helpSections = []struct {
 		{"j / k", "scroll one line"},
 		{"ctrl-d", "half page down"},
 		{"ctrl-u", "half page up"},
+		{"g / G", "top / bottom"},
 	}},
 	{"Links", []helpRow{
 		{"n / N", "next / previous wiki-link"},

@@ -89,3 +89,27 @@ func TestPageViewRestoreClampsCursor(t *testing.T) {
 		t.Errorf("under-range cursor: want -1, got %d", got)
 	}
 }
+
+func TestPageViewGotoTopBottom(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	idx := loadFixture(t)
+	// Small viewport so Alpha (~10 styled lines) is scrollable.
+	pv := NewPageView(idx, "Alpha", 80, 5)
+
+	// Scroll a bit so GotoTop has somewhere to go back to.
+	pv.HalfPageDown()
+	if pv.Offset() == 0 {
+		t.Fatalf("setup: HalfPageDown should have advanced offset; got 0")
+	}
+
+	pv.GotoTop()
+	if got := pv.Offset(); got != 0 {
+		t.Errorf("after GotoTop: want offset 0, got %d", got)
+	}
+
+	pv.GotoBottom()
+	if got := pv.Offset(); got == 0 {
+		t.Errorf("after GotoBottom: expected non-zero offset, got 0")
+	}
+}

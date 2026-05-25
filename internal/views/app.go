@@ -273,6 +273,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.historyBack()
 			case "]":
 				a.historyForward()
+			case "g":
+				a.page.GotoTop()
+			case "G":
+				a.page.GotoBottom()
 			case "R":
 				// Async reindex — the response lands as indexLoadedMsg and
 				// rebuilds PageView for the current page. Errors surface in

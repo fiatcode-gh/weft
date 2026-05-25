@@ -111,11 +111,13 @@ func (p *PageView) FollowCursor() string {
 	return p.result.Links[p.cursor].Target
 }
 
-// LineDown/LineUp/HalfPage delegates to viewport.
+// LineDown/LineUp/HalfPage/Goto delegates to viewport.
 func (p *PageView) LineDown()     { p.vp.LineDown(1) }
 func (p *PageView) LineUp()       { p.vp.LineUp(1) }
 func (p *PageView) HalfPageDown() { p.vp.HalfViewDown() }
 func (p *PageView) HalfPageUp()   { p.vp.HalfViewUp() }
+func (p *PageView) GotoTop()      { p.vp.GotoTop() }
+func (p *PageView) GotoBottom()   { p.vp.GotoBottom() }
 
 // Offset returns the viewport's current scroll position (YOffset).
 func (p *PageView) Offset() int { return p.vp.YOffset }

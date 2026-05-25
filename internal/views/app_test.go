@@ -236,3 +236,26 @@ func TestHistoryRestoresScrollAndCursor(t *testing.T) {
 		t.Errorf("restored cursor: want %d, got %d", wantCursor, got)
 	}
 }
+
+func TestPageEdgeKeys(t *testing.T) {
+	a := bootApp(t)
+	// Navigate to Alpha so we have real content that can scroll. Boot
+	// page (today's journal) is typically empty in the fixture.
+	a.navigate("Alpha")
+
+	// Shrink the viewport so Alpha is scrollable.
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 5})
+
+	// 'G' jumps to bottom.
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")})
+	bottomOffset := a.page.Offset()
+	if bottomOffset == 0 {
+		t.Errorf("after G: expected non-zero offset, got 0")
+	}
+
+	// 'g' jumps back to top.
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
+	if got := a.page.Offset(); got != 0 {
+		t.Errorf("after g: want offset 0, got %d", got)
+	}
+}
