@@ -1,4 +1,4 @@
-Alpha  ·  4 links
+Alpha  ·  3 links
 ────────────────────────────────────────────────────────────────────────────────
                                                                                 
   title:: Alpha tags:: fixture                                                  
@@ -7,7 +7,7 @@ Alpha  ·  4 links
   • TODO Buy milk                                                               
   • LATER [#A] Review the design doc                                            
   • A link inside a fence should NOT be extracted:                              
-    see ShouldNotMatch for details                                              
+    see [[ShouldNotMatch]] for details                                          
                                                                                 
   • An aliased link to the second page.                                         
                                                                                 
