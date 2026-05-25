@@ -25,15 +25,17 @@ type Picker struct {
 	names   []string // derived from choices, kept in lockstep for fuzzy.Find
 	matches []fuzzy.Match
 	sel     int
+	width   int       // terminal width snapshot, for layout
+	height  int       // terminal height snapshot, for scroll window sizing
 	now     time.Time // captured at construction for stable relative-time hints
 }
 
-func NewPicker(idx *graph.Index) *Picker {
+func NewPicker(idx *graph.Index, width, height int) *Picker {
 	ti := textinput.New()
 	ti.Placeholder = "Type a page name or YYYY-MM-DD..."
 	ti.Focus()
 	ti.CharLimit = 200
-	p := &Picker{idx: idx, input: ti, now: time.Now()}
+	p := &Picker{idx: idx, input: ti, width: width, height: height, now: time.Now()}
 	p.choices = pickerChoices(idx, p.now)
 	p.names = make([]string, len(p.choices))
 	for i, c := range p.choices {
@@ -42,6 +44,9 @@ func NewPicker(idx *graph.Index) *Picker {
 	p.search("")
 	return p
 }
+
+// SetSize updates the cached terminal dimensions.
+func (p *Picker) SetSize(w, h int) { p.width, p.height = w, h }
 
 // pickerChoices returns the picker candidate list sorted with the most recently
 // active entries first. Real pages use their file mtime; virtual journal dates
@@ -155,44 +160,109 @@ var (
 	pickerFaint  = lipgloss.NewStyle().Faint(true)
 )
 
-// pickerInnerWidth is the column width of the picker body (between the
-// border + padding). Picks a comfortable fixed size that fits standard
-// terminals; the rounded border auto-expands to fit if a result is wider.
 const (
-	pickerInnerWidth = 56
-	pickerNameCol    = 38 // name column width before the right-aligned mtime hint
+	pickerInnerWidthMax = 64 // ceiling — picker stays compact even on wide terminals
+	pickerInnerWidthMin = 30
+	pickerVisibleRowsMax = 14 // ceiling on simultaneously-shown matches
+	pickerVisibleRowsMin = 6
 )
 
+func (p *Picker) innerWidth() int {
+	w := p.width - 2 - 4 - 4 // border + padding + safety margin
+	if w > pickerInnerWidthMax {
+		w = pickerInnerWidthMax
+	}
+	if w < pickerInnerWidthMin {
+		w = pickerInnerWidthMin
+	}
+	return w
+}
+
+// visibleRows returns how many match rows the picker will render at once.
+// The picker scrolls within this window when the match list is longer.
+func (p *Picker) visibleRows() int {
+	// Picker chrome: 2 (border) + 2 (padding) + 1 (title) + 1 (blank) +
+	// 1 (prompt) + 1 (divider) + 1 (blank) + 1 (hint) ≈ 10 lines.
+	const chrome = 10
+	r := p.height - chrome
+	if r > pickerVisibleRowsMax {
+		r = pickerVisibleRowsMax
+	}
+	if r < pickerVisibleRowsMin {
+		r = pickerVisibleRowsMin
+	}
+	return r
+}
+
+// scrollWindow returns the [start, end) slice indices of matches to render
+// such that p.sel is always visible.
+func (p *Picker) scrollWindow() (start, end int) {
+	rows := p.visibleRows()
+	if rows >= len(p.matches) {
+		return 0, len(p.matches)
+	}
+	half := rows / 2
+	start = p.sel - half
+	if start < 0 {
+		start = 0
+	}
+	end = start + rows
+	if end > len(p.matches) {
+		end = len(p.matches)
+		start = end - rows
+	}
+	return start, end
+}
+
 func (p *Picker) View() string {
+	inner := p.innerWidth()
+	const hintCol = 14 // right-aligned mtime hint column width
+	nameBudget := inner - hintCol - 2
+
 	var b strings.Builder
 	b.WriteString(pickerTitle.Render("Find a page"))
 	b.WriteString("\n\n")
 	b.WriteString(pickerPrompt.Render("> "))
-	b.WriteString(p.input.Value())
+	b.WriteString(clamp(p.input.Value(), inner-3))
 	b.WriteString("\n")
-	b.WriteString(pickerFaint.Render(strings.Repeat("─", pickerInnerWidth)))
+	b.WriteString(pickerFaint.Render(strings.Repeat("─", inner)))
 	b.WriteString("\n")
 	if len(p.matches) == 0 {
 		b.WriteString(pickerFaint.Render("  no matches"))
 		b.WriteString("\n")
+		b.WriteString("\n")
+		b.WriteString(pickerFaint.Render("↑/↓ select · enter open · esc cancel"))
+		return pickerBorder.Render(b.String())
 	}
-	for i, m := range p.matches {
+
+	start, end := p.scrollWindow()
+	if start > 0 {
+		b.WriteString(pickerFaint.Render(fmt.Sprintf("  ↑ %d more above", start)))
+		b.WriteString("\n")
+	}
+	for i := start; i < end; i++ {
+		m := p.matches[i]
 		hint := ""
 		if m.Index >= 0 && m.Index < len(p.choices) {
 			hint = relativeTime(p.now, p.choices[m.Index].mtime)
 		}
-		name := m.Str
-		row := layoutPickerRow(name, hint)
+		name := clamp(m.Str, nameBudget)
 		marker := "  "
+		var row string
 		if i == p.sel {
 			marker = pickerSel.Render(" ▶ ")
-			row = pickerSel.Render(row)
+			row = pickerSel.Render(layoutPickerRow(name, hint, nameBudget))
 		} else if hint != "" {
-			// Re-render with the hint as faint when the row is unselected.
-			row = padTo(name, pickerNameCol) + "  " + pickerFaint.Render(hint)
+			row = padTo(name, nameBudget) + "  " + pickerFaint.Render(hint)
+		} else {
+			row = name
 		}
 		b.WriteString(marker)
 		b.WriteString(row)
+		b.WriteString("\n")
+	}
+	if end < len(p.matches) {
+		b.WriteString(pickerFaint.Render(fmt.Sprintf("  ↓ %d more below", len(p.matches)-end)))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
@@ -204,11 +274,11 @@ func (p *Picker) View() string {
 // selected-line render. Unselected rows render the same layout but with the
 // hint marked faint; doing the styling at the call site keeps the layout
 // math simple.
-func layoutPickerRow(name, hint string) string {
+func layoutPickerRow(name, hint string, nameCol int) string {
 	if hint == "" {
 		return name
 	}
-	return padTo(name, pickerNameCol) + "  " + hint
+	return padTo(name, nameCol) + "  " + hint
 }
 
 func padTo(s string, w int) string {

@@ -14,11 +14,15 @@ type Backlinks struct {
 	target string // page being viewed
 	refs   []graph.Ref
 	sel    int
+	width  int
 }
 
-func NewBacklinks(idx *graph.Index, target string) *Backlinks {
-	return &Backlinks{idx: idx, target: target, refs: idx.Backlinks[target]}
+func NewBacklinks(idx *graph.Index, target string, width int) *Backlinks {
+	return &Backlinks{idx: idx, target: target, refs: idx.Backlinks[target], width: width}
 }
+
+// SetSize updates the cached terminal width.
+func (b *Backlinks) SetSize(w, _ int) { b.width = w }
 
 func (b *Backlinks) Update(key string) (selected string, accept, cancel bool) {
 	switch key {
@@ -48,29 +52,46 @@ var (
 	blSel    = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("12")).Bold(true)
 )
 
-const blInnerWidth = 64
+const (
+	blInnerWidthMax = 72
+	blInnerWidthMin = 30
+)
+
+func (b *Backlinks) innerWidth() int {
+	w := b.width - 2 - 4 - 4
+	if w > blInnerWidthMax {
+		w = blInnerWidthMax
+	}
+	if w < blInnerWidthMin {
+		w = blInnerWidthMin
+	}
+	return w
+}
 
 func (b *Backlinks) View() string {
+	inner := b.innerWidth()
 	var sb strings.Builder
 	sb.WriteString(blTitle.Render("Backlinks"))
-	sb.WriteString(blFaint.Render(fmt.Sprintf("   → %s   (%d)", b.target, len(b.refs))))
+	sb.WriteString(blFaint.Render(clamp(fmt.Sprintf("   → %s   (%d)", b.target, len(b.refs)), inner-len("Backlinks"))))
 	sb.WriteString("\n\n")
-	sb.WriteString(blFaint.Render(strings.Repeat("─", blInnerWidth)))
+	sb.WriteString(blFaint.Render(strings.Repeat("─", inner)))
 	sb.WriteString("\n")
 	if len(b.refs) == 0 {
 		sb.WriteString(blFaint.Render("  no backlinks"))
 		sb.WriteString("\n")
 	}
+	rowBudget := inner - 3
 	for i, r := range b.refs {
 		ctx := strings.TrimSpace(r.Context)
 		marker := "  "
 		var line string
 		if i == b.sel {
 			marker = blSel.Render(" ▶ ")
-			line = blSel.Render(fmt.Sprintf("%s:%d  · %s", r.FromPage, r.LineNumber, ctx))
+			raw := fmt.Sprintf("%s:%d  · %s", r.FromPage, r.LineNumber, ctx)
+			line = blSel.Render(clamp(raw, rowBudget))
 		} else {
 			pos := blPos.Render(fmt.Sprintf("%s:%d", r.FromPage, r.LineNumber))
-			line = pos + blFaint.Render("  · ") + ctx
+			line = clamp(pos+blFaint.Render("  · ")+ctx, rowBudget)
 		}
 		sb.WriteString(marker)
 		sb.WriteString(line)

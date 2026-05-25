@@ -38,11 +38,15 @@ type SearchView struct {
 	sel     int
 	running bool
 	err     error
+	width   int // terminal width snapshot, for layout
 }
 
-func NewSearchView(idx *graph.Index) *SearchView {
-	return &SearchView{idx: idx}
+func NewSearchView(idx *graph.Index, width int) *SearchView {
+	return &SearchView{idx: idx, width: width}
 }
+
+// SetSize updates the cached terminal width.
+func (s *SearchView) SetSize(w, _ int) { s.width = w }
 
 func (s *SearchView) Query() string { return s.query }
 
@@ -151,29 +155,49 @@ func highlightMatches(ctx string, spans []SearchSpan) string {
 	return b.String()
 }
 
-const searchInnerWidth = 72
+const (
+	searchInnerWidthMax = 80 // ceiling — never wider than this even on huge terminals
+	searchInnerWidthMin = 30 // floor — collapse gracefully on tiny terminals
+)
+
+// searchInnerWidth returns the column width to budget for content lines,
+// shrinking to fit narrower terminals so the right edge of the overlay
+// never falls off-screen.
+func (s *SearchView) innerWidth() int {
+	// Border (2) + padding (4) + a 2-col safety margin on each side.
+	w := s.width - 2 - 4 - 4
+	if w > searchInnerWidthMax {
+		w = searchInnerWidthMax
+	}
+	if w < searchInnerWidthMin {
+		w = searchInnerWidthMin
+	}
+	return w
+}
 
 func (s *SearchView) View() string {
+	inner := s.innerWidth()
 	var b strings.Builder
 	b.WriteString(searchTitle.Render("Search the graph"))
 	b.WriteString("\n\n")
 	b.WriteString(searchPrompt.Render("/ "))
-	b.WriteString(s.query)
+	b.WriteString(clamp(s.query, inner-3))
 	switch {
 	case s.err != nil:
-		b.WriteString(searchFaint.Render(fmt.Sprintf("   error: %v", s.err)))
+		b.WriteString(searchFaint.Render(clamp(fmt.Sprintf("   error: %v", s.err), inner)))
 	case s.running:
 		b.WriteString(searchFaint.Render("   searching…"))
 	case len(s.hits) == 0 && s.query != "":
 		b.WriteString(searchFaint.Render("   press enter to search"))
 	}
 	b.WriteString("\n")
-	b.WriteString(searchFaint.Render(strings.Repeat("─", searchInnerWidth)))
+	b.WriteString(searchFaint.Render(strings.Repeat("─", inner)))
 	b.WriteString("\n")
 	if len(s.hits) == 0 && s.query == "" {
 		b.WriteString(searchFaint.Render("  type a query and press enter"))
 		b.WriteString("\n")
 	}
+	rowBudget := inner - 3 // leave room for the leading "  " or " ▶ " marker
 	for i, h := range s.hits {
 		marker := "  "
 		var line string
@@ -182,10 +206,12 @@ func (s *SearchView) View() string {
 			// emphasis off here to avoid nested SGR resets clobbering the
 			// selection background.
 			marker = searchSel.Render(" ▶ ")
-			line = searchSel.Render(fmt.Sprintf("%s:%d  · %s", shortPath(h.FilePath), h.Line, h.Context))
+			raw := fmt.Sprintf("%s:%d  · %s", shortPath(h.FilePath), h.Line, h.Context)
+			line = searchSel.Render(clamp(raw, rowBudget))
 		} else {
 			pos := searchHitPos.Render(fmt.Sprintf("%s:%d", shortPath(h.FilePath), h.Line))
-			line = pos + searchFaint.Render("  · ") + highlightMatches(h.Context, h.Matches)
+			ctx := highlightMatches(h.Context, h.Matches)
+			line = clamp(pos+searchFaint.Render("  · ")+ctx, rowBudget)
 		}
 		b.WriteString(marker)
 		b.WriteString(line)

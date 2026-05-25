@@ -10,7 +10,7 @@ import (
 func TestPickerFiltersOnQuery(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
-	p := NewPicker(loadFixture(t))
+	p := NewPicker(loadFixture(t), 80, 30)
 	// Zero out mtimes so the relative-time hint doesn't drift with
 	// checkout time. relativeTime returns "" for a zero mtime.
 	for i := range p.choices {

@@ -193,13 +193,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "q", "ctrl+c":
 				return a, tea.Quit
 			case "ctrl+p":
-				a.picker = NewPicker(a.idx)
+				a.picker = NewPicker(a.idx, a.width, a.height)
 				a.mode = modePicker
 			case "/":
-				a.search = NewSearchView(a.idx)
+				a.search = NewSearchView(a.idx, a.width)
 				a.mode = modeSearch
 			case "b":
-				a.backlinks = NewBacklinks(a.idx, a.page.Page())
+				a.backlinks = NewBacklinks(a.idx, a.page.Page(), a.width)
 				a.mode = modeBacklinks
 			case "T":
 				a.todos = NewTodos(a.idx)
