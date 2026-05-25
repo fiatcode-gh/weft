@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"runtime/debug"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -30,6 +31,8 @@ func debugLogPath() string {
 // resolvedVersion returns the version to print for -version. Prefers an
 // ldflags-injected value; falls back to the module version captured by `go
 // install` / `go build`; falls back to "dev" for raw local builds.
+// Pseudo-versions (untagged go-install builds) are shortened so the help
+// overlay footer doesn't get cluttered with timestamps.
 func resolvedVersion() string {
 	if Version != "dev" {
 		return Version
@@ -37,10 +40,30 @@ func resolvedVersion() string {
 	if info, ok := debug.ReadBuildInfo(); ok {
 		v := info.Main.Version
 		if v != "" && v != "(devel)" {
-			return v
+			return shortenPseudoVersion(v)
 		}
 	}
 	return Version
+}
+
+// pseudoVersionRe matches a Go pseudo-version's trailing timestamp + commit
+// hash, optionally followed by Go's "+dirty" VCS-modified marker. Form 1
+// (no prior tag): "vX.0.0-yyyymmddhhmmss-abcdefabcdef" — separator before
+// the timestamp is "-". Form 2/3 (after a release or prerelease tag):
+// "...x.yyyymmddhhmmss-abcdefabcdef" — separator is ".".
+var pseudoVersionRe = regexp.MustCompile(`^(.+)[-.](\d{14})-([a-f0-9]{12})(\+dirty)?$`)
+
+// shortenPseudoVersion collapses a Go pseudo-version to "<base>+<sha7>",
+// dropping the timestamp and truncating the SHA to 7 chars. The "+dirty"
+// marker (added by go build against an uncommitted working tree) is
+// preserved. Non-pseudo versions (tagged releases, "dev", arbitrary
+// strings) are returned unchanged.
+func shortenPseudoVersion(v string) string {
+	m := pseudoVersionRe.FindStringSubmatch(v)
+	if m == nil {
+		return v
+	}
+	return m[1] + "+" + m[3][:7] + m[4]
 }
 
 func main() {
