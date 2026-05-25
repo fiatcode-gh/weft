@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -58,12 +59,21 @@ func New(graphPath string) *App {
 
 func todayJournalName() string { return time.Now().Format("2006-01-02") }
 
-func (a *App) Init() tea.Cmd { return a.buildIndexCmd() }
+func (a *App) Init() tea.Cmd {
+	log.Printf("Init: scheduling buildIndexCmd for %q", a.graphPath)
+	return a.buildIndexCmd()
+}
 
 func (a *App) buildIndexCmd() tea.Cmd {
 	path := a.graphPath
 	return func() tea.Msg {
+		log.Printf("buildIndexCmd: BuildIndex start for %q", path)
 		idx, err := graph.BuildIndex(path)
+		if err != nil {
+			log.Printf("buildIndexCmd: BuildIndex err=%v", err)
+		} else {
+			log.Printf("buildIndexCmd: BuildIndex ok, %d pages", len(idx.Pages))
+		}
 		return indexLoadedMsg{idx: idx, err: err}
 	}
 }
@@ -73,13 +83,18 @@ func (a *App) buildIndexCmd() tea.Cmd {
 // "flash from 80 cols to actual width" the previous synchronous path showed.
 func (a *App) tryInitPage() {
 	if a.page == nil && a.idx != nil && a.loadErr == nil && a.width > 0 {
+		log.Printf("tryInitPage: building PageView at %dx%d for %q", a.width, a.height, todayJournalName())
 		a.page = NewPageView(a.idx, todayJournalName(), a.width, a.height)
+		log.Printf("tryInitPage: PageView built")
+	} else {
+		log.Printf("tryInitPage: not ready (page=%v idx=%v loadErr=%v width=%d)", a.page != nil, a.idx != nil, a.loadErr, a.width)
 	}
 }
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m := msg.(type) {
 	case indexLoadedMsg:
+		log.Printf("Update: indexLoadedMsg err=%v idx=%v width=%d", m.err, m.idx != nil, a.width)
 		a.idx = m.idx
 		a.loadErr = m.err
 		a.tryInitPage()
@@ -90,6 +105,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 	case tea.WindowSizeMsg:
+		log.Printf("Update: WindowSizeMsg w=%d h=%d idx=%v page=%v", m.Width, m.Height, a.idx != nil, a.page != nil)
 		a.width, a.height = m.Width, m.Height
 		if a.page != nil {
 			a.page.SetSize(m.Width, m.Height)
