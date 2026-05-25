@@ -1,6 +1,6 @@
 # lstui — a read-only Logseq TUI
 
-A terminal browser for a local Logseq graph. Fuzzy palette navigation, ripgrep-backed search, backlinks, and a TODO dashboard. Never writes to the graph.
+A terminal browser for a local Logseq graph. Recency-sorted page picker, ripgrep-backed full-text search, backlinks, and a TODO dashboard. Renders pages with hanging-indent bullets, coloured workflow markers (TODO/DOING/LATER/WAITING/DONE/CANCELED/NOW), and highlighted wiki-links you can step through. Never writes to the graph.
 
 ## Install
 
@@ -30,20 +30,39 @@ Graph path resolution: `--graph` flag > `$LSTUI_GRAPH` > `~/Documents/fiat-codex
 
 ## Keys
 
-| Key       | Action                              |
-|-----------|-------------------------------------|
-| `Ctrl-P`  | open palette (fuzzy page search)    |
-| `/`       | open full-text search               |
-| `T`       | open TODO dashboard                 |
-| `b`       | toggle backlinks panel              |
-| `n` / `N` | cycle wiki-link cursor              |
-| `Enter`   | follow link / open selection        |
-| `j` / `k` | scroll                              |
-| `Ctrl-d/u`| half-page scroll                    |
-| `R`       | rebuild index                       |
-| `Esc`     | close overlay                       |
-| `q`       | quit                                |
+Press `?` from the page view at any time to see a grouped keymap inside the app.
+
+| Key        | Action                              |
+|------------|-------------------------------------|
+| `Ctrl-P`   | open picker (recent + fuzzy)        |
+| `/`        | open full-text search (ripgrep)     |
+| `T`        | open TODO dashboard                 |
+| `b`        | open backlinks for the current page |
+| `?`        | toggle the help overlay             |
+| `n` / `N`  | cycle the wiki-link cursor          |
+| `Enter`    | follow link / open selection        |
+| `j` / `k`  | scroll one line                     |
+| `Ctrl-d/u` | half-page scroll                    |
+| `R`        | rebuild the index                   |
+| `Esc`      | close an overlay                    |
+| `q`        | quit (from page view)               |
+
+## What gets rendered
+
+- `[[wiki-links]]` are styled inline, navigable with `n`/`N`, and follow with `Enter`. Aliased links (`[[Target|alias]]`) show the alias.
+- Workflow markers at the start of a bullet are colour-coded (`TODO` red, `DOING` yellow, `LATER` blue, `WAITING` dim, `DONE` green, `CANCELED`/`CANCELLED` strikethrough, `NOW` magenta).
+- `:LOGBOOK: ... :END:` blocks are hidden — they're metadata, not content.
+- Long bullets wrap with hanging indent, so continuation lines align with the text after the bullet rather than under the bullet glyph.
+
+## Environment
+
+| Variable        | Effect                                                                            |
+|-----------------|-----------------------------------------------------------------------------------|
+| `LSTUI_GRAPH`   | Default graph path (overridden by `--graph`).                                     |
+| `LSTUI_STYLE`   | Force a Glamour markdown style (`dark`, `light`, `ascii`, `notty`). Default `dark`. |
+| `NO_COLOR`      | Honoured: forces `notty` rendering, no ANSI styling anywhere.                     |
+| `LSTUI_DEBUG=1` | Mirror Bubble Tea events to `./lstui.log`. Useful when reporting bugs.            |
 
 ## Scope
 
-Read-only. No editing, no fold/unfold, no live reload. Spec at `docs/superpowers/specs/2026-05-24-logseq-tui-design.md`.
+Read-only. No editing, no fold/unfold, no filesystem-watch live reload (use `R`). Design spec is at `docs/superpowers/specs/2026-05-24-logseq-tui-design.md`; the v1 implementation plan is at `docs/superpowers/plans/2026-05-24-logseq-tui.md`.
