@@ -2,7 +2,6 @@ package views
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -59,21 +58,12 @@ func New(graphPath string) *App {
 
 func todayJournalName() string { return time.Now().Format("2006-01-02") }
 
-func (a *App) Init() tea.Cmd {
-	log.Printf("Init: scheduling buildIndexCmd for %q", a.graphPath)
-	return a.buildIndexCmd()
-}
+func (a *App) Init() tea.Cmd { return a.buildIndexCmd() }
 
 func (a *App) buildIndexCmd() tea.Cmd {
 	path := a.graphPath
 	return func() tea.Msg {
-		log.Printf("buildIndexCmd: BuildIndex start for %q", path)
 		idx, err := graph.BuildIndex(path)
-		if err != nil {
-			log.Printf("buildIndexCmd: BuildIndex err=%v", err)
-		} else {
-			log.Printf("buildIndexCmd: BuildIndex ok, %d pages", len(idx.Pages))
-		}
 		return indexLoadedMsg{idx: idx, err: err}
 	}
 }
@@ -83,21 +73,26 @@ func (a *App) buildIndexCmd() tea.Cmd {
 // "flash from 80 cols to actual width" the previous synchronous path showed.
 func (a *App) tryInitPage() {
 	if a.page == nil && a.idx != nil && a.loadErr == nil && a.width > 0 {
-		log.Printf("tryInitPage: building PageView at %dx%d for %q", a.width, a.height, todayJournalName())
 		a.page = NewPageView(a.idx, todayJournalName(), a.width, a.height)
-		log.Printf("tryInitPage: PageView built")
-	} else {
-		log.Printf("tryInitPage: not ready (page=%v idx=%v loadErr=%v width=%d)", a.page != nil, a.idx != nil, a.loadErr, a.width)
 	}
 }
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m := msg.(type) {
 	case indexLoadedMsg:
-		log.Printf("Update: indexLoadedMsg err=%v idx=%v width=%d", m.err, m.idx != nil, a.width)
+		if m.err != nil {
+			a.loadErr = m.err
+			return a, nil
+		}
 		a.idx = m.idx
-		a.loadErr = m.err
-		a.tryInitPage()
+		a.loadErr = nil
+		if a.page != nil {
+			// Refresh path (R): rebuild PageView for the same page so it
+			// picks up new links / todos from the rebuilt index.
+			a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
+		} else {
+			a.tryInitPage()
+		}
 		return a, nil
 	case searchDoneMsg:
 		if a.search != nil {
@@ -105,7 +100,6 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 	case tea.WindowSizeMsg:
-		log.Printf("Update: WindowSizeMsg w=%d h=%d idx=%v page=%v", m.Width, m.Height, a.idx != nil, a.page != nil)
 		a.width, a.height = m.Width, m.Height
 		if a.page != nil {
 			a.page.SetSize(m.Width, m.Height)
@@ -115,10 +109,16 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 	case tea.KeyMsg:
 		key := m.String()
-		// While loading or in an error state, only quit is honoured.
+		// While loading or in an error state, only quit + retry are honoured.
 		if a.page == nil {
-			if key == "q" || key == "ctrl+c" {
+			switch key {
+			case "q", "ctrl+c":
 				return a, tea.Quit
+			case "R":
+				if a.loadErr != nil {
+					a.loadErr = nil
+					return a, a.buildIndexCmd()
+				}
 			}
 			return a, nil
 		}
@@ -195,10 +195,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.todos = NewTodos(a.idx)
 				a.mode = modeTodos
 			case "R":
-				if idx, err := graph.BuildIndex(a.idx.GraphPath); err == nil {
-					a.idx = idx
-					a.page = NewPageView(idx, a.page.Page(), a.width, a.height)
-				}
+				// Async reindex — the response lands as indexLoadedMsg and
+				// rebuilds PageView for the current page. Errors surface in
+				// loadErr which the splash overlay renders.
+				return a, a.buildIndexCmd()
 			case "n":
 				a.page.CycleLink(+1)
 			case "N":
@@ -225,7 +225,7 @@ func (a *App) View() string {
 	if a.loadErr != nil {
 		return splashBold.Render(fmt.Sprintf("lstui — failed to index %s", a.graphPath)) +
 			"\n\n" + a.loadErr.Error() +
-			"\n\n" + splashFaint.Render("q to quit")
+			"\n\n" + splashFaint.Render("R to retry · q to quit")
 	}
 	if a.page == nil {
 		return splashBold.Render("lstui") +

@@ -12,11 +12,18 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Link is one wiki-link position inside the styled output.
+// Link is one wiki-link occurrence inside the styled output.
+//
+// Display is the user-visible link text (target or alias). It's exposed so
+// the view layer can re-render the link with combined cursor + link styling
+// in one pass — slicing Styled[Start:End] yields bytes that already contain
+// SGR codes, and wrapping those produces nested resets that clobber the
+// cursor highlight and any surrounding Glamour styling.
 type Link struct {
-	Target string
-	Start  int // byte offset in Styled
-	End    int // byte offset in Styled (exclusive)
+	Target  string
+	Display string
+	Start   int // byte offset in Styled (start of the styled link span)
+	End     int // byte offset in Styled (exclusive, end of the styled link span)
 }
 
 // Result is the rendered page.
@@ -167,9 +174,10 @@ func Render(body string, width int) (Result, error) {
 		start := out.Len()
 		out.WriteString(rendered)
 		links = append(links, Link{
-			Target: subs[id].target,
-			Start:  start,
-			End:    start + len(rendered),
+			Target:  subs[id].target,
+			Display: subs[id].display,
+			Start:   start,
+			End:     start + len(rendered),
 		})
 		last = m[1]
 	}

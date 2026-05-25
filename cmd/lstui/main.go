@@ -3,8 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
-	"log"
 	"os"
 	"os/exec"
 
@@ -43,14 +41,10 @@ func main() {
 		if f, err := tea.LogToFile(path, "lstui"); err == nil {
 			defer f.Close()
 		}
-	} else {
-		// Silence stray log.Printf calls so they don't bleed into the alt-screen.
-		log.SetOutput(io.Discard)
 	}
 
-	// Pre-warm Glamour so its terminal-capability detection (OSC queries over
-	// stdin) runs while we still own the terminal. Otherwise the first render
-	// inside Bubble Tea's loop hangs waiting for a reply that BT swallowed.
+	// Pre-build the Glamour renderer cache so chroma's syntax-highlighter
+	// init cost is paid before the TUI takes over the screen.
 	render.Warmup()
 
 	app := views.New(graphPath)

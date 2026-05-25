@@ -92,13 +92,16 @@ func (p *PageView) HalfPageDown() { p.vp.HalfViewDown() }
 func (p *PageView) HalfPageUp()   { p.vp.HalfViewUp() }
 
 var (
-	// Bright background + dark foreground + bold makes the cursor pop on top
-	// of an already-styled (blue, underlined) wiki-link. Pure Reverse(true)
-	// flips the link's own colors and disappears into the surrounding text.
+	// Bright background + dark foreground + bold + underline so the cursored
+	// link still reads as a link (underline) while standing out from the
+	// other links on the page. Rendered in a single pass over the link's
+	// display text — never nested over the pre-styled bytes from
+	// render.Render, which would emit overlapping SGR resets.
 	cursorStyle = lipgloss.NewStyle().
 			Background(lipgloss.Color("11")). // bright yellow
 			Foreground(lipgloss.Color("0")).  // black
-			Bold(true)
+			Bold(true).
+			Underline(true)
 	titleStyle = lipgloss.NewStyle().Bold(true)
 	metaStyle  = lipgloss.NewStyle().Faint(true)
 )
@@ -128,7 +131,7 @@ func (p *PageView) View() string {
 	}
 	if p.cursor >= 0 && p.cursor < len(p.result.Links) {
 		l := p.result.Links[p.cursor]
-		body = body[:l.Start] + cursorStyle.Render(body[l.Start:l.End]) + body[l.End:]
+		body = body[:l.Start] + cursorStyle.Render(l.Display) + body[l.End:]
 	}
 	p.vp.SetContent(body)
 	return header + "\n" + rule + "\n" + p.vp.View()
