@@ -2,40 +2,31 @@ package views
 
 import (
 	"fmt"
-	"os"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/fiatcode/logseq-tui/internal/graph"
-	"github.com/fiatcode/logseq-tui/internal/render"
 )
 
-// App is the top-level Bubble Tea model.
 type App struct {
-	idx     *graph.Index
-	current string // page name currently displayed
-	width   int
-	height  int
-	body    render.Result
-	err     error
+	idx    *graph.Index
+	page   *PageView
+	width  int
+	height int
 }
 
-// New builds an App rooted at graphPath. It loads the index synchronously
-// because BuildIndex is fast (<100ms for graphs we care about) and a blank
-// first frame is worse than a 100ms delay.
 func New(graphPath string) (*App, error) {
 	idx, err := graph.BuildIndex(graphPath)
 	if err != nil {
 		return nil, fmt.Errorf("index %s: %w", graphPath, err)
 	}
-	a := &App{idx: idx, current: todayJournalName()}
+	a := &App{idx: idx}
+	a.page = NewPageView(idx, todayJournalName(), 80, 24)
 	return a, nil
 }
 
-func todayJournalName() string {
-	return time.Now().Format("2006-01-02")
-}
+func todayJournalName() string { return time.Now().Format("2006-01-02") }
 
 func (a *App) Init() tea.Cmd { return nil }
 
@@ -43,42 +34,32 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m := msg.(type) {
 	case tea.WindowSizeMsg:
 		a.width, a.height = m.Width, m.Height
-		a.refreshBody()
+		a.page.SetSize(m.Width, m.Height)
 	case tea.KeyMsg:
 		switch m.String() {
 		case "q", "ctrl+c":
 			return a, tea.Quit
+		case "n":
+			a.page.CycleLink(+1)
+		case "N":
+			a.page.CycleLink(-1)
+		case "enter":
+			if t := a.page.FollowCursor(); t != "" {
+				a.page.SetPage(t)
+			}
+		case "j", "down":
+			a.page.LineDown()
+		case "k", "up":
+			a.page.LineUp()
+		case "ctrl+d":
+			a.page.HalfPageDown()
+		case "ctrl+u":
+			a.page.HalfPageUp()
 		}
 	}
 	return a, nil
 }
 
 func (a *App) View() string {
-	if a.err != nil {
-		return fmt.Sprintf("error: %v\n\nq to quit.", a.err)
-	}
-	header := fmt.Sprintf("lstui — %s\n\n", a.current)
-	if a.body.Styled == "" {
-		return header + "(no entry yet for this page)\n\nq to quit."
-	}
-	return header + a.body.Styled + "\n\nq to quit."
-}
-
-func (a *App) refreshBody() {
-	meta, ok := a.idx.ByName[a.current]
-	if !ok {
-		a.body = render.Result{}
-		return
-	}
-	bytes, err := os.ReadFile(meta.Path)
-	if err != nil {
-		a.err = err
-		return
-	}
-	res, err := render.Render(string(bytes), a.width)
-	if err != nil {
-		a.err = err
-		return
-	}
-	a.body = res
+	return a.page.View() + "\n[n/N] link  [enter] follow  [j/k] scroll  [q] quit"
 }
