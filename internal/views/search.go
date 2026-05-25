@@ -21,6 +21,14 @@ type SearchHit struct {
 	FilePath string
 	Line     int
 	Context  string
+	// Matches are byte offsets within Context that the query matched, so the
+	// view can emphasise them in the rendered list.
+	Matches []SearchSpan
+}
+
+// SearchSpan is a [Start, End) byte range inside SearchHit.Context.
+type SearchSpan struct {
+	Start, End int
 }
 
 type SearchView struct {
@@ -115,7 +123,28 @@ var (
 	searchSel    = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("12")).Bold(true)
 	searchFaint  = lipgloss.NewStyle().Faint(true)
 	searchHitPos = lipgloss.NewStyle().Foreground(lipgloss.Color("12"))
+	searchMatch  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11"))
 )
+
+// highlightMatches emphasises each [Start,End) span of ctx with searchMatch.
+// Overlapping or out-of-range spans are skipped defensively.
+func highlightMatches(ctx string, spans []SearchSpan) string {
+	if len(spans) == 0 {
+		return ctx
+	}
+	var b strings.Builder
+	last := 0
+	for _, m := range spans {
+		if m.Start < last || m.End > len(ctx) || m.Start >= m.End {
+			continue
+		}
+		b.WriteString(ctx[last:m.Start])
+		b.WriteString(searchMatch.Render(ctx[m.Start:m.End]))
+		last = m.End
+	}
+	b.WriteString(ctx[last:])
+	return b.String()
+}
 
 const searchInnerWidth = 72
 
@@ -142,11 +171,16 @@ func (s *SearchView) View() string {
 	}
 	for i, h := range s.hits {
 		marker := "  "
-		pos := searchHitPos.Render(fmt.Sprintf("%s:%d", shortPath(h.FilePath), h.Line))
-		line := pos + searchFaint.Render("  · ") + h.Context
+		var line string
 		if i == s.sel {
+			// Selected rows render in one blue-bg pass — keep the match
+			// emphasis off here to avoid nested SGR resets clobbering the
+			// selection background.
 			marker = searchSel.Render(" ▶ ")
 			line = searchSel.Render(fmt.Sprintf("%s:%d  · %s", shortPath(h.FilePath), h.Line, h.Context))
+		} else {
+			pos := searchHitPos.Render(fmt.Sprintf("%s:%d", shortPath(h.FilePath), h.Line))
+			line = pos + searchFaint.Render("  · ") + highlightMatches(h.Context, h.Matches)
 		}
 		b.WriteString(marker)
 		b.WriteString(line)
@@ -202,6 +236,10 @@ func parseRipgrepJSON(b []byte) []SearchHit {
 				Path       struct{ Text string } `json:"path"`
 				Lines      struct{ Text string } `json:"lines"`
 				LineNumber int                   `json:"line_number"`
+				Submatches []struct {
+					Start int `json:"start"`
+					End   int `json:"end"`
+				} `json:"submatches"`
 			} `json:"data"`
 		}
 		if err := json.Unmarshal(sc.Bytes(), &env); err != nil {
@@ -210,10 +248,20 @@ func parseRipgrepJSON(b []byte) []SearchHit {
 		if env.Type != "match" {
 			continue
 		}
+		ctx := strings.TrimRight(env.Data.Lines.Text, "\n")
+		ctxLen := len(ctx)
+		spans := make([]SearchSpan, 0, len(env.Data.Submatches))
+		for _, sm := range env.Data.Submatches {
+			if sm.Start < 0 || sm.End > ctxLen || sm.Start >= sm.End {
+				continue
+			}
+			spans = append(spans, SearchSpan{Start: sm.Start, End: sm.End})
+		}
 		out = append(out, SearchHit{
 			FilePath: env.Data.Path.Text,
 			Line:     env.Data.LineNumber,
-			Context:  strings.TrimRight(env.Data.Lines.Text, "\n"),
+			Context:  ctx,
+			Matches:  spans,
 		})
 	}
 	return out
