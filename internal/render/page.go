@@ -64,12 +64,13 @@ var taskMarkerStyles = map[string]lipgloss.Style{
 const (
 	wikiSentinelStart = ""
 	wikiSentinelEnd   = ""
+	wikiSentinelPad   = ""
 	taskSentinelStart = ""
 	taskSentinelEnd   = ""
 )
 
 var (
-	wikiSentinelRe = regexp.MustCompile(wikiSentinelStart + `(\d+)` + wikiSentinelEnd)
+	wikiSentinelRe = regexp.MustCompile(wikiSentinelStart + `(\d+)` + wikiSentinelEnd + `(?:` + wikiSentinelPad + `)*`)
 	taskSentinelRe = regexp.MustCompile(taskSentinelStart + `(\d+)` + taskSentinelEnd)
 )
 
@@ -191,7 +192,16 @@ func preprocessWikiLinks(body string) (string, []linkSubst) {
 				}
 				id := len(subs)
 				subs = append(subs, linkSubst{target: target, display: display})
-				return fmt.Sprintf("%s%d%s", wikiSentinelStart, id, wikiSentinelEnd)
+				core := fmt.Sprintf("%s%d%s", wikiSentinelStart, id, wikiSentinelEnd)
+				// Pad sentinel to the rendered link's display width so Glamour's
+				// word-wrap reserves enough columns. Otherwise a short sentinel
+				// (e.g. <id 0>) at the end of a line lets Glamour fit it within
+				// the wrap width, then post-substitution the longer link text
+				// overflows the right margin and the terminal crops it.
+				if pad := lipgloss.Width(display) - lipgloss.Width(core); pad > 0 {
+					core += strings.Repeat(wikiSentinelPad, pad)
+				}
+				return core
 			})
 			out.WriteString(rewritten)
 		}

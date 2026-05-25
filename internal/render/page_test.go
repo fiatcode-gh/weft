@@ -68,6 +68,30 @@ func TestRenderStripsLogbookBlocks(t *testing.T) {
 	}
 }
 
+func TestRenderWikiLinkWrapsAtRightMargin(t *testing.T) {
+	// A line whose wiki-link sits near the right margin: the link's rendered
+	// display is much wider than the raw `<id>` sentinel, so without
+	// width-padding Glamour wraps based on the sentinel and the substituted
+	// link overflows the column budget.
+	body := "- Some text leading up to [[VeryLongPageNameRightAtTheEnd]]"
+	out, err := Render(body, 40)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	plain := ansi.Strip(out.Styled)
+	maxLine := 0
+	for _, line := range strings.Split(plain, "\n") {
+		// strip trailing spaces lipgloss adds to pad to width
+		line = strings.TrimRight(line, " ")
+		if w := len(line); w > maxLine {
+			maxLine = w
+		}
+	}
+	if maxLine > 40 {
+		t.Errorf("rendered line wider than wrap width 40: max=%d, output=%q", maxLine, plain)
+	}
+}
+
 func TestRenderTaskMarkersSurviveStyling(t *testing.T) {
 	body := strings.Join([]string{
 		"- TODO Buy milk",
