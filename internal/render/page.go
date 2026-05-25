@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -46,10 +47,24 @@ var (
 	rendererCache = map[int]*glamour.TermRenderer{}
 )
 
-// Warmup pre-initialises Glamour's renderer (and through it, termenv's
-// background-colour detection). Call this once at program start *before* the
-// TUI takes over stdin — otherwise WithAutoStyle's OSC 11 query is routed to
-// Bubble Tea's input parser and termenv blocks forever waiting for a reply.
+// styleName picks the Glamour style without doing any terminal IO. This is
+// deliberate: Glamour's WithAutoStyle issues OSC 11 background-colour queries
+// over stdin, which can leave stray reply bytes in the terminal's input
+// buffer. When lstui is quit and immediately re-opened, the next session's
+// termenv reads those stale bytes, fails to parse them, and blocks for
+// seconds before timing out. Reading env vars sidesteps the problem.
+func styleName() string {
+	if os.Getenv("NO_COLOR") != "" {
+		return "notty"
+	}
+	if s := os.Getenv("LSTUI_STYLE"); s != "" {
+		return s
+	}
+	return "dark"
+}
+
+// Warmup pre-builds the renderer cache so the first page render inside the
+// TUI doesn't pay chroma's syntax-highlighter init cost (~100ms).
 func Warmup() {
 	_, _ = rendererFor(80)
 }
@@ -65,7 +80,7 @@ func rendererFor(width int) (*glamour.TermRenderer, error) {
 		return r, nil
 	}
 	r, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
+		glamour.WithStandardStyle(styleName()),
 		glamour.WithWordWrap(width),
 	)
 	if err != nil {
