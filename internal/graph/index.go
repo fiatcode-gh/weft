@@ -44,6 +44,9 @@ func BuildIndex(graphPath string) (*Index, error) {
 				Path:      path,
 				IsJournal: sub == "journals",
 			}
+			if info, err := e.Info(); err == nil {
+				meta.ModTime = info.ModTime()
+			}
 			idx.Pages = append(idx.Pages, meta)
 		}
 	}

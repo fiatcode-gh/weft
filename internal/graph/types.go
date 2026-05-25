@@ -1,10 +1,13 @@
 package graph
 
+import "time"
+
 // PageMeta is the indexed metadata for one .md file in the graph.
 type PageMeta struct {
-	Name      string // logical page name (e.g., "proj/nested" or "2026-05-24")
-	Path      string // absolute filesystem path
-	IsJournal bool
+	Name      string    // logical page name (e.g., "proj/nested" or "2026-05-24")
+	Path      string    // absolute filesystem path
+	IsJournal bool      //
+	ModTime   time.Time // file modification time; zero if stat failed
 }
 
 // Ref points from one page's body to another page name.
