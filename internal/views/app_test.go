@@ -96,3 +96,37 @@ func TestNavigatePushesAndCapturesDeparting(t *testing.T) {
 		t.Errorf("entry[2]: want {Beta 0 -1}, got %+v", a.hist[2])
 	}
 }
+
+func TestNavigateTruncatesForwardHistory(t *testing.T) {
+	a := bootApp(t)
+
+	// Build hist: [journal, Alpha, Beta], histIdx=2.
+	a.navigate("Alpha")
+	a.navigate("Beta")
+	if len(a.hist) != 3 {
+		t.Fatalf("setup: want hist len 3, got %d", len(a.hist))
+	}
+
+	// Simulate the user being mid-history (a future back-key step).
+	// histIdx=1 points at Alpha with Beta still in the forward slot.
+	a.histIdx = 1
+
+	// Navigate to a new page from mid-history. Beta must be discarded.
+	a.navigate("proj/nested")
+
+	if len(a.hist) != 3 {
+		t.Errorf("after branch: hist len want 3, got %d", len(a.hist))
+	}
+	if a.histIdx != 2 {
+		t.Errorf("histIdx: want 2, got %d", a.histIdx)
+	}
+	if a.hist[2].page != "proj/nested" {
+		t.Errorf("tail entry: want proj/nested, got %q", a.hist[2].page)
+	}
+	// Beta must be gone from the stack.
+	for i, e := range a.hist {
+		if e.page == "Beta" {
+			t.Errorf("Beta still in history at idx %d", i)
+		}
+	}
+}
