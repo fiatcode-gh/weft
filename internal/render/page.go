@@ -3,6 +3,7 @@ package render
 import (
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
@@ -25,13 +26,36 @@ var wikiLinkRe = regexp.MustCompile(`\[\[([^\]\|]+)(?:\|([^\]]*))?\]\]`)
 
 var linkStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Underline(true)
 
-// Render returns Glamour-rendered markdown with wiki-link positions annotated.
-// width is the target terminal column count.
-func Render(body string, width int) (Result, error) {
+var (
+	rendererMu    sync.Mutex
+	rendererCache = map[int]*glamour.TermRenderer{}
+)
+
+// rendererFor returns a TermRenderer for the given word-wrap width, building
+// and caching one on first use. Glamour's chroma-based syntax highlighter is
+// expensive to initialise; reusing a renderer per width drops per-page cost
+// from hundreds of milliseconds to a few.
+func rendererFor(width int) (*glamour.TermRenderer, error) {
+	rendererMu.Lock()
+	defer rendererMu.Unlock()
+	if r, ok := rendererCache[width]; ok {
+		return r, nil
+	}
 	r, err := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
 		glamour.WithWordWrap(width),
 	)
+	if err != nil {
+		return nil, err
+	}
+	rendererCache[width] = r
+	return r, nil
+}
+
+// Render returns Glamour-rendered markdown with wiki-link positions annotated.
+// width is the target terminal column count.
+func Render(body string, width int) (Result, error) {
+	r, err := rendererFor(width)
 	if err != nil {
 		return Result{}, err
 	}
