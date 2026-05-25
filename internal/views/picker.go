@@ -32,11 +32,11 @@ type Picker struct {
 
 func NewPicker(idx *graph.Index, width, height int) *Picker {
 	ti := textinput.New()
-	ti.Placeholder = "Type a page name or YYYY-MM-DD..."
+	ti.Placeholder = "Type a page name..."
 	ti.Focus()
 	ti.CharLimit = 200
 	p := &Picker{idx: idx, input: ti, width: width, height: height, now: time.Now()}
-	p.choices = pickerChoices(idx, p.now)
+	p.choices = pickerChoices(idx)
 	p.names = make([]string, len(p.choices))
 	for i, c := range p.choices {
 		p.names[i] = c.name
@@ -48,34 +48,19 @@ func NewPicker(idx *graph.Index, width, height int) *Picker {
 // SetSize updates the cached terminal dimensions.
 func (p *Picker) SetSize(w, h int) { p.width, p.height = w, h }
 
-// pickerChoices returns the picker candidate list sorted with the most recently
-// active entries first. Real pages use their file mtime; virtual journal dates
-// in the ±30-day window get the start of that day so today's journal lands at
-// the top alongside any other page edited today.
-func pickerChoices(idx *graph.Index, now time.Time) []pickerChoice {
-	seen := make(map[string]struct{}, len(idx.Pages)+61)
-	entries := make([]pickerChoice, 0, len(idx.Pages)+61)
+// pickerChoices returns the picker candidate list sorted with the most
+// recently modified files first. Only real on-disk pages and journals
+// appear; the picker is read-only just like the rest of lstui and won't
+// invent rows for files that don't exist yet.
+func pickerChoices(idx *graph.Index) []pickerChoice {
+	seen := make(map[string]struct{}, len(idx.Pages))
+	entries := make([]pickerChoice, 0, len(idx.Pages))
 	for _, p := range idx.Pages {
 		if _, ok := seen[p.Name]; ok {
 			continue
 		}
 		seen[p.Name] = struct{}{}
 		entries = append(entries, pickerChoice{name: p.Name, mtime: p.ModTime})
-	}
-	// Virtual journal entries for today and the past 30 days. Future dates
-	// don't get virtual entries — they only exist as real files if/when the
-	// user actually writes the journal that day.
-	for d := -30; d <= 0; d++ {
-		date := now.AddDate(0, 0, d)
-		name := date.Format("2006-01-02")
-		if _, ok := seen[name]; ok {
-			continue
-		}
-		seen[name] = struct{}{}
-		entries = append(entries, pickerChoice{
-			name:  name,
-			mtime: time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location()),
-		})
 	}
 	sort.SliceStable(entries, func(i, j int) bool {
 		if !entries[i].mtime.Equal(entries[j].mtime) {
