@@ -15,16 +15,18 @@ const (
 	modePage modeT = iota
 	modePalette
 	modeSearch
+	modeBacklinks
 )
 
 type App struct {
-	idx     *graph.Index
-	page    *PageView
-	palette *Palette
-	search  *SearchView
-	mode    modeT
-	width   int
-	height  int
+	idx       *graph.Index
+	page      *PageView
+	palette   *Palette
+	search    *SearchView
+	backlinks *Backlinks
+	mode      modeT
+	width     int
+	height    int
 }
 
 func New(graphPath string) (*App, error) {
@@ -83,6 +85,19 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 			return a, cmd
+		case modeBacklinks:
+			sel, accept, cancel := a.backlinks.Update(key)
+			if cancel {
+				a.mode = modePage
+				a.backlinks = nil
+				return a, nil
+			}
+			if accept {
+				a.page.SetPage(sel)
+				a.mode = modePage
+				a.backlinks = nil
+			}
+			return a, nil
 		case modePage:
 			switch key {
 			case "q", "ctrl+c":
@@ -93,6 +108,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "/":
 				a.search = NewSearchView(a.idx)
 				a.mode = modeSearch
+			case "b":
+				a.backlinks = NewBacklinks(a.idx, a.page.Page())
+				a.mode = modeBacklinks
 			case "n":
 				a.page.CycleLink(+1)
 			case "N":
@@ -121,8 +139,10 @@ func (a *App) View() string {
 		return a.palette.View()
 	case modeSearch:
 		return a.search.View()
+	case modeBacklinks:
+		return a.backlinks.View()
 	}
-	return a.page.View() + "\n[ctrl-p] palette  [/] search  [n/N] link  [enter] follow  [q] quit"
+	return a.page.View() + "\n[ctrl-p] palette  [/] search  [b] backlinks  [n/N] link  [enter] follow  [q] quit"
 }
 
 func pageNameFromHitPath(idx *graph.Index, abs string) string {
