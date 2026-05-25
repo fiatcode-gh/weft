@@ -43,6 +43,10 @@ var helpSections = []struct {
 		{"n / N", "next / previous wiki-link"},
 		{"enter", "follow link under cursor"},
 	}},
+	{"History", []helpRow{
+		{"[", "back"},
+		{"]", "forward"},
+	}},
 	{"Open", []helpRow{
 		{"ctrl-p", "picker — find any page"},
 		{"/", "search the graph (ripgrep)"},
