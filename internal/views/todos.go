@@ -77,17 +77,20 @@ func (t *Todos) Update(key string) (page string, accept, cancel bool) {
 }
 
 var (
-	todosBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
-	todosHdr    = lipgloss.NewStyle().Bold(true)
+	todosBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(1, 2)
+	todosTitle  = lipgloss.NewStyle().Bold(true)
+	todosGroup  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
 	todosFaint  = lipgloss.NewStyle().Faint(true)
-	todosSel    = lipgloss.NewStyle().Reverse(true)
+	todosSel    = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("12")).Bold(true)
 	todosMark   = map[string]lipgloss.Style{
-		"TODO":    lipgloss.NewStyle().Foreground(lipgloss.Color("9")),  // red
-		"DOING":   lipgloss.NewStyle().Foreground(lipgloss.Color("11")), // yellow
-		"LATER":   lipgloss.NewStyle().Foreground(lipgloss.Color("12")), // blue
-		"WAITING": lipgloss.NewStyle().Foreground(lipgloss.Color("8")),  // dim
+		"TODO":    lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true),  // red
+		"DOING":   lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Bold(true), // yellow
+		"LATER":   lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Bold(true), // blue
+		"WAITING": lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Bold(true),  // dim
 	}
 )
+
+const todosInnerWidth = 64
 
 func (t *Todos) View() string {
 	var sb strings.Builder
@@ -95,36 +98,46 @@ func (t *Todos) View() string {
 	if t.filter != "" {
 		filterTxt = t.filter
 	}
-	sb.WriteString(todosHdr.Render(fmt.Sprintf("Open todos — filter: %s (%d)", filterTxt, len(t.visible))))
+	sb.WriteString(todosTitle.Render("Open todos"))
+	sb.WriteString(todosFaint.Render(fmt.Sprintf("   · filter: %s   (%d)", filterTxt, len(t.visible))))
 	sb.WriteString("\n\n")
+	sb.WriteString(todosFaint.Render(strings.Repeat("─", todosInnerWidth)))
+	sb.WriteString("\n")
+	if len(t.visible) == 0 {
+		sb.WriteString(todosFaint.Render("  nothing open"))
+		sb.WriteString("\n")
+	}
 	lastPage := ""
 	for i, b := range t.visible {
 		if b.Page != lastPage {
 			if lastPage != "" {
 				sb.WriteString("\n")
 			}
-			sb.WriteString(todosHdr.Render(b.Page))
+			sb.WriteString(todosGroup.Render(b.Page))
 			sb.WriteString("\n")
 			lastPage = b.Page
-		}
-		marker := b.Marker
-		if st, ok := todosMark[b.Marker]; ok {
-			marker = st.Render(b.Marker)
 		}
 		prio := ""
 		if b.Priority != "" {
 			prio = "[#" + b.Priority + "] "
 		}
-		row := fmt.Sprintf("  %s %s%s", marker, prio, b.Text)
+		marker := "  "
+		var row string
 		if i == t.sel {
-			row = todosSel.Render("▶" + row)
+			marker = todosSel.Render(" ▶ ")
+			row = todosSel.Render(fmt.Sprintf("%s %s%s", b.Marker, prio, b.Text))
 		} else {
-			row = " " + row
+			styledMarker := b.Marker
+			if st, ok := todosMark[b.Marker]; ok {
+				styledMarker = st.Render(b.Marker)
+			}
+			row = styledMarker + " " + prio + b.Text
 		}
-		sb.WriteString(row + "\n")
+		sb.WriteString(marker)
+		sb.WriteString(row)
+		sb.WriteString("\n")
 	}
 	sb.WriteString("\n")
-	sb.WriteString(todosFaint.Render("t cycle filter · enter open · esc back"))
-	sb.WriteString("\n")
+	sb.WriteString(todosFaint.Render("↑/↓ select · t cycle filter · enter open · esc back"))
 	return todosBorder.Render(sb.String())
 }

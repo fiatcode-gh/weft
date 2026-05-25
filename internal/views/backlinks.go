@@ -41,25 +41,42 @@ func (b *Backlinks) Update(key string) (selected string, accept, cancel bool) {
 }
 
 var (
-	blBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
-	blSel    = lipgloss.NewStyle().Reverse(true)
+	blBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(1, 2)
+	blTitle  = lipgloss.NewStyle().Bold(true)
+	blFaint  = lipgloss.NewStyle().Faint(true)
+	blPos    = lipgloss.NewStyle().Foreground(lipgloss.Color("12"))
+	blSel    = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("12")).Bold(true)
 )
+
+const blInnerWidth = 64
 
 func (b *Backlinks) View() string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "Backlinks → %s (%d)\n\n", b.target, len(b.refs))
+	sb.WriteString(blTitle.Render("Backlinks"))
+	sb.WriteString(blFaint.Render(fmt.Sprintf("   → %s   (%d)", b.target, len(b.refs))))
+	sb.WriteString("\n\n")
+	sb.WriteString(blFaint.Render(strings.Repeat("─", blInnerWidth)))
+	sb.WriteString("\n")
 	if len(b.refs) == 0 {
-		sb.WriteString("(none)\n")
-		return blBorder.Render(sb.String())
+		sb.WriteString(blFaint.Render("  no backlinks"))
+		sb.WriteString("\n")
 	}
 	for i, r := range b.refs {
-		line := fmt.Sprintf("%s:%d — %s", r.FromPage, r.LineNumber, strings.TrimSpace(r.Context))
+		ctx := strings.TrimSpace(r.Context)
+		marker := "  "
+		var line string
 		if i == b.sel {
-			line = blSel.Render("▶ " + line)
+			marker = blSel.Render(" ▶ ")
+			line = blSel.Render(fmt.Sprintf("%s:%d  · %s", r.FromPage, r.LineNumber, ctx))
 		} else {
-			line = "  " + line
+			pos := blPos.Render(fmt.Sprintf("%s:%d", r.FromPage, r.LineNumber))
+			line = pos + blFaint.Render("  · ") + ctx
 		}
-		sb.WriteString(line + "\n")
+		sb.WriteString(marker)
+		sb.WriteString(line)
+		sb.WriteString("\n")
 	}
+	sb.WriteString("\n")
+	sb.WriteString(blFaint.Render("↑/↓ select · enter open · b or esc close"))
 	return blBorder.Render(sb.String())
 }
