@@ -245,19 +245,32 @@ func (a *App) View() string {
 			"\n\n" + splashFaint.Render(fmt.Sprintf("Loading %s ...", a.graphPath)) +
 			"\n\n" + splashFaint.Render("q to quit")
 	}
+	var overlay string
 	switch a.mode {
 	case modePicker:
-		return a.picker.View()
+		overlay = a.picker.View()
 	case modeSearch:
-		return a.search.View()
+		overlay = a.search.View()
 	case modeBacklinks:
-		return a.backlinks.View()
+		overlay = a.backlinks.View()
 	case modeTodos:
-		return a.todos.View()
+		overlay = a.todos.View()
 	case modeHelp:
-		return a.help.View()
+		overlay = a.help.View()
+	}
+	if overlay != "" {
+		return a.centerOverlay(overlay)
 	}
 	return a.page.View() + "\n" + a.statusBar()
+}
+
+// centerOverlay places content in the middle of the terminal. Falls back to
+// the raw content when the terminal size hasn't arrived yet.
+func (a *App) centerOverlay(content string) string {
+	if a.width <= 0 || a.height <= 0 {
+		return content
+	}
+	return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center, content)
 }
 
 // statusBar renders a one-line bottom bar: page title + meta on the left,
