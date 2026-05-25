@@ -7,6 +7,8 @@ import (
 )
 
 func TestPaletteFiltersOnQuery(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
 	p := NewPalette(loadFixture(t))
 	p.Update("a") // type 'a'
 	p.Update("l")

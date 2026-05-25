@@ -23,6 +23,8 @@ func loadFixture(t *testing.T) *graph.Index {
 }
 
 func TestPageViewRendersAlpha(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
 	idx := loadFixture(t)
 	pv := NewPageView(idx, "Alpha", 80, 24)
 	teatest.RequireEqualOutput(t, []byte(pv.View()))
