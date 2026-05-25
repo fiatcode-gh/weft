@@ -149,8 +149,8 @@ var (
 )
 
 const (
-	pickerInnerWidthMax = 64 // ceiling — picker stays compact even on wide terminals
-	pickerInnerWidthMin = 30
+	pickerInnerWidthMax  = 80 // matches search/backlinks/todos for visual uniformity
+	pickerInnerWidthMin  = 30
 	pickerVisibleRowsMax = 14 // ceiling on simultaneously-shown matches
 	pickerVisibleRowsMin = 6
 )

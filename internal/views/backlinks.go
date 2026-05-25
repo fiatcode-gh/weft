@@ -53,7 +53,7 @@ var (
 )
 
 const (
-	blInnerWidthMax = 72
+	blInnerWidthMax = 80 // matches picker/search/todos for visual uniformity
 	blInnerWidthMin = 30
 )
 

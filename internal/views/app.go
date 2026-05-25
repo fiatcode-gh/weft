@@ -202,7 +202,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.backlinks = NewBacklinks(a.idx, a.page.Page(), a.width)
 				a.mode = modeBacklinks
 			case "T":
-				a.todos = NewTodos(a.idx)
+				a.todos = NewTodos(a.idx, a.width)
 				a.mode = modeTodos
 			case "?":
 				a.help = NewHelp()

@@ -15,13 +15,17 @@ type Todos struct {
 	filter  string // "", "TODO", "LATER", "DOING", "WAITING"
 	visible []graph.TodoBullet
 	sel     int
+	width   int // terminal width snapshot, for layout
 }
 
-func NewTodos(idx *graph.Index) *Todos {
-	t := &Todos{idx: idx}
+func NewTodos(idx *graph.Index, width int) *Todos {
+	t := &Todos{idx: idx, width: width}
 	t.recompute()
 	return t
 }
+
+// SetSize updates the cached terminal width.
+func (t *Todos) SetSize(w, _ int) { t.width = w }
 
 var markerCycle = []string{"", "TODO", "LATER", "DOING", "WAITING"}
 
@@ -90,9 +94,24 @@ var (
 	}
 )
 
-const todosInnerWidth = 64
+const (
+	todosInnerWidthMax = 80 // matches picker/search/backlinks for visual uniformity
+	todosInnerWidthMin = 30
+)
+
+func (t *Todos) innerWidth() int {
+	w := t.width - 2 - 4 - 4
+	if w > todosInnerWidthMax {
+		w = todosInnerWidthMax
+	}
+	if w < todosInnerWidthMin {
+		w = todosInnerWidthMin
+	}
+	return w
+}
 
 func (t *Todos) View() string {
+	inner := t.innerWidth()
 	var sb strings.Builder
 	filterTxt := "all"
 	if t.filter != "" {
@@ -101,7 +120,7 @@ func (t *Todos) View() string {
 	sb.WriteString(todosTitle.Render("Open todos"))
 	sb.WriteString(todosFaint.Render(fmt.Sprintf("   · filter: %s   (%d)", filterTxt, len(t.visible))))
 	sb.WriteString("\n\n")
-	sb.WriteString(todosFaint.Render(strings.Repeat("─", todosInnerWidth)))
+	sb.WriteString(todosFaint.Render(strings.Repeat("─", inner)))
 	sb.WriteString("\n")
 	if len(t.visible) == 0 {
 		sb.WriteString(todosFaint.Render("  nothing open"))
@@ -139,5 +158,5 @@ func (t *Todos) View() string {
 	}
 	sb.WriteString("\n")
 	sb.WriteString(todosFaint.Render("↑/↓ select · t cycle filter · enter open · esc back"))
-	return todosBorder.Width(todosInnerWidth + 4).Render(sb.String())
+	return todosBorder.Width(inner + 4).Render(sb.String())
 }

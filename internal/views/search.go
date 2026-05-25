@@ -32,18 +32,33 @@ type SearchSpan struct {
 }
 
 type SearchView struct {
-	idx     *graph.Index
-	query   string
-	hits    []SearchHit
-	sel     int
-	running bool
-	err     error
-	width   int // terminal width snapshot, for layout
-	height  int // terminal height snapshot, for scroll-window sizing
+	idx        *graph.Index
+	query      string
+	hits       []SearchHit
+	sel        int
+	running    bool
+	err        error
+	width      int               // terminal width snapshot, for layout
+	height     int               // terminal height snapshot, for scroll-window sizing
+	pathToName map[string]string // file path → logical page name, for tidy row prefixes
 }
 
 func NewSearchView(idx *graph.Index, width, height int) *SearchView {
-	return &SearchView{idx: idx, width: width, height: height}
+	s := &SearchView{idx: idx, width: width, height: height}
+	s.pathToName = make(map[string]string, len(idx.Pages))
+	for _, p := range idx.Pages {
+		s.pathToName[p.Path] = p.Name
+	}
+	return s
+}
+
+// hitLabel returns the column-left label for a hit row: the page name when
+// the file is in the index, falling back to a short path otherwise.
+func (s *SearchView) hitLabel(filePath string) string {
+	if name, ok := s.pathToName[filePath]; ok {
+		return name
+	}
+	return shortPath(filePath)
 }
 
 // SetSize updates the cached terminal dimensions.
@@ -135,6 +150,29 @@ var (
 	searchHitPos = lipgloss.NewStyle().Foreground(lipgloss.Color("12"))
 	searchMatch  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11"))
 )
+
+// matchesWithin returns the subset of h.Matches that still fits inside the
+// first ctxBytes bytes of the (possibly truncated) context.
+func (s *SearchView) matchesWithin(h SearchHit, ctxBytes int) []SearchSpan {
+	if len(h.Matches) == 0 {
+		return nil
+	}
+	out := h.Matches[:0:0]
+	for _, m := range h.Matches {
+		if m.Start >= ctxBytes {
+			break
+		}
+		end := m.End
+		if end > ctxBytes {
+			end = ctxBytes
+		}
+		if m.Start >= end {
+			continue
+		}
+		out = append(out, SearchSpan{Start: m.Start, End: end})
+	}
+	return out
+}
 
 // highlightMatches emphasises each [Start,End) span of ctx with searchMatch.
 // Overlapping or out-of-range spans are skipped defensively.
@@ -236,7 +274,17 @@ func (s *SearchView) View() string {
 		b.WriteString(searchFaint.Render("  type a query and press enter"))
 		b.WriteString("\n")
 	}
-	rowBudget := inner - 3 // leave room for the leading "   " or " ▶ " marker
+	// rowBudget leaves room for the 3-cell marker and keeps one cell of
+	// headroom so a wide-character edge case can't push the line past the
+	// inner content width and force lipgloss to wrap it.
+	rowBudget := inner - 4
+	const posCol = 22 // width reserved for "{page}:{line}" so context columns line up
+	sep := searchFaint.Render(" · ")
+	sepW := lipgloss.Width(sep)
+	ctxBudget := rowBudget - posCol - sepW
+	if ctxBudget < 8 {
+		ctxBudget = 8
+	}
 	start, end := s.scrollWindow()
 	if start > 0 {
 		b.WriteString(searchFaint.Render(fmt.Sprintf("   ↑ %d more above", start)))
@@ -244,19 +292,22 @@ func (s *SearchView) View() string {
 	}
 	for i := start; i < end; i++ {
 		h := s.hits[i]
+		label := s.hitLabel(h.FilePath)
+		posStr := fmt.Sprintf("%s:%d", label, h.Line)
+		posStr = padTo(clamp(posStr, posCol), posCol)
+		ctx := clamp(h.Context, ctxBudget)
+
 		marker := "   " // 3-cell so unselected rows align with " ▶ " width
 		var line string
 		if i == s.sel {
-			// Selected rows render in one blue-bg pass — keep the match
-			// emphasis off here to avoid nested SGR resets clobbering the
-			// selection background.
+			// Selected rows render in one blue-bg pass — applying match
+			// emphasis on top would inject nested SGR resets that clobber
+			// the selection background.
 			marker = searchSel.Render(" ▶ ")
-			raw := fmt.Sprintf("%s:%d  · %s", shortPath(h.FilePath), h.Line, h.Context)
-			line = searchSel.Render(clamp(raw, rowBudget))
+			line = searchSel.Render(posStr + " · " + ctx)
 		} else {
-			pos := searchHitPos.Render(fmt.Sprintf("%s:%d", shortPath(h.FilePath), h.Line))
-			ctx := highlightMatches(h.Context, h.Matches)
-			line = clamp(pos+searchFaint.Render("  · ")+ctx, rowBudget)
+			pos := searchHitPos.Render(posStr)
+			line = pos + sep + highlightMatches(ctx, s.matchesWithin(h, len(ctx)))
 		}
 		b.WriteString(marker)
 		b.WriteString(line)
@@ -335,13 +386,27 @@ func parseRipgrepJSON(b []byte) []SearchHit {
 			continue
 		}
 		ctx := strings.TrimRight(env.Data.Lines.Text, "\n")
+		// Strip leading whitespace from indented bullets so list rows line
+		// up. Match spans are byte offsets into the *original* line, so we
+		// also shift them by the number of bytes we trimmed.
+		trimmed := strings.TrimLeft(ctx, " \t")
+		shift := len(ctx) - len(trimmed)
+		ctx = trimmed
 		ctxLen := len(ctx)
 		spans := make([]SearchSpan, 0, len(env.Data.Submatches))
 		for _, sm := range env.Data.Submatches {
-			if sm.Start < 0 || sm.End > ctxLen || sm.Start >= sm.End {
-				continue
+			start := sm.Start - shift
+			end := sm.End - shift
+			if end <= 0 || start >= ctxLen || start >= end {
+				continue // span fell entirely inside the trimmed indent, or is degenerate
 			}
-			spans = append(spans, SearchSpan{Start: sm.Start, End: sm.End})
+			if start < 0 {
+				start = 0
+			}
+			if end > ctxLen {
+				end = ctxLen
+			}
+			spans = append(spans, SearchSpan{Start: start, End: end})
 		}
 		out = append(out, SearchHit{
 			FilePath: env.Data.Path.Text,
