@@ -41,6 +41,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | `?`        | toggle the help overlay             |
 | `n` / `N`  | cycle the wiki-link cursor          |
 | `Enter`    | follow link / open selection        |
+| `[` / `]`  | back / forward in page history      |
 | `j` / `k`  | scroll one line                     |
 | `Ctrl-d/u` | half-page scroll                    |
 | `R`        | rebuild the index                   |
