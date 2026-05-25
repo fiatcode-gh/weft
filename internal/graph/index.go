@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Index is the read-only in-memory view of a Logseq graph.
@@ -89,7 +90,7 @@ func lineAt(body string, n int) string {
 			for end < len(body) && body[end] != '\n' {
 				end++
 			}
-			return body[start:end]
+			return strings.TrimRight(body[start:end], "\r")
 		}
 		if body[j] == '\n' {
 			i++

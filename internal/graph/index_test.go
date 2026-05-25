@@ -40,6 +40,25 @@ func TestBuildIndex(t *testing.T) {
 		t.Errorf("Alpha backlinks: want %v, got %v", wantAlpha, gotAlpha)
 	}
 
+	// Lock down Ref.Context (the source line for the backlink).
+	var betaRef *Ref
+	for i, r := range idx.Backlinks["Alpha"] {
+		if r.FromPage == "Beta" {
+			betaRef = &idx.Backlinks["Alpha"][i]
+			break
+		}
+	}
+	if betaRef == nil {
+		t.Fatalf("no Beta→Alpha backlink found")
+	}
+	wantCtx := "- Beta links back to [[Alpha]]."
+	if betaRef.Context != wantCtx {
+		t.Errorf("Beta→Alpha context: want %q, got %q", wantCtx, betaRef.Context)
+	}
+	if betaRef.LineNumber != 1 {
+		t.Errorf("Beta→Alpha line: want 1, got %d", betaRef.LineNumber)
+	}
+
 	// Dangling refs still recorded
 	if len(idx.Backlinks["DoesNotExist"]) != 1 {
 		t.Errorf("dangling backlink to DoesNotExist not recorded: %v", idx.Backlinks["DoesNotExist"])
