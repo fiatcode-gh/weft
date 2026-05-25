@@ -2,6 +2,7 @@ package views
 
 import (
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/charmbracelet/x/exp/teatest"
@@ -111,5 +112,54 @@ func TestPageViewGotoTopBottom(t *testing.T) {
 	pv.GotoBottom()
 	if got := pv.Offset(); got == 0 {
 		t.Errorf("after GotoBottom: expected non-zero offset, got 0")
+	}
+}
+
+func TestPageViewScrollIndicatorFitsViewport(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	idx := loadFixture(t)
+	// Tall viewport so Alpha fits entirely — no scroll possible.
+	pv := NewPageView(idx, "Alpha", 80, 100)
+
+	if got := pv.ScrollIndicator(); got != "" {
+		t.Errorf("non-scrollable indicator: want \"\", got %q", got)
+	}
+}
+
+func TestPageViewScrollIndicatorTopBottom(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	idx := loadFixture(t)
+	// Small viewport so Alpha is scrollable.
+	pv := NewPageView(idx, "Alpha", 80, 5)
+
+	pv.GotoTop()
+	if got := pv.ScrollIndicator(); got != "0%" {
+		t.Errorf("at top: want \"0%%\", got %q", got)
+	}
+
+	pv.GotoBottom()
+	if got := pv.ScrollIndicator(); got != "100%" {
+		t.Errorf("at bottom: want \"100%%\", got %q", got)
+	}
+}
+
+func TestPageViewScrollIndicatorMid(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	idx := loadFixture(t)
+	pv := NewPageView(idx, "Alpha", 80, 5)
+
+	pv.GotoTop()
+	pv.HalfPageDown()
+
+	got := pv.ScrollIndicator()
+	matched, err := regexp.MatchString(`^\d{1,2}%$`, got)
+	if err != nil {
+		t.Fatalf("regex error: %v", err)
+	}
+	if !matched {
+		t.Errorf("mid-scroll: want NN%% (1-2 digits), got %q", got)
 	}
 }

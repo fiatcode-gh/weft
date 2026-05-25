@@ -349,7 +349,11 @@ func (a *App) centerOverlay(content string) string {
 // as a distinct strip even on terminals without colour.
 func (a *App) statusBar() string {
 	left := a.page.StatusLine()
-	right := statusFaint.Render("? help")
+	rightText := "? help"
+	if ind := a.page.ScrollIndicator(); ind != "" {
+		rightText = ind + "  " + rightText
+	}
+	right := statusFaint.Render(rightText)
 	width := a.width
 	if width <= 0 {
 		width = lipgloss.Width(left) + 2 + lipgloss.Width(right)

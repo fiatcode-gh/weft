@@ -2,6 +2,7 @@ package views
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -257,5 +258,38 @@ func TestPageEdgeKeys(t *testing.T) {
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
 	if got := a.page.Offset(); got != 0 {
 		t.Errorf("after g: want offset 0, got %d", got)
+	}
+}
+
+func TestAppStatusBarContainsScrollIndicator(t *testing.T) {
+	a := bootApp(t)
+	a.navigate("Alpha")
+	// Shrink the viewport so Alpha is scrollable.
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 5})
+
+	a.page.GotoBottom()
+
+	bar := a.statusBar()
+	if !strings.Contains(bar, "100%") {
+		t.Errorf("status bar missing 100%% indicator; got:\n%s", bar)
+	}
+	if !strings.Contains(bar, "? help") {
+		t.Errorf("status bar missing close hint; got:\n%s", bar)
+	}
+}
+
+func TestAppStatusBarHidesIndicatorWhenFits(t *testing.T) {
+	a := bootApp(t)
+	a.navigate("Alpha")
+	// Force a very tall viewport so Alpha is guaranteed to fit regardless
+	// of future content changes.
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 200})
+
+	bar := a.statusBar()
+	if strings.Contains(bar, "%") {
+		t.Errorf("status bar should hide percentage when page fits; got:\n%s", bar)
+	}
+	if !strings.Contains(bar, "? help") {
+		t.Errorf("status bar missing close hint; got:\n%s", bar)
 	}
 }

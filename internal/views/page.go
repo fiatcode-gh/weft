@@ -125,6 +125,17 @@ func (p *PageView) Offset() int { return p.vp.YOffset }
 // Cursor returns the current link cursor index. -1 means no link selected.
 func (p *PageView) Cursor() int { return p.cursor }
 
+// ScrollIndicator returns "" when the page fits the viewport (no scroll
+// possible), otherwise "NN%" — 0% at the top, 100% at the bottom.
+// viewport.ScrollPercent is already clamped to [0, 1] and returns exactly
+// 0 at YOffset=0 and 1 at the max offset.
+func (p *PageView) ScrollIndicator() string {
+	if p.vp.TotalLineCount() <= p.vp.Height {
+		return ""
+	}
+	return fmt.Sprintf("%d%%", int(p.vp.ScrollPercent()*100))
+}
+
 // Restore sets the viewport scroll offset and link cursor in one shot. The
 // viewport's SetYOffset clamps offset against the current content height.
 // Cursor is clamped to a valid link index; anything outside [0, len(Links))
