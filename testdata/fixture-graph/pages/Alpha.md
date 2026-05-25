@@ -1,0 +1,11 @@
+title:: Alpha
+tags:: fixture
+
+- This page links to [[Beta]] and the namespaced [[proj/nested]].
+- TODO Buy milk
+- LATER [#A] Review the design doc
+- A link inside a fence should NOT be extracted:
+  ```
+  see [[ShouldNotMatch]] for details
+  ```
+- An aliased link to [[Beta|the second page]].
