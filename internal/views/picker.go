@@ -13,57 +13,71 @@ import (
 	"github.com/fiatcode/logseq-tui/internal/graph"
 )
 
-type Palette struct {
+type Picker struct {
 	idx     *graph.Index
 	input   textinput.Model
-	choices []string // candidate page names (real + virtual journals)
+	choices []string // candidate page names (real + virtual journals), sorted by mtime desc
 	matches []fuzzy.Match
 	sel     int
 }
 
-func NewPalette(idx *graph.Index) *Palette {
+func NewPicker(idx *graph.Index) *Picker {
 	ti := textinput.New()
 	ti.Placeholder = "Type a page name or YYYY-MM-DD..."
 	ti.Focus()
 	ti.CharLimit = 200
-	p := &Palette{idx: idx, input: ti}
-	p.choices = paletteChoices(idx)
+	p := &Picker{idx: idx, input: ti}
+	p.choices = pickerChoices(idx)
 	p.search("")
 	return p
 }
 
-func paletteChoices(idx *graph.Index) []string {
-	// Real pages, sorted alphabetically. Listed first so the no-query view
-	// shows the actual catalog instead of a wall of date strings (which sort
-	// before letter-starting names lexicographically).
+// pickerChoices returns the picker candidate list sorted with the most recently
+// active entries first. Real pages use their file mtime; virtual journal dates
+// in the ±30-day window get the start of that day so today's journal lands at
+// the top alongside any other page edited today.
+func pickerChoices(idx *graph.Index) []string {
+	type entry struct {
+		name  string
+		mtime time.Time
+	}
+
 	seen := make(map[string]struct{}, len(idx.Pages)+61)
-	pages := make([]string, 0, len(idx.Pages))
+	entries := make([]entry, 0, len(idx.Pages)+61)
 	for _, p := range idx.Pages {
 		if _, ok := seen[p.Name]; ok {
 			continue
 		}
 		seen[p.Name] = struct{}{}
-		pages = append(pages, p.Name)
+		entries = append(entries, entry{name: p.Name, mtime: p.ModTime})
 	}
-	sort.Strings(pages)
-
-	// Virtual journal dates ±30 days around today, in chronological order
-	// (oldest to newest) so the user can scroll forward through time.
-	today := time.Now()
-	dates := make([]string, 0, 61)
+	now := time.Now()
 	for d := -30; d <= 30; d++ {
-		name := today.AddDate(0, 0, d).Format("2006-01-02")
+		date := now.AddDate(0, 0, d)
+		name := date.Format("2006-01-02")
 		if _, ok := seen[name]; ok {
 			continue
 		}
 		seen[name] = struct{}{}
-		dates = append(dates, name)
+		entries = append(entries, entry{
+			name:  name,
+			mtime: time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location()),
+		})
 	}
-
-	return append(pages, dates...)
+	sort.SliceStable(entries, func(i, j int) bool {
+		if !entries[i].mtime.Equal(entries[j].mtime) {
+			return entries[i].mtime.After(entries[j].mtime)
+		}
+		return entries[i].name < entries[j].name
+	})
+	names := make([]string, len(entries))
+	for i, e := range entries {
+		names[i] = e.name
+	}
+	return names
 }
 
-func (p *Palette) search(q string) {
+func (p *Picker) search(q string) {
 	if strings.TrimSpace(q) == "" {
 		p.matches = nil
 		for i, c := range p.choices {
@@ -83,7 +97,7 @@ func (p *Palette) search(q string) {
 }
 
 // Update handles a key. Returns (selected page name, accept, cancel).
-func (p *Palette) Update(key string) (selected string, accept bool, cancel bool) {
+func (p *Picker) Update(key string) (selected string, accept bool, cancel bool) {
 	switch key {
 	case "esc":
 		return "", false, true
@@ -128,21 +142,21 @@ func consumeKey(ti textinput.Model, key string) (textinput.Model, bool) {
 }
 
 var (
-	paletteBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
-	paletteSel    = lipgloss.NewStyle().Reverse(true)
+	pickerBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
+	pickerSel    = lipgloss.NewStyle().Reverse(true)
 )
 
-func (p *Palette) View() string {
+func (p *Picker) View() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "> %s\n\n", p.input.Value())
 	for i, m := range p.matches {
 		line := m.Str
 		if i == p.sel {
-			line = paletteSel.Render("▶ " + line)
+			line = pickerSel.Render("▶ " + line)
 		} else {
 			line = "  " + line
 		}
 		b.WriteString(line + "\n")
 	}
-	return paletteBorder.Render(b.String())
+	return pickerBorder.Render(b.String())
 }

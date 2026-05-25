@@ -20,7 +20,7 @@ type modeT int
 
 const (
 	modePage modeT = iota
-	modePalette
+	modePicker
 	modeSearch
 	modeBacklinks
 	modeTodos
@@ -39,7 +39,7 @@ type App struct {
 	loadErr error
 	page    *PageView
 
-	palette   *Palette
+	picker    *Picker
 	search    *SearchView
 	backlinks *Backlinks
 	todos     *Todos
@@ -123,17 +123,17 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		switch a.mode {
-		case modePalette:
-			sel, accept, cancel := a.palette.Update(key)
+		case modePicker:
+			sel, accept, cancel := a.picker.Update(key)
 			if cancel {
 				a.mode = modePage
-				a.palette = nil
+				a.picker = nil
 				return a, nil
 			}
 			if accept {
 				a.page.SetPage(sel)
 				a.mode = modePage
-				a.palette = nil
+				a.picker = nil
 			}
 			return a, nil
 		case modeSearch:
@@ -183,8 +183,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "q", "ctrl+c":
 				return a, tea.Quit
 			case "ctrl+p":
-				a.palette = NewPalette(a.idx)
-				a.mode = modePalette
+				a.picker = NewPicker(a.idx)
+				a.mode = modePicker
 			case "/":
 				a.search = NewSearchView(a.idx)
 				a.mode = modeSearch
@@ -233,8 +233,8 @@ func (a *App) View() string {
 			"\n\n" + splashFaint.Render("q to quit")
 	}
 	switch a.mode {
-	case modePalette:
-		return a.palette.View()
+	case modePicker:
+		return a.picker.View()
 	case modeSearch:
 		return a.search.View()
 	case modeBacklinks:
@@ -242,7 +242,7 @@ func (a *App) View() string {
 	case modeTodos:
 		return a.todos.View()
 	}
-	keys := "ctrl-p palette · / search · b backlinks · T todos · R refresh · n/N link · enter follow · q quit"
+	keys := "ctrl-p picker · / search · b backlinks · T todos · R refresh · n/N link · enter follow · q quit"
 	return a.page.View() + "\n" + footerStyle.Render(keys)
 }
 

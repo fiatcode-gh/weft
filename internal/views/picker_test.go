@@ -6,10 +6,10 @@ import (
 	"github.com/charmbracelet/x/exp/teatest"
 )
 
-func TestPaletteFiltersOnQuery(t *testing.T) {
+func TestPickerFiltersOnQuery(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
-	p := NewPalette(loadFixture(t))
+	p := NewPicker(loadFixture(t))
 	p.Update("a") // type 'a'
 	p.Update("l")
 	p.Update("p")
