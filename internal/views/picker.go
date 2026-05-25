@@ -134,6 +134,11 @@ func consumeKey(ti textinput.Model, key string) (textinput.Model, bool) {
 			ti.SetValue(v[:len(v)-1])
 		}
 		return ti, true
+	case "space":
+		// Some bubbletea code paths report the space key by name rather
+		// than as the literal " " character; handle both forms.
+		ti.SetValue(ti.Value() + " ")
+		return ti, true
 	}
 	if len(key) == 1 {
 		ti.SetValue(ti.Value() + key)

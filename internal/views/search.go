@@ -107,6 +107,11 @@ func (s *SearchView) Update(key string, graphPath string) (hit *SearchHit, accep
 			s.query = s.query[:len(s.query)-1]
 			s.hits = nil
 		}
+	case " ", "space":
+		// Both forms covered in case bubbletea reports the space key as
+		// the literal " " (default in v1) or the named "space" elsewhere.
+		s.query += " "
+		s.hits = nil
 	default:
 		if len(key) == 1 {
 			s.query += key
@@ -200,14 +205,18 @@ func shortPath(p string) string {
 }
 
 func runRipgrep(graphPath, query string) ([]byte, error) {
-	args := []string{"--json", "--", query}
+	// --smart-case keeps the search case-insensitive unless the pattern
+	// contains an uppercase letter, which matches what most interactive
+	// users expect from a quick search.
+	args := []string{"--json", "--smart-case", "--", query}
+	baseArgs := len(args)
 	for _, sub := range []string{"pages", "journals"} {
 		p := filepath.Join(graphPath, sub)
 		if _, err := os.Stat(p); err == nil {
 			args = append(args, p)
 		}
 	}
-	if len(args) == 3 {
+	if len(args) == baseArgs {
 		// No pages/ or journals/ dir — nothing to search.
 		return nil, nil
 	}
