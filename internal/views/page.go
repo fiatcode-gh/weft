@@ -106,25 +106,26 @@ var (
 	metaStyle  = lipgloss.NewStyle().Faint(true)
 )
 
-func (p *PageView) View() string {
-	if p.err != nil {
-		return fmt.Sprintf("error: %v", p.err)
-	}
-	meta := ""
+// StatusLine returns the text to display on the left side of the App-level
+// status bar: page name, plus a link count or cursor position when relevant.
+func (p *PageView) StatusLine() string {
+	out := titleStyle.Render(p.page)
 	if n := len(p.result.Links); n > 0 {
+		var meta string
 		if p.cursor >= 0 {
 			meta = fmt.Sprintf("  ·  link %d/%d", p.cursor+1, n)
 		} else {
 			meta = fmt.Sprintf("  ·  %d links", n)
 		}
+		out += metaStyle.Render(meta)
 	}
-	header := titleStyle.Render(p.page) + metaStyle.Render(meta)
-	ruleW := p.width
-	if ruleW < 8 {
-		ruleW = 8
-	}
-	rule := metaStyle.Render(strings.Repeat("─", ruleW))
+	return out
+}
 
+func (p *PageView) View() string {
+	if p.err != nil {
+		return fmt.Sprintf("error: %v", p.err)
+	}
 	body := p.result.Styled
 	if body == "" {
 		body = metaStyle.Render("(no entry yet for this page)")
@@ -134,7 +135,7 @@ func (p *PageView) View() string {
 		body = body[:l.Start] + cursorStyle.Render(l.Display) + body[l.End:]
 	}
 	p.vp.SetContent(body)
-	return header + "\n" + rule + "\n" + p.vp.View()
+	return p.vp.View()
 }
 
 func (p *PageView) load() {

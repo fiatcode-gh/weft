@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -11,7 +12,8 @@ import (
 )
 
 var (
-	footerStyle = lipgloss.NewStyle().Faint(true)
+	statusFaint = lipgloss.NewStyle().Faint(true)
+	statusRule  = lipgloss.NewStyle().Faint(true)
 	splashBold  = lipgloss.NewStyle().Bold(true)
 	splashFaint = lipgloss.NewStyle().Faint(true)
 )
@@ -24,6 +26,7 @@ const (
 	modeSearch
 	modeBacklinks
 	modeTodos
+	modeHelp
 )
 
 // indexLoadedMsg carries the result of an asynchronous graph.BuildIndex run.
@@ -43,6 +46,7 @@ type App struct {
 	search    *SearchView
 	backlinks *Backlinks
 	todos     *Todos
+	help      *Help
 
 	mode   modeT
 	width  int
@@ -178,6 +182,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.todos = nil
 			}
 			return a, nil
+		case modeHelp:
+			if a.help.Update(key) {
+				a.mode = modePage
+				a.help = nil
+			}
+			return a, nil
 		case modePage:
 			switch key {
 			case "q", "ctrl+c":
@@ -194,6 +204,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "T":
 				a.todos = NewTodos(a.idx)
 				a.mode = modeTodos
+			case "?":
+				a.help = NewHelp()
+				a.mode = modeHelp
 			case "R":
 				// Async reindex — the response lands as indexLoadedMsg and
 				// rebuilds PageView for the current page. Errors surface in
@@ -241,9 +254,29 @@ func (a *App) View() string {
 		return a.backlinks.View()
 	case modeTodos:
 		return a.todos.View()
+	case modeHelp:
+		return a.help.View()
 	}
-	keys := "ctrl-p picker · / search · b backlinks · T todos · R refresh · n/N link · enter follow · q quit"
-	return a.page.View() + "\n" + footerStyle.Render(keys)
+	return a.page.View() + "\n" + a.statusBar()
+}
+
+// statusBar renders a one-line bottom bar: page title + meta on the left,
+// help hint on the right, separated by enough whitespace to span the
+// terminal width. A faint horizontal rule sits above it so the bar reads
+// as a distinct strip even on terminals without colour.
+func (a *App) statusBar() string {
+	left := a.page.StatusLine()
+	right := statusFaint.Render("? help")
+	width := a.width
+	if width <= 0 {
+		width = lipgloss.Width(left) + 2 + lipgloss.Width(right)
+	}
+	rule := statusRule.Render(strings.Repeat("─", width))
+	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
+	if gap < 1 {
+		gap = 1
+	}
+	return rule + "\n" + left + strings.Repeat(" ", gap) + right
 }
 
 func pageNameFromHitPath(idx *graph.Index, abs string) string {
