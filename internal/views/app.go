@@ -51,13 +51,24 @@ type App struct {
 	mode   modeT
 	width  int
 	height int
+
+	// Browser-style page history. hist[histIdx] is the entry currently on
+	// screen. histIdx == -1 before the first page is shown.
+	hist    []historyEntry
+	histIdx int
+}
+
+type historyEntry struct {
+	page   string
+	offset int
+	cursor int
 }
 
 // New returns an App that has not yet built its index. The index is built
 // asynchronously in Init so the first frame can render a "loading" splash
 // instead of freezing the terminal while a large graph is walked.
 func New(graphPath string) *App {
-	return &App{graphPath: graphPath, mode: modePage}
+	return &App{graphPath: graphPath, mode: modePage, histIdx: -1}
 }
 
 func todayJournalName() string { return time.Now().Format("2006-01-02") }
@@ -77,8 +88,25 @@ func (a *App) buildIndexCmd() tea.Cmd {
 // "flash from 80 cols to actual width" the previous synchronous path showed.
 func (a *App) tryInitPage() {
 	if a.page == nil && a.idx != nil && a.loadErr == nil && a.width > 0 {
-		a.page = NewPageView(a.idx, todayJournalName(), a.width, a.height)
+		name := todayJournalName()
+		a.page = NewPageView(a.idx, name, a.width, a.height)
+		a.hist = []historyEntry{{page: name, offset: 0, cursor: -1}}
+		a.histIdx = 0
 	}
+}
+
+// navigate switches the page view to name and records the transition in
+// history. The departing page's offset/cursor are captured into the current
+// history entry, any forward history is truncated, then a fresh entry for
+// the destination is pushed and becomes current.
+func (a *App) navigate(name string) {
+	if a.histIdx >= 0 && a.histIdx < len(a.hist) {
+		a.hist[a.histIdx].offset = a.page.Offset()
+		a.hist[a.histIdx].cursor = a.page.Cursor()
+	}
+	a.hist = append(a.hist[:a.histIdx+1], historyEntry{page: name, offset: 0, cursor: -1})
+	a.histIdx = len(a.hist) - 1
+	a.page.SetPage(name)
 }
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -135,7 +163,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 			if accept {
-				a.page.SetPage(sel)
+				a.navigate(sel)
 				a.mode = modePage
 				a.picker = nil
 			}
@@ -149,7 +177,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if accept && hit != nil {
 				if name := pageNameFromHitPath(a.idx, hit.FilePath); name != "" {
-					a.page.SetPage(name)
+					a.navigate(name)
 				}
 				a.mode = modePage
 				a.search = nil
@@ -164,7 +192,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 			if accept {
-				a.page.SetPage(sel)
+				a.navigate(sel)
 				a.mode = modePage
 				a.backlinks = nil
 			}
@@ -177,7 +205,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 			if accept {
-				a.page.SetPage(page)
+				a.navigate(page)
 				a.mode = modePage
 				a.todos = nil
 			}
@@ -218,7 +246,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.page.CycleLink(-1)
 			case "enter":
 				if t := a.page.FollowCursor(); t != "" {
-					a.page.SetPage(t)
+					a.navigate(t)
 				}
 			case "j", "down":
 				a.page.LineDown()
