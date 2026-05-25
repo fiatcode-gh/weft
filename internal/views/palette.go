@@ -131,7 +131,7 @@ func (p *Palette) View() string {
 	for i, m := range p.matches {
 		line := m.Str
 		if i == p.sel {
-			line = paletteSel.Render("> " + line)
+			line = paletteSel.Render("▶ " + line)
 		} else {
 			line = "  " + line
 		}
