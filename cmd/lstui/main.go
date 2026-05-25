@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/fiatcode/logseq-tui/internal/render"
 	"github.com/fiatcode/logseq-tui/internal/views"
 )
 
@@ -41,6 +42,11 @@ func main() {
 			defer f.Close()
 		}
 	}
+
+	// Pre-warm Glamour so its terminal-capability detection (OSC queries over
+	// stdin) runs while we still own the terminal. Otherwise the first render
+	// inside Bubble Tea's loop hangs waiting for a reply that BT swallowed.
+	render.Warmup()
 
 	app := views.New(graphPath)
 

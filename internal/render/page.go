@@ -46,6 +46,14 @@ var (
 	rendererCache = map[int]*glamour.TermRenderer{}
 )
 
+// Warmup pre-initialises Glamour's renderer (and through it, termenv's
+// background-colour detection). Call this once at program start *before* the
+// TUI takes over stdin — otherwise WithAutoStyle's OSC 11 query is routed to
+// Bubble Tea's input parser and termenv blocks forever waiting for a reply.
+func Warmup() {
+	_, _ = rendererFor(80)
+}
+
 // rendererFor returns a TermRenderer for the given word-wrap width, building
 // and caching one on first use. Glamour's chroma-based syntax highlighter is
 // expensive to initialise; reusing a renderer per width drops per-page cost
