@@ -65,4 +65,4 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 
 ## Scope
 
-Read-only. No editing, no fold/unfold, no filesystem-watch live reload (use `R`). Design spec is at `docs/superpowers/specs/2026-05-24-logseq-tui-design.md`; the v1 implementation plan is at `docs/superpowers/plans/2026-05-24-logseq-tui.md`.
+Read-only. No editing, no fold/unfold, no filesystem-watch live reload (use `R`).
