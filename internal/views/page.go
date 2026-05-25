@@ -47,12 +47,17 @@ func (p *PageView) SetPage(name string) {
 	p.load()
 }
 
-// SetSize updates viewport size.
+// SetSize updates viewport size. The page body is only re-rendered when the
+// width changes — height changes don't affect word-wrap, so we just resize
+// the viewport and let it re-clip the existing styled content.
 func (p *PageView) SetSize(w, h int) {
+	widthChanged := w != p.width
 	p.width, p.height = w, h
 	p.vp.Width = w
 	p.vp.Height = max(1, h-2)
-	p.load()
+	if widthChanged {
+		p.load()
+	}
 }
 
 // CycleLink moves the cursor to the next/previous wiki-link.
