@@ -62,7 +62,10 @@ func pickerChoices(idx *graph.Index, now time.Time) []pickerChoice {
 		seen[p.Name] = struct{}{}
 		entries = append(entries, pickerChoice{name: p.Name, mtime: p.ModTime})
 	}
-	for d := -30; d <= 30; d++ {
+	// Virtual journal entries for today and the past 30 days. Future dates
+	// don't get virtual entries — they only exist as real files if/when the
+	// user actually writes the journal that day.
+	for d := -30; d <= 0; d++ {
 		date := now.AddDate(0, 0, d)
 		name := date.Format("2006-01-02")
 		if _, ok := seen[name]; ok {
@@ -247,7 +250,7 @@ func (p *Picker) View() string {
 			hint = relativeTime(p.now, p.choices[m.Index].mtime)
 		}
 		name := clamp(m.Str, nameBudget)
-		marker := "  "
+		marker := "   " // 3-cell marker matches the selected " ▶ " so rows don't shift
 		var row string
 		if i == p.sel {
 			marker = pickerSel.Render(" ▶ ")

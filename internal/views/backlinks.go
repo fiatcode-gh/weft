@@ -83,7 +83,7 @@ func (b *Backlinks) View() string {
 	rowBudget := inner - 3
 	for i, r := range b.refs {
 		ctx := strings.TrimSpace(r.Context)
-		marker := "  "
+		marker := "   " // 3-cell to match selected " ▶ " width
 		var line string
 		if i == b.sel {
 			marker = blSel.Render(" ▶ ")

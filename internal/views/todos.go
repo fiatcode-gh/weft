@@ -121,7 +121,7 @@ func (t *Todos) View() string {
 		if b.Priority != "" {
 			prio = "[#" + b.Priority + "] "
 		}
-		marker := "  "
+		marker := "   " // 3-cell to match selected " ▶ " width
 		var row string
 		if i == t.sel {
 			marker = todosSel.Render(" ▶ ")

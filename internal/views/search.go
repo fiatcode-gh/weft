@@ -199,7 +199,7 @@ func (s *SearchView) View() string {
 	}
 	rowBudget := inner - 3 // leave room for the leading "  " or " ▶ " marker
 	for i, h := range s.hits {
-		marker := "  "
+		marker := "   " // 3-cell so unselected rows align with " ▶ " width
 		var line string
 		if i == s.sel {
 			// Selected rows render in one blue-bg pass — keep the match

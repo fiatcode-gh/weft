@@ -7,14 +7,14 @@
 │   ▶ TODO Ship the TUI MVP                                          │
 │                                                                    │
 │  Alpha                                                             │
-│    TODO Buy milk                                                   │
-│    LATER [#A] Review the design doc                                │
+│     TODO Buy milk                                                  │
+│     LATER [#A] Review the design doc                               │
 │                                                                    │
 │  Beta                                                              │
-│    DOING Write the parser                                          │
+│     DOING Write the parser                                         │
 │                                                                    │
 │  proj/nested                                                       │
-│    WAITING [#B] Vendor response on quote                           │
+│     WAITING [#B] Vendor response on quote                          │
 │                                                                    │
 │  ↑/↓ select · t cycle filter · enter open · esc back               │
 │                                                                    │
