@@ -129,6 +129,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "T":
 				a.todos = NewTodos(a.idx)
 				a.mode = modeTodos
+			case "R":
+				if idx, err := graph.BuildIndex(a.idx.GraphPath); err == nil {
+					a.idx = idx
+					a.page = NewPageView(idx, a.page.Page(), a.width, a.height)
+				}
 			case "n":
 				a.page.CycleLink(+1)
 			case "N":
@@ -162,7 +167,7 @@ func (a *App) View() string {
 	case modeTodos:
 		return a.todos.View()
 	}
-	return a.page.View() + "\n[ctrl-p] palette  [/] search  [b] backlinks  [T] todos  [n/N] link  [enter] follow  [q] quit"
+	return a.page.View() + "\n[ctrl-p] palette  [/] search  [b] backlinks  [T] todos  [R] refresh  [n/N] link  [enter] follow  [q] quit"
 }
 
 func pageNameFromHitPath(idx *graph.Index, abs string) string {
