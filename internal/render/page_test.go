@@ -92,6 +92,46 @@ func TestRenderWikiLinkWrapsAtRightMargin(t *testing.T) {
 	}
 }
 
+func TestRenderHangingIndentOnWrappedBullets(t *testing.T) {
+	body := "- This bullet has enough text that Glamour will wrap it across two lines for sure."
+	out, err := Render(body, 40)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	plain := ansi.Strip(out.Styled)
+	lines := strings.Split(plain, "\n")
+	var bullet, continuation int = -1, -1
+	for i, line := range lines {
+		if strings.Contains(line, "• ") && bullet < 0 {
+			bullet = i
+			continue
+		}
+		if bullet >= 0 && continuation < 0 && strings.TrimSpace(line) != "" {
+			continuation = i
+			break
+		}
+	}
+	if bullet < 0 || continuation < 0 {
+		t.Fatalf("expected a bullet line followed by a continuation line, got:\n%s", plain)
+	}
+	bulletIndent := leadingSpaceCount(lines[bullet])
+	contentIndent := bulletIndent + 2 // bullet glyph + space
+	if got := leadingSpaceCount(lines[continuation]); got != contentIndent {
+		t.Errorf("continuation indent: want %d, got %d. lines:\n%s", contentIndent, got, plain)
+	}
+}
+
+func leadingSpaceCount(s string) int {
+	n := 0
+	for _, r := range s {
+		if r != ' ' {
+			break
+		}
+		n++
+	}
+	return n
+}
+
 func TestRenderTaskMarkersSurviveStyling(t *testing.T) {
 	body := strings.Join([]string{
 		"- TODO Buy milk",

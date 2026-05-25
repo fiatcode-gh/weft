@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Link is one wiki-link occurrence inside the styled output.
@@ -250,6 +251,51 @@ func preprocessTaskMarkers(body string) (string, []string) {
 	return out.String(), markers
 }
 
+// bulletLineRe matches a Glamour-rendered bullet row: optional leading spaces,
+// a bullet glyph, and at least one space before the content. Glamour swaps
+// markdown `-`/`*` for `•` and may use `◦` / `▪` for nested levels.
+var bulletLineRe = regexp.MustCompile(`^(\s*)([•◦▪▫])\s+`)
+
+// indentWrappedBullets gives bullets hanging-indent behaviour: Glamour wraps
+// continuation lines to the bullet column, but the eye expects them aligned
+// with the content column (one bullet + one space to the right). This pass
+// walks the styled output and adds the missing two spaces to continuation
+// lines until the bullet block ends (blank line or a new bullet).
+func indentWrappedBullets(styled string) string {
+	lines := strings.Split(styled, "\n")
+	contentCol := 0
+	inBullet := false
+	for i, line := range lines {
+		plain := ansi.Strip(line)
+		if strings.TrimSpace(plain) == "" {
+			inBullet = false
+			continue
+		}
+		if m := bulletLineRe.FindStringSubmatch(plain); m != nil {
+			contentCol = len(m[1]) + 2 // leading spaces + bullet (1 cell) + space
+			inBullet = true
+			continue
+		}
+		if !inBullet {
+			continue
+		}
+		// Continuation: prepend the gap between current leading spaces and
+		// the bullet's content column. Padding goes at the raw start of the
+		// line so it sits before any ANSI prefix Glamour emitted.
+		existing := 0
+		for _, r := range plain {
+			if r != ' ' {
+				break
+			}
+			existing++
+		}
+		if existing < contentCol {
+			lines[i] = strings.Repeat(" ", contentCol-existing) + line
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 // substituteTaskSentinels replaces each task-marker sentinel in styled with
 // its rendered (colour-coded) marker text. Position-stable: it doesn't track
 // offsets the way the wiki-link pass does, so it runs first.
@@ -288,6 +334,9 @@ func Render(body string, width int) (Result, error) {
 	// Substitute task markers first so the byte positions we record for wiki
 	// links in the next pass reflect the final output bytes.
 	styled = substituteTaskSentinels(styled, taskMarkers)
+	// Re-indent wrapped bullet text before wiki-link sentinel substitution so
+	// the recorded link positions land in the final output.
+	styled = indentWrappedBullets(styled)
 
 	// Walk the styled output once, replacing each wiki-link sentinel with its
 	// rendered display string and recording the byte position in the result.
