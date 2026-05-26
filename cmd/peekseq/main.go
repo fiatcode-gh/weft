@@ -86,8 +86,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, "peekseq: ripgrep (rg) not found on PATH — install it (https://github.com/BurntSushi/ripgrep) and try again.")
 		os.Exit(2)
 	}
-	if _, err := os.Stat(graphPath); err != nil {
+	if info, err := os.Stat(graphPath); err != nil {
 		fmt.Fprintf(os.Stderr, "peekseq: graph path %q is not accessible: %v\n", graphPath, err)
+		os.Exit(2)
+	} else if !info.IsDir() {
+		fmt.Fprintf(os.Stderr, "peekseq: graph path %q is not a directory\n", graphPath)
 		os.Exit(2)
 	}
 
