@@ -27,7 +27,11 @@ func TestBuildIndex(t *testing.T) {
 		names = append(names, p.Name)
 	}
 	sort.Strings(names)
-	want := []string{"2026-05-23", "2026-05-24", "Alpha", "Beta", "proj/nested"}
+	want := []string{
+		"2026-01-10", "2026-03-15", "2026-04-20", "2026-05-01",
+		"2026-05-15", "2026-05-22", "2026-05-23", "2026-05-24", "2026-05-25",
+		"Alpha", "Beta", "Hub", "Orphan", "Workbench", "kb/notes", "proj/nested",
+	}
 	if !equalSlices(names, want) {
 		t.Errorf("page names: want %v, got %v", want, names)
 	}
@@ -35,7 +39,7 @@ func TestBuildIndex(t *testing.T) {
 	// Backlinks: Alpha is linked from Beta and 2026-05-24
 	gotAlpha := pageNamesOfRefs(idx.Backlinks["Alpha"])
 	sort.Strings(gotAlpha)
-	wantAlpha := []string{"2026-05-24", "Beta"}
+	wantAlpha := []string{"2026-05-15", "2026-05-24", "Beta", "Hub"}
 	if !equalSlices(gotAlpha, wantAlpha) {
 		t.Errorf("Alpha backlinks: want %v, got %v", wantAlpha, gotAlpha)
 	}
@@ -64,9 +68,9 @@ func TestBuildIndex(t *testing.T) {
 		t.Errorf("dangling backlink to DoesNotExist not recorded: %v", idx.Backlinks["DoesNotExist"])
 	}
 
-	// Todos: 5 open across the fixture
-	if len(idx.Todos) != 5 {
-		t.Errorf("todo count: want 5, got %d (%+v)", len(idx.Todos), idx.Todos)
+	// Todos: 13 open across the fixture
+	if len(idx.Todos) != 13 {
+		t.Errorf("todo count: want 13, got %d (%+v)", len(idx.Todos), idx.Todos)
 	}
 }
 
