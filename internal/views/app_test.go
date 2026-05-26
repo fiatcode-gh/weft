@@ -446,3 +446,68 @@ func TestAppQuitsBeforePage(t *testing.T) {
 		t.Errorf("q before page should return Quit cmd, got nil")
 	}
 }
+
+func TestAppCenterOverlayFallback(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	a := New("/no/such/path", "test")
+	if got := a.centerOverlay("hello"); got != "hello" {
+		t.Errorf("zero-size fallback: want raw content, got %q", got)
+	}
+}
+
+func TestAppCenterOverlayPlacesContent(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	a := bootApp(t)
+	out := a.centerOverlay("X")
+	if !strings.Contains(out, "X") {
+		t.Errorf("centered output must contain content; got:\n%s", out)
+	}
+	if len(out) <= len("X") {
+		t.Errorf("centered output should pad with whitespace; got len %d", len(out))
+	}
+}
+
+func TestPageNameFromHitPath(t *testing.T) {
+	idx := loadFixture(t)
+	var sample, name string
+	for _, p := range idx.Pages {
+		sample, name = p.Path, p.Name
+		break
+	}
+	if got := pageNameFromHitPath(idx, sample); got != name {
+		t.Errorf("known path: want %q, got %q", name, got)
+	}
+	if got := pageNameFromHitPath(idx, "/totally/unknown/file.md"); got != "" {
+		t.Errorf("unknown path: want \"\", got %q", got)
+	}
+}
+
+func TestAppSearchDoneMsgRouting(t *testing.T) {
+	a := bootApp(t)
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	if a.search == nil {
+		t.Fatalf("setup: search not open")
+	}
+	a.Update(searchDoneMsg{hits: []SearchHit{
+		{FilePath: "/x", Line: 1, Context: "hello"},
+	}})
+	if len(a.search.hits) != 1 {
+		t.Errorf("searchDoneMsg should populate hits, got %d", len(a.search.hits))
+	}
+}
+
+func TestAppViewWithOverlay(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	a := bootApp(t)
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")})
+	v := a.View()
+	if strings.Contains(v, "? help") {
+		t.Errorf("overlay view should not render the page status bar; got:\n%s", v)
+	}
+	if !strings.Contains(v, "Open todos") {
+		t.Errorf("overlay view should show todos title; got:\n%s", v)
+	}
+}
