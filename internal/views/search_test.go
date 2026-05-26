@@ -27,3 +27,36 @@ func TestParseRipgrepJSON(t *testing.T) {
 		t.Errorf("hit[1].Matches: want 0, got %d", len(hits[1].Matches))
 	}
 }
+
+func TestNewSearchViewIndexesPathToName(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	idx := loadFixture(t)
+	s := NewSearchView(idx, 100, 30)
+	if s.width != 100 || s.height != 30 {
+		t.Errorf("size: want 100x30, got %dx%d", s.width, s.height)
+	}
+	// Every indexed page maps its absolute path to its logical name.
+	for _, p := range idx.Pages {
+		if got := s.pathToName[p.Path]; got != p.Name {
+			t.Errorf("pathToName[%q] = %q, want %q", p.Path, got, p.Name)
+		}
+	}
+}
+
+func TestSearchAccessorsAndSetSize(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	s := NewSearchView(loadFixture(t), 80, 24)
+	if s.Query() != "" {
+		t.Errorf("fresh Query: want \"\", got %q", s.Query())
+	}
+	s.SetQuery("foo")
+	if s.Query() != "foo" {
+		t.Errorf("after SetQuery: want \"foo\", got %q", s.Query())
+	}
+	s.SetSize(120, 40)
+	if s.width != 120 || s.height != 40 {
+		t.Errorf("SetSize: want 120x40, got %dx%d", s.width, s.height)
+	}
+}
