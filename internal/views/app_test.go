@@ -511,3 +511,53 @@ func TestAppViewWithOverlay(t *testing.T) {
 		t.Errorf("overlay view should show todos title; got:\n%s", v)
 	}
 }
+
+func TestAppPageKeyDispatch(t *testing.T) {
+	a := bootApp(t)
+	a.navigate("Alpha")
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 5}) // scrollable
+
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	if a.page.Cursor() < 0 {
+		t.Errorf("n should advance cursor from -1, got %d", a.page.Cursor())
+	}
+
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("N")})
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	afterJ := a.page.Offset()
+
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	if a.page.Offset() >= afterJ && afterJ > 0 {
+		t.Errorf("k should retreat from %d, got %d", afterJ, a.page.Offset())
+	}
+
+	a.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	afterCtrlD := a.page.Offset()
+	a.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	if a.page.Offset() >= afterCtrlD && afterCtrlD > 0 {
+		t.Errorf("ctrl+u should retreat from %d, got %d", afterCtrlD, a.page.Offset())
+	}
+}
+
+func TestAppEnterFollowsLink(t *testing.T) {
+	a := bootApp(t)
+	a.navigate("Alpha")
+	a.page.CycleLink(+1)
+	target := a.page.FollowCursor()
+	if target == "" {
+		t.Fatalf("setup: no link target available")
+	}
+
+	a.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if a.page.Page() != target {
+		t.Errorf("enter should navigate to %q, got %q", target, a.page.Page())
+	}
+}
+
+func TestAppReindexFromPage(t *testing.T) {
+	a := bootApp(t)
+	_, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("R")})
+	if cmd == nil {
+		t.Errorf("R from page mode should return a reindex cmd")
+	}
+}
