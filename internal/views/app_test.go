@@ -1,6 +1,7 @@
 package views
 
 import (
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -388,5 +389,60 @@ func TestAppTodosAcceptNavigates(t *testing.T) {
 	}
 	if a.todos != nil {
 		t.Errorf("todos not cleared")
+	}
+}
+
+func TestAppLoadingSplashBeforePage(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	a := New("/nonexistent/before/build", "test")
+	v := a.View()
+	if !strings.Contains(v, "peekseq") {
+		t.Errorf("splash should contain title; got:\n%s", v)
+	}
+	if !strings.Contains(v, "Loading") {
+		t.Errorf("splash should announce loading; got:\n%s", v)
+	}
+}
+
+func TestAppErrorSplashOnIndexFailure(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	a := New("/some/graph", "test")
+	a.Update(indexLoadedMsg{err: errors.New("synthetic build failure")})
+	v := a.View()
+	if !strings.Contains(v, "failed to index") {
+		t.Errorf("error splash should announce failure; got:\n%s", v)
+	}
+	if !strings.Contains(v, "R to retry") {
+		t.Errorf("error splash should show retry hint; got:\n%s", v)
+	}
+}
+
+func TestAppRetryFromErrorSplash(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	a := New("/some/graph", "test")
+	a.Update(indexLoadedMsg{err: errors.New("synthetic build failure")})
+	if a.loadErr == nil {
+		t.Fatalf("setup: loadErr should be set")
+	}
+
+	_, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("R")})
+	if cmd == nil {
+		t.Fatalf("R from error splash should return a retry cmd")
+	}
+	if a.loadErr != nil {
+		t.Errorf("R should clear loadErr before rebuilding, got %v", a.loadErr)
+	}
+}
+
+func TestAppQuitsBeforePage(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	a := New("/no/such/path", "test")
+	_, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	if cmd == nil {
+		t.Errorf("q before page should return Quit cmd, got nil")
 	}
 }
