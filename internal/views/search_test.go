@@ -2,8 +2,18 @@ package views
 
 import (
 	"errors"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func skipIfNoRipgrep(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("rg"); err != nil {
+		t.Skip("rg not on PATH; install ripgrep to run search tests")
+	}
+}
 
 func TestParseRipgrepJSON(t *testing.T) {
 	// Two match lines + non-match types interleaved, with one match
@@ -276,5 +286,80 @@ func TestSearchApplyRecordsError(t *testing.T) {
 	}
 	if s.err == nil || s.err.Error() != "boom" {
 		t.Errorf("error: want \"boom\", got %v", s.err)
+	}
+}
+
+func TestRunRipgrepFindsHits(t *testing.T) {
+	skipIfNoRipgrep(t)
+	abs, err := filepath.Abs("../../testdata/fixture-graph")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runRipgrep(abs, "Beta")
+	if err != nil {
+		t.Fatalf("runRipgrep err: %v", err)
+	}
+	hits := parseRipgrepJSON(out)
+	if len(hits) == 0 {
+		t.Fatalf("expected at least one hit for \"Beta\"")
+	}
+	for _, h := range hits {
+		if !strings.HasPrefix(h.FilePath, abs) {
+			t.Errorf("hit path outside fixture: %s", h.FilePath)
+		}
+	}
+}
+
+func TestRunRipgrepNoMatchReturnsEmpty(t *testing.T) {
+	skipIfNoRipgrep(t)
+	abs, err := filepath.Abs("../../testdata/fixture-graph")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runRipgrep(abs, "thisstringshouldnotexistanywhere_xyzzy_1234")
+	if err != nil {
+		t.Fatalf("no-match should not error, got: %v", err)
+	}
+	if hits := parseRipgrepJSON(out); len(hits) != 0 {
+		t.Errorf("no-match: want 0 hits, got %d", len(hits))
+	}
+}
+
+func TestRunRipgrepMissingDirsReturnsNil(t *testing.T) {
+	tmp := t.TempDir()
+	out, err := runRipgrep(tmp, "anything")
+	if err != nil {
+		t.Errorf("missing dirs: want nil err, got %v", err)
+	}
+	if out != nil {
+		t.Errorf("missing dirs: want nil out, got %q", out)
+	}
+}
+
+func TestSearchCmdRoundtrip(t *testing.T) {
+	skipIfNoRipgrep(t)
+	abs, err := filepath.Abs("../../testdata/fixture-graph")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewSearchView(loadFixture(t), 80, 24)
+	s.SetQuery("Beta")
+	cmd := s.SearchCmd(abs)
+	if cmd == nil {
+		t.Fatal("SearchCmd returned nil")
+	}
+	msg := cmd()
+	done, ok := msg.(searchDoneMsg)
+	if !ok {
+		t.Fatalf("want searchDoneMsg, got %T", msg)
+	}
+	if done.err != nil {
+		t.Errorf("done.err: %v", done.err)
+	}
+	if len(done.hits) == 0 {
+		t.Errorf("done.hits: expected at least one")
 	}
 }
