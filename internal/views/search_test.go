@@ -1,6 +1,9 @@
 package views
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestParseRipgrepJSON(t *testing.T) {
 	// Two match lines + non-match types interleaved, with one match
@@ -222,5 +225,56 @@ func TestSearchEscCancels(t *testing.T) {
 	if hit != nil || accept || !cancel || cmd != nil {
 		t.Errorf("esc: want cancel only, got (%v,%v,%v,%v)",
 			hit, accept, cancel, cmd)
+	}
+}
+
+func TestSearchApplyPopulatesHits(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	s := NewSearchView(loadFixture(t), 80, 24)
+	s.running = true
+	s.sel = 5
+
+	s.Apply(searchDoneMsg{hits: []SearchHit{
+		{FilePath: "/p/A.md", Line: 1, Context: "x"},
+		{FilePath: "/p/B.md", Line: 2, Context: "y"},
+	}})
+
+	if s.running {
+		t.Errorf("after Apply: running should clear, still true")
+	}
+	if len(s.hits) != 2 {
+		t.Errorf("after Apply: hits len want 2, got %d", len(s.hits))
+	}
+	if s.sel != 0 {
+		t.Errorf("after Apply: sel must clamp to 0 when prior sel exceeded new len, got %d", s.sel)
+	}
+}
+
+func TestSearchApplyKeepsValidSel(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	s := NewSearchView(loadFixture(t), 80, 24)
+	s.sel = 1
+	s.Apply(searchDoneMsg{hits: []SearchHit{
+		{FilePath: "/p/A.md", Line: 1}, {FilePath: "/p/B.md", Line: 2},
+		{FilePath: "/p/C.md", Line: 3},
+	}})
+	if s.sel != 1 {
+		t.Errorf("sel within new bounds should survive: want 1, got %d", s.sel)
+	}
+}
+
+func TestSearchApplyRecordsError(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	s := NewSearchView(loadFixture(t), 80, 24)
+	s.running = true
+	s.Apply(searchDoneMsg{err: errors.New("boom")})
+	if s.running {
+		t.Errorf("after Apply: running should clear even on error")
+	}
+	if s.err == nil || s.err.Error() != "boom" {
+		t.Errorf("error: want \"boom\", got %v", s.err)
 	}
 }
