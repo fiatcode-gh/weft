@@ -153,3 +153,66 @@ func TestAppCenterOverlayPlacesContent(t *testing.T) {
 		t.Errorf("centered output should pad with whitespace; got len %d", len(out))
 	}
 }
+
+// TestAppResizePropagatesToOverlays asserts that a WindowSizeMsg arriving
+// while an overlay is open updates the overlay's cached size. Without
+// propagation, the overlay would continue rendering at its construction-
+// time dimensions and (for backlinks/todos) scroll against the wrong row
+// budget after a resize.
+func TestAppResizePropagatesToOverlays(t *testing.T) {
+	a := bootApp(t)
+
+	// Open each overlay, fire a new WindowSizeMsg, and verify the
+	// overlay captured the new size.
+	openers := []struct {
+		name      string
+		key       tea.KeyMsg
+		setupPage string // navigate first for the b overlay
+		read      func() (int, int)
+	}{
+		{
+			name: "picker",
+			key:  tea.KeyMsg{Type: tea.KeyCtrlP},
+			read: func() (int, int) { return a.picker.width, a.picker.height },
+		},
+		{
+			name: "search",
+			key:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")},
+			read: func() (int, int) { return a.search.width, a.search.height },
+		},
+		{
+			name:      "backlinks",
+			key:       tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")},
+			setupPage: "Hub",
+			read:      func() (int, int) { return a.backlinks.width, a.backlinks.height },
+		},
+		{
+			name: "todos",
+			key:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")},
+			read: func() (int, int) { return a.todos.width, a.todos.height },
+		},
+	}
+
+	for _, o := range openers {
+		t.Run(o.name, func(t *testing.T) {
+			// Reset to page mode each iteration.
+			a.mode = modePage
+			if o.setupPage != "" {
+				a.navigate(o.setupPage)
+			}
+			a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+			a.Update(o.key)
+
+			// Trigger a resize and check the overlay's cached dims.
+			a.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+			w, h := o.read()
+			if w != 120 || h != 40 {
+				t.Errorf("%s: want 120x40 after resize, got %dx%d", o.name, w, h)
+			}
+
+			// Close the overlay (esc clears everything except backlinks
+			// which uses 'b' or esc — esc covers both).
+			a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		})
+	}
+}

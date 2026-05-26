@@ -189,3 +189,42 @@ func TestAppReindexFromPage(t *testing.T) {
 		t.Errorf("R from page mode should return a reindex cmd")
 	}
 }
+
+// TestStatusBarTruncatesLongLeft asserts that a wide page name + meta
+// don't overflow the terminal width — the left segment is clamped with
+// an ellipsis so the bar fits on one line.
+func TestStatusBarTruncatesLongLeft(t *testing.T) {
+	a := bootApp(t)
+	// Tight terminal width — left ("Alpha · 5 links" ish) plus right
+	// ("? help") still wants ~25 cells; shrink so the page name itself
+	// can dominate the budget. Then navigate so the page is forced; we
+	// already use Alpha which is short, so the page name itself fits.
+	// To make the bar overflow we force a width narrower than the page
+	// name's length-plus-right and verify the bar's total rendered
+	// width stays bounded.
+	a.navigate("Alpha")
+	a.Update(tea.WindowSizeMsg{Width: 20, Height: 24})
+
+	bar := a.statusBar()
+	for _, line := range strings.Split(bar, "\n") {
+		if w := runewidthLen(line); w > 20 {
+			t.Errorf("status bar line exceeds width 20: w=%d, line=%q", w, line)
+		}
+	}
+	// Even with the clamp, the right segment (which carries the help
+	// hint) must survive — it's the user's only on-screen reminder of
+	// how to open help.
+	if !strings.Contains(bar, "? help") {
+		t.Errorf("clamped bar dropped the close hint; got:\n%s", bar)
+	}
+}
+
+// runewidthLen counts visible cells in a single line, ignoring nothing
+// (NO_COLOR=1 in test setup keeps ANSI out of the way).
+func runewidthLen(s string) int {
+	n := 0
+	for range s {
+		n++
+	}
+	return n
+}

@@ -172,6 +172,21 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			a.tryInitPage()
 		}
+		// Propagate to any active overlay so its scroll-window budget and
+		// inner-width calculations track the new terminal size on resize.
+		// Help is content-sized and doesn't expose a SetSize.
+		if a.picker != nil {
+			a.picker.SetSize(m.Width, m.Height)
+		}
+		if a.search != nil {
+			a.search.SetSize(m.Width, m.Height)
+		}
+		if a.backlinks != nil {
+			a.backlinks.SetSize(m.Width, m.Height)
+		}
+		if a.todos != nil {
+			a.todos.SetSize(m.Width, m.Height)
+		}
 		return a, nil
 	case tea.KeyMsg:
 		key := m.String()
@@ -347,6 +362,10 @@ func (a *App) centerOverlay(content string) string {
 // help hint on the right, separated by enough whitespace to span the
 // terminal width. A faint horizontal rule sits above it so the bar reads
 // as a distinct strip even on terminals without colour.
+//
+// When the page title is too long to fit alongside the right segment, the
+// left segment is truncated with an ellipsis. Without this clamp the bar
+// overflowed the terminal width and wrapped onto a second line.
 func (a *App) statusBar() string {
 	left := a.page.StatusLine()
 	rightText := "? help"
@@ -358,8 +377,15 @@ func (a *App) statusBar() string {
 	if width <= 0 {
 		width = lipgloss.Width(left) + 2 + lipgloss.Width(right)
 	}
+	rightW := lipgloss.Width(right)
+	// Reserve at least one space between left and right.
+	leftBudget := width - rightW - 1
+	if leftBudget < 1 {
+		leftBudget = 1
+	}
+	left = clamp(left, leftBudget)
 	rule := statusRule.Render(strings.Repeat("─", width))
-	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
+	gap := width - lipgloss.Width(left) - rightW
 	if gap < 1 {
 		gap = 1
 	}
