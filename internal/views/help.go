@@ -9,9 +9,19 @@ import (
 // Help is a stateless overlay listing the keymap. ? or esc toggles it off.
 type Help struct {
 	version string
+	width   int
 }
 
-func NewHelp(version string) *Help { return &Help{version: version} }
+// NewHelp builds the help overlay at the current terminal width. width is
+// used to clamp rendered lines so the panel never exceeds the terminal —
+// pass 0 to disable clamping (content sizes itself; useful in tests that
+// don't care about width).
+func NewHelp(version string, width int) *Help {
+	return &Help{version: version, width: width}
+}
+
+// SetSize updates the cached terminal width.
+func (h *Help) SetSize(w, _ int) { h.width = w }
 
 // Update reports whether the overlay should close. There's no state to mutate.
 func (h *Help) Update(key string) (cancel bool) {
@@ -91,10 +101,24 @@ func (h *Help) View() string {
 			b.WriteString("\n")
 		}
 	}
+
+	body := b.String()
+	// When the terminal width is known, clamp each line so the panel can't
+	// exceed it. The Padding(0, 2) border adds 4 cells of chrome on either
+	// side plus the 2 border characters, so the content budget is
+	// width - 6. Passing width=0 disables clamping (content sizes itself).
+	if h.width > 6 {
+		max := h.width - 6
+		lines := strings.Split(body, "\n")
+		for i, line := range lines {
+			lines[i] = clamp(line, max)
+		}
+		body = strings.Join(lines, "\n")
+	}
+
 	// Footer: close hint on the left, version on the right, padded to the
 	// max line width of the body built so far. Version segment is omitted
 	// when h.version is empty.
-	body := b.String()
 	contentWidth := 0
 	for _, line := range strings.Split(body, "\n") {
 		if w := lipgloss.Width(line); w > contentWidth {
@@ -117,7 +141,5 @@ func (h *Help) View() string {
 		}
 	}
 
-	b.WriteString("\n")
-	b.WriteString(helpFaint.Render(footer))
-	return helpBorder.Render(b.String())
+	return helpBorder.Render(body + "\n" + helpFaint.Render(footer))
 }

@@ -217,7 +217,7 @@ func (p *Picker) View() string {
 		b.WriteString(pickerFaint.Render("  no matches"))
 		b.WriteString("\n")
 		b.WriteString("\n")
-		b.WriteString(pickerFaint.Render("↑/↓ select · enter open · esc cancel"))
+		b.WriteString(pickerFaint.Render(clamp("↑/↓ select · enter open · esc cancel", inner)))
 		return pickerBorder.Width(inner + 4).Render(b.String())
 	}
 
@@ -252,7 +252,7 @@ func (p *Picker) View() string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
-	b.WriteString(pickerFaint.Render("↑/↓ select · enter open · esc cancel"))
+	b.WriteString(pickerFaint.Render(clamp("↑/↓ select · enter open · esc cancel", inner)))
 	// Width(inner) locks the panel so the rounded border doesn't resize when
 	// a longer match scrolls into view.
 	return pickerBorder.Width(inner + 4).Render(b.String())

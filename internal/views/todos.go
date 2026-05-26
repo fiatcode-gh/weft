@@ -207,7 +207,7 @@ func (t *Todos) View() string {
 		sb.WriteString(todosFaint.Render("  nothing open"))
 		sb.WriteString("\n")
 		sb.WriteString("\n")
-		sb.WriteString(todosFaint.Render("↑/↓ select · t cycle filter · enter open · esc back"))
+		sb.WriteString(todosFaint.Render(clamp("↑/↓ select · t cycle filter · enter open · esc back", inner)))
 		return todosBorder.Width(inner + 4).Render(sb.String())
 	}
 
@@ -264,6 +264,6 @@ func (t *Todos) View() string {
 	}
 
 	sb.WriteString("\n")
-	sb.WriteString(todosFaint.Render("↑/↓ select · t cycle filter · enter open · esc back"))
+	sb.WriteString(todosFaint.Render(clamp("↑/↓ select · t cycle filter · enter open · esc back", inner)))
 	return todosBorder.Width(inner + 4).Render(sb.String())
 }

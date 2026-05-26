@@ -2,10 +2,12 @@ package views
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/exp/teatest"
 	"github.com/sahilm/fuzzy"
 
@@ -171,6 +173,45 @@ func TestPickerScrollWindowMiddle(t *testing.T) {
 	if p.sel < start || p.sel >= end {
 		t.Errorf("sel %d should be in window [%d,%d)", p.sel, start, end)
 	}
+}
+
+// TestOverlayFootersFitNarrowWidth asserts that each overlay's footer
+// hint is clamped so the panel stays bounded at the narrowest terminal
+// the inner-width clamp allows (inner = 30). Without clamping the hint,
+// the footer line wraps and breaks the panel's rounded border.
+func TestOverlayFootersFitNarrowWidth(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	idx := loadFixture(t)
+
+	cases := []struct {
+		name string
+		view func() string
+	}{
+		{"picker", func() string { return NewPicker(idx, 30, 30).View() }},
+		{"search", func() string { return NewSearchView(idx, 30, 30).View() }},
+		{"backlinks", func() string { return NewBacklinks(idx, "Hub", 30, 30).View() }},
+		{"todos", func() string { return NewTodos(idx, 30, 30).View() }},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			out := c.view()
+			lines := strings.Split(out, "\n")
+			// The first line is the top border; its width sets the panel
+			// envelope. Every other line must fit inside the same envelope.
+			if len(lines) == 0 {
+				t.Fatal("empty view")
+			}
+			panelW := lipgloss.Width(lines[0])
+			for i, l := range lines {
+				if w := lipgloss.Width(l); w > panelW {
+					t.Errorf("line %d exceeds panel width %d: w=%d, line=%q",
+						i, panelW, w, l)
+				}
+			}
+		})
+	}
+	_ = fuzzy.Match{} // keep fuzzy import
 }
 
 func TestPickerSetSize(t *testing.T) {

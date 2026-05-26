@@ -187,6 +187,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if a.todos != nil {
 			a.todos.SetSize(m.Width, m.Height)
 		}
+		if a.help != nil {
+			a.help.SetSize(m.Width, m.Height)
+		}
 		return a, nil
 	case tea.KeyMsg:
 		key := m.String()
@@ -282,7 +285,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.todos = NewTodos(a.idx, a.width, a.height)
 				a.mode = modeTodos
 			case "?":
-				a.help = NewHelp(a.version)
+				a.help = NewHelp(a.version, a.width)
 				a.mode = modeHelp
 			case "[":
 				a.historyBack()
