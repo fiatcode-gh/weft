@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/exp/teatest"
 )
 
 func skipIfNoRipgrep(t *testing.T) {
@@ -480,6 +482,27 @@ func TestSearchVisibleRowsClamps(t *testing.T) {
 	if got := s.visibleRows(); got != searchVisibleRowsMax {
 		t.Errorf("huge term: want max %d, got %d", searchVisibleRowsMax, got)
 	}
+}
+
+func TestSearchViewEmptyState(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	s := NewSearchView(loadFixture(t), 80, 24)
+	teatest.RequireEqualOutput(t, []byte(s.View()))
+}
+
+func TestSearchViewWithHits(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	s := NewSearchView(loadFixture(t), 80, 24)
+	s.SetQuery("Beta")
+	s.hits = []SearchHit{
+		{FilePath: "/abs/pages/Alpha.md", Line: 3, Context: "links to Beta",
+			Matches: []SearchSpan{{Start: 9, End: 13}}},
+		{FilePath: "/abs/pages/Hub.md", Line: 2, Context: "the hub mentions Beta in passing",
+			Matches: []SearchSpan{{Start: 17, End: 21}}},
+	}
+	teatest.RequireEqualOutput(t, []byte(s.View()))
 }
 
 func TestShortPath(t *testing.T) {
