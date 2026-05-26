@@ -169,3 +169,46 @@ func TestPageViewScrollIndicatorMid(t *testing.T) {
 		t.Errorf("mid-scroll landed on a boundary: %q", got)
 	}
 }
+
+func TestPageFollowCursorNoLink(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	pv := NewPageView(loadFixture(t), "Alpha", 80, 24)
+	if got := pv.FollowCursor(); got != "" {
+		t.Errorf("no cursor set: want \"\", got %q", got)
+	}
+}
+
+func TestPageFollowCursorReturnsTarget(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	pv := NewPageView(loadFixture(t), "Alpha", 80, 24)
+	pv.CycleLink(+1)
+	if got := pv.FollowCursor(); got == "" {
+		t.Errorf("after CycleLink: want a target, got empty")
+	}
+}
+
+func TestPageLineUpDownAndHalfPageUp(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	pv := NewPageView(loadFixture(t), "Alpha", 80, 5)
+
+	pv.LineDown()
+	afterDown := pv.Offset()
+	if afterDown == 0 {
+		t.Errorf("after LineDown: expected non-zero offset, got 0")
+	}
+	pv.LineUp()
+	if got := pv.Offset(); got >= afterDown {
+		t.Errorf("after LineUp: offset should retreat from %d, got %d", afterDown, got)
+	}
+
+	pv.GotoBottom()
+	bottom := pv.Offset()
+	pv.HalfPageUp()
+	if got := pv.Offset(); got >= bottom {
+		t.Errorf("after HalfPageUp from bottom: offset should retreat from %d, got %d",
+			bottom, got)
+	}
+}
