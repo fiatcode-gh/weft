@@ -148,3 +148,79 @@ func TestSearchSelectionBounds(t *testing.T) {
 		t.Errorf("after ctrl+k: want sel 1, got %d", s.sel)
 	}
 }
+
+func TestSearchEnterEmptyQueryNoop(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	s := NewSearchView(loadFixture(t), 80, 24)
+	hit, accept, cancel, cmd := s.Update("enter", "/tmp/x")
+	if hit != nil || accept || cancel || cmd != nil {
+		t.Errorf("enter on empty query: want all-zero, got (%v,%v,%v,%v)",
+			hit, accept, cancel, cmd)
+	}
+}
+
+func TestSearchEnterFirstTimeRunsCmd(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	s := NewSearchView(loadFixture(t), 80, 24)
+	s.SetQuery("Beta")
+
+	hit, accept, cancel, cmd := s.Update("enter", "/tmp/x")
+	if hit != nil || accept || cancel {
+		t.Errorf("enter to launch: want non-accept non-cancel nil hit, got (%v,%v,%v)",
+			hit, accept, cancel)
+	}
+	if cmd == nil {
+		t.Errorf("enter to launch: want non-nil cmd, got nil")
+	}
+	if !s.running {
+		t.Errorf("enter to launch: running flag should be set")
+	}
+}
+
+func TestSearchEnterWhileRunningIsNoop(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	s := NewSearchView(loadFixture(t), 80, 24)
+	s.SetQuery("Beta")
+	s.running = true
+
+	hit, accept, cancel, cmd := s.Update("enter", "/tmp/x")
+	if hit != nil || accept || cancel || cmd != nil {
+		t.Errorf("enter while running: want all-zero, got (%v,%v,%v,%v)",
+			hit, accept, cancel, cmd)
+	}
+}
+
+func TestSearchEnterWithHitsOpensSelection(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	s := NewSearchView(loadFixture(t), 80, 24)
+	s.SetQuery("Beta")
+	s.hits = []SearchHit{
+		{FilePath: "/p/Alpha.md", Line: 3, Context: "links to Beta"},
+		{FilePath: "/p/Hub.md", Line: 5, Context: "Beta sometimes"},
+	}
+	s.sel = 1
+
+	hit, accept, cancel, cmd := s.Update("enter", "/tmp/x")
+	if !accept || cancel || cmd != nil {
+		t.Errorf("enter with hits: want accept, got accept=%v cancel=%v cmd=%v",
+			accept, cancel, cmd)
+	}
+	if hit == nil || hit.FilePath != "/p/Hub.md" || hit.Line != 5 {
+		t.Errorf("returned hit: want Hub.md:5, got %+v", hit)
+	}
+}
+
+func TestSearchEscCancels(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	s := NewSearchView(loadFixture(t), 80, 24)
+	hit, accept, cancel, cmd := s.Update("esc", "/tmp/x")
+	if hit != nil || accept || !cancel || cmd != nil {
+		t.Errorf("esc: want cancel only, got (%v,%v,%v,%v)",
+			hit, accept, cancel, cmd)
+	}
+}
