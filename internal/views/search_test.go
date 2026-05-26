@@ -116,3 +116,35 @@ func TestSearchUpdateSpaceVariants(t *testing.T) {
 		t.Errorf("after named space: want \"foo  \", got %q", s.query)
 	}
 }
+
+func TestSearchSelectionBounds(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	s := NewSearchView(loadFixture(t), 80, 24)
+	s.hits = []SearchHit{
+		{FilePath: "a", Line: 1, Context: "x"},
+		{FilePath: "b", Line: 2, Context: "y"},
+		{FilePath: "c", Line: 3, Context: "z"},
+	}
+
+	s.Update("up", "/tmp/x")
+	if s.sel != 0 {
+		t.Errorf("up at top: want sel 0, got %d", s.sel)
+	}
+	s.Update("down", "/tmp/x")
+	if s.sel != 1 {
+		t.Errorf("after down: want sel 1, got %d", s.sel)
+	}
+	s.Update("ctrl+j", "/tmp/x")
+	if s.sel != 2 {
+		t.Errorf("after ctrl+j: want sel 2, got %d", s.sel)
+	}
+	s.Update("down", "/tmp/x")
+	if s.sel != 2 {
+		t.Errorf("down at bottom: want sel 2, got %d", s.sel)
+	}
+	s.Update("ctrl+k", "/tmp/x")
+	if s.sel != 1 {
+		t.Errorf("after ctrl+k: want sel 1, got %d", s.sel)
+	}
+}
