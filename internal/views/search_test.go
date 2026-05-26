@@ -413,6 +413,75 @@ func TestHighlightMatches(t *testing.T) {
 	}
 }
 
+func TestSearchScrollWindow(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	s := NewSearchView(loadFixture(t), 80, 24)
+	s.hits = make([]SearchHit, 20)
+	for i := range s.hits {
+		s.hits[i] = SearchHit{FilePath: "/p/X.md", Line: i + 1, Context: "y"}
+	}
+
+	cases := []struct {
+		name      string
+		sel       int
+		wantStart int
+	}{
+		{"top", 0, 0},
+		{"middle", 10, 10 - s.visibleRows()/2},
+		{"bottom", 19, len(s.hits) - s.visibleRows()},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s.sel = c.sel
+			start, end := s.scrollWindow()
+			if end-start != s.visibleRows() {
+				t.Errorf("window size: want %d, got %d (start=%d end=%d)",
+					s.visibleRows(), end-start, start, end)
+			}
+			if start != c.wantStart {
+				t.Errorf("start: want %d, got %d", c.wantStart, start)
+			}
+			if c.sel < start || c.sel >= end {
+				t.Errorf("sel %d should be in [%d,%d)", c.sel, start, end)
+			}
+		})
+	}
+}
+
+func TestSearchScrollWindowAllFit(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	s := NewSearchView(loadFixture(t), 80, 24)
+	s.hits = []SearchHit{{Line: 1}, {Line: 2}, {Line: 3}}
+	start, end := s.scrollWindow()
+	if start != 0 || end != 3 {
+		t.Errorf("all-fit: want [0,3), got [%d,%d)", start, end)
+	}
+}
+
+func TestSearchInnerWidthClamps(t *testing.T) {
+	s := &SearchView{width: 10}
+	if got := s.innerWidth(); got != searchInnerWidthMin {
+		t.Errorf("narrow term: want min %d, got %d", searchInnerWidthMin, got)
+	}
+	s.width = 200
+	if got := s.innerWidth(); got != searchInnerWidthMax {
+		t.Errorf("wide term: want max %d, got %d", searchInnerWidthMax, got)
+	}
+}
+
+func TestSearchVisibleRowsClamps(t *testing.T) {
+	s := &SearchView{height: 5}
+	if got := s.visibleRows(); got != searchVisibleRowsMin {
+		t.Errorf("tiny term: want min %d, got %d", searchVisibleRowsMin, got)
+	}
+	s.height = 100
+	if got := s.visibleRows(); got != searchVisibleRowsMax {
+		t.Errorf("huge term: want max %d, got %d", searchVisibleRowsMax, got)
+	}
+}
+
 func TestShortPath(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"/a/b/c/file.md", "c/file.md"},
