@@ -293,3 +293,100 @@ func TestAppStatusBarHidesIndicatorWhenFits(t *testing.T) {
 		t.Errorf("status bar missing close hint; got:\n%s", bar)
 	}
 }
+
+func TestAppOpensAndCancelsPicker(t *testing.T) {
+	a := bootApp(t)
+	if a.mode != modePage {
+		t.Fatalf("setup: want modePage, got %d", a.mode)
+	}
+	a.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
+	if a.mode != modePicker || a.picker == nil {
+		t.Fatalf("after ctrl+p: want modePicker with picker set, got mode=%d picker=%v", a.mode, a.picker)
+	}
+	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if a.mode != modePage || a.picker != nil {
+		t.Errorf("after esc: want modePage with picker cleared, got mode=%d picker=%v", a.mode, a.picker)
+	}
+}
+
+func TestAppOpensSearchAndEscapes(t *testing.T) {
+	a := bootApp(t)
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	if a.mode != modeSearch || a.search == nil {
+		t.Fatalf("after /: want modeSearch with search set, got mode=%d search=%v", a.mode, a.search)
+	}
+	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if a.mode != modePage || a.search != nil {
+		t.Errorf("after esc: want modePage with search cleared, got mode=%d search=%v", a.mode, a.search)
+	}
+}
+
+func TestAppOpensBacklinksAndCloses(t *testing.T) {
+	a := bootApp(t)
+	a.navigate("Hub")
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
+	if a.mode != modeBacklinks || a.backlinks == nil {
+		t.Fatalf("after b: want modeBacklinks, got mode=%d backlinks=%v", a.mode, a.backlinks)
+	}
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
+	if a.mode != modePage || a.backlinks != nil {
+		t.Errorf("after second b: want modePage cleared, got mode=%d backlinks=%v", a.mode, a.backlinks)
+	}
+}
+
+func TestAppOpensTodosAndCloses(t *testing.T) {
+	a := bootApp(t)
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")})
+	if a.mode != modeTodos || a.todos == nil {
+		t.Fatalf("after T: want modeTodos, got mode=%d todos=%v", a.mode, a.todos)
+	}
+	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if a.mode != modePage || a.todos != nil {
+		t.Errorf("after esc: want modePage cleared, got mode=%d todos=%v", a.mode, a.todos)
+	}
+}
+
+func TestAppOpensHelpAndCloses(t *testing.T) {
+	a := bootApp(t)
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	if a.mode != modeHelp || a.help == nil {
+		t.Fatalf("after ?: want modeHelp, got mode=%d help=%v", a.mode, a.help)
+	}
+	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if a.mode != modePage || a.help != nil {
+		t.Errorf("after esc: want modePage cleared, got mode=%d help=%v", a.mode, a.help)
+	}
+}
+
+func TestAppPickerAcceptNavigates(t *testing.T) {
+	a := bootApp(t)
+	a.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
+	if a.mode != modePicker {
+		t.Fatalf("setup: picker not open")
+	}
+	for _, r := range "Alp" {
+		a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	a.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if a.mode != modePage {
+		t.Errorf("after enter: want modePage, got %d", a.mode)
+	}
+	if a.page.Page() != "Alpha" {
+		t.Errorf("after picker accept: want page Alpha, got %q", a.page.Page())
+	}
+}
+
+func TestAppTodosAcceptNavigates(t *testing.T) {
+	a := bootApp(t)
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")})
+	if a.mode != modeTodos {
+		t.Fatalf("setup: todos not open")
+	}
+	a.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if a.mode != modePage {
+		t.Errorf("after enter: want modePage, got %d", a.mode)
+	}
+	if a.todos != nil {
+		t.Errorf("todos not cleared")
+	}
+}
