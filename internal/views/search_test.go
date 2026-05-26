@@ -355,6 +355,64 @@ func TestHitLabelKnownVsUnknown(t *testing.T) {
 	}
 }
 
+func TestMatchesWithin(t *testing.T) {
+	s := &SearchView{}
+	h := SearchHit{
+		Context: "the quick brown fox",
+		Matches: []SearchSpan{{Start: 4, End: 9}, {Start: 10, End: 15}, {Start: 16, End: 19}},
+	}
+	cases := []struct {
+		name  string
+		bytes int
+		want  []SearchSpan
+	}{
+		{"all fit", 100, []SearchSpan{{4, 9}, {10, 15}, {16, 19}}},
+		{"truncates last", 17, []SearchSpan{{4, 9}, {10, 15}, {16, 17}}},
+		{"drops out-of-range", 9, []SearchSpan{{4, 9}}},
+		{"zero budget yields none", 0, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := s.matchesWithin(h, c.bytes)
+			if len(got) != len(c.want) {
+				t.Fatalf("len: want %d, got %d (%+v)", len(c.want), len(got), got)
+			}
+			for i, m := range got {
+				if m != c.want[i] {
+					t.Errorf("[%d]: want %v, got %v", i, c.want[i], m)
+				}
+			}
+		})
+	}
+}
+
+func TestMatchesWithinEmpty(t *testing.T) {
+	s := &SearchView{}
+	if got := s.matchesWithin(SearchHit{Context: "x"}, 10); got != nil {
+		t.Errorf("empty Matches: want nil, got %+v", got)
+	}
+}
+
+func TestHighlightMatches(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+
+	if got := highlightMatches("hello world", nil); got != "hello world" {
+		t.Errorf("no spans: want verbatim, got %q", got)
+	}
+	if got := highlightMatches("hi", []SearchSpan{{Start: 10, End: 12}}); got != "hi" {
+		t.Errorf("out-of-range span: want \"hi\", got %q", got)
+	}
+	if got := highlightMatches("hi", []SearchSpan{{Start: 1, End: 1}}); got != "hi" {
+		t.Errorf("degenerate span: want \"hi\", got %q", got)
+	}
+	in := "the quick"
+	got := highlightMatches(in, []SearchSpan{{Start: 4, End: 9}, {Start: 0, End: 3}})
+	if !strings.Contains(got, "quick") || !strings.HasPrefix(got, "the ") {
+		t.Errorf("expected output containing styled \"quick\" with \"the \" prefix; got %q", got)
+	}
+}
+
 func TestShortPath(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"/a/b/c/file.md", "c/file.md"},
