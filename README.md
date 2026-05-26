@@ -4,7 +4,7 @@ A terminal browser for a local Logseq graph. Recency-sorted page picker, ripgrep
 
 ## Install
 
-Requires Go 1.22+ and [ripgrep](https://github.com/BurntSushi/ripgrep) on PATH.
+Requires Go 1.26+ and [ripgrep](https://github.com/BurntSushi/ripgrep) on PATH.
 
 ```bash
 go install git.fiatcode.dev/fiatcode/peekseq/cmd/peekseq@latest
@@ -44,6 +44,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | `[` / `]`  | back / forward in page history      |
 | `j` / `k`  | scroll one line                     |
 | `Ctrl-d/u` | half-page scroll                    |
+| `g` / `G`  | jump to top / bottom of page        |
 | `R`        | rebuild the index                   |
 | `Esc`      | close an overlay                    |
 | `q`        | quit (from page view)               |
@@ -54,6 +55,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 - Workflow markers at the start of a bullet are colour-coded (`TODO` red, `DOING` yellow, `LATER` blue, `WAITING` dim, `DONE` green, `CANCELED`/`CANCELLED` strikethrough, `NOW` magenta).
 - `:LOGBOOK: ... :END:` blocks are hidden — they're metadata, not content.
 - Long bullets wrap with hanging indent, so continuation lines align with the text after the bullet rather than under the bullet glyph.
+- Backlinks filters self-references — viewing a page never lists that page's own mentions of itself.
 
 ## Environment
 
