@@ -60,3 +60,59 @@ func TestSearchAccessorsAndSetSize(t *testing.T) {
 		t.Errorf("SetSize: want 120x40, got %dx%d", s.width, s.height)
 	}
 }
+
+func TestSearchUpdateTypesIntoQuery(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	s := NewSearchView(loadFixture(t), 80, 24)
+	for _, k := range []string{"a", "l", "p"} {
+		hit, accept, cancel, cmd := s.Update(k, "/tmp/x")
+		if hit != nil || accept || cancel || cmd != nil {
+			t.Errorf("typing %q: want (nil,false,false,nil), got (%v,%v,%v,%v)",
+				k, hit, accept, cancel, cmd)
+		}
+	}
+	if s.query != "alp" {
+		t.Errorf("query: want \"alp\", got %q", s.query)
+	}
+}
+
+func TestSearchUpdateBackspace(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	s := NewSearchView(loadFixture(t), 80, 24)
+	s.SetQuery("abc")
+	s.hits = []SearchHit{{FilePath: "x", Line: 1, Context: "y"}}
+
+	s.Update("backspace", "/tmp/x")
+	if s.query != "ab" {
+		t.Errorf("after first backspace: want \"ab\", got %q", s.query)
+	}
+	if s.hits != nil {
+		t.Errorf("after backspace: hits must clear, got %+v", s.hits)
+	}
+
+	s.Update("backspace", "/tmp/x")
+	s.Update("backspace", "/tmp/x")
+	s.Update("backspace", "/tmp/x")
+	if s.query != "" {
+		t.Errorf("after draining: want \"\", got %q", s.query)
+	}
+}
+
+func TestSearchUpdateSpaceVariants(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	s := NewSearchView(loadFixture(t), 80, 24)
+	s.SetQuery("foo")
+
+	s.Update(" ", "/tmp/x")
+	if s.query != "foo " {
+		t.Errorf("after literal space: want \"foo \", got %q", s.query)
+	}
+
+	s.Update("space", "/tmp/x")
+	if s.query != "foo  " {
+		t.Errorf("after named space: want \"foo  \", got %q", s.query)
+	}
+}
