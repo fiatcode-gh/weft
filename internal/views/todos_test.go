@@ -1,9 +1,12 @@
 package views
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/x/exp/teatest"
+
+	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
 )
 
 func TestTodosDashboardAllFilter(t *testing.T) {
@@ -113,4 +116,79 @@ func TestTodosSelClampedOnFilter(t *testing.T) {
 	if td.sel < 0 || td.sel >= len(td.visible) {
 		t.Errorf("after filter: sel %d out of range [0,%d)", td.sel, len(td.visible))
 	}
+}
+
+// TestTodosLongRowStaysOneLine guards against layout shift from unclamped
+// long todos: without clamping, a long bullet wraps inside the panel —
+// continuation lines have no hanging indent (they look like sibling
+// bullets) and a wrapped selected row carries the ▶ marker only on its
+// first visible line.
+func TestTodosLongRowStaysOneLine(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	idx := loadFixture(t)
+	idx.Todos = append(idx.Todos, graph.TodoBullet{
+		Page:       "LongCase",
+		LineNumber: 1,
+		Marker:     "TODO",
+		Text:       strings.Repeat("really long text ", 30),
+	})
+
+	td := NewTodos(idx, 80)
+	td.recompute()
+
+	target := -1
+	for i, b := range td.visible {
+		if b.Page == "LongCase" {
+			target = i
+			break
+		}
+	}
+	if target < 0 {
+		t.Fatalf("LongCase bullet not in visible list")
+	}
+
+	// The LongCase block must be exactly one row tall, whether selected
+	// or not. The selected row's marker is "▶ "; the unselected row's
+	// marker is "   ". A wrap-induced extra line breaks both invariants.
+	td.sel = 0
+	off := countTodoBlockLines(td.View(), "LongCase")
+	td.sel = target
+	on := countTodoBlockLines(td.View(), "LongCase")
+
+	if off != 1 {
+		t.Errorf("unselected long row should be one line, got %d", off)
+	}
+	if on != 1 {
+		t.Errorf("selected long row should be one line, got %d", on)
+	}
+	if off != on {
+		t.Errorf("layout shift: unselected=%d lines, selected=%d lines", off, on)
+	}
+}
+
+// countTodoBlockLines counts how many rendered rows belong to the bullet
+// list under pageHeader inside a todos View() snapshot. The block ends at
+// the next blank inter-group line.
+func countTodoBlockLines(view, pageHeader string) int {
+	lines := strings.Split(view, "\n")
+	start := -1
+	for i, l := range lines {
+		if strings.Contains(l, pageHeader) && !strings.Contains(l, "▶") {
+			start = i + 1
+			break
+		}
+	}
+	if start < 0 {
+		return 0
+	}
+	n := 0
+	for j := start; j < len(lines); j++ {
+		inner := strings.TrimSuffix(strings.TrimPrefix(lines[j], "│"), "│")
+		if strings.TrimSpace(inner) == "" {
+			break
+		}
+		n++
+	}
+	return n
 }

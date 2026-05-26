@@ -140,17 +140,23 @@ func (t *Todos) View() string {
 		if b.Priority != "" {
 			prio = "[#" + b.Priority + "] "
 		}
-		marker := "   " // 3-cell to match selected " ▶ " width
+		// Clamp the row content to one line. Without this, a long todo
+		// wraps inside the panel without hanging indent — continuation
+		// lines start flush at column 0 and look like sibling bullets,
+		// and only the first line of a wrapped selected row carries the
+		// ▶ marker. Matches the picker/search/backlinks single-line policy.
+		rowBudget := inner - 3 // marker prefix is 3 cells
+		marker := "   "        // 3-cell to match selected " ▶ " width
 		var row string
 		if i == t.sel {
 			marker = todosSel.Render(" ▶ ")
-			row = todosSel.Render(fmt.Sprintf("%s %s%s", b.Marker, prio, b.Text))
+			row = todosSel.Render(clamp(fmt.Sprintf("%s %s%s", b.Marker, prio, b.Text), rowBudget))
 		} else {
 			styledMarker := b.Marker
 			if st, ok := todosMark[b.Marker]; ok {
 				styledMarker = st.Render(b.Marker)
 			}
-			row = styledMarker + " " + prio + b.Text
+			row = clamp(styledMarker+" "+prio+b.Text, rowBudget)
 		}
 		sb.WriteString(marker)
 		sb.WriteString(row)
