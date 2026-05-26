@@ -18,7 +18,18 @@ type Backlinks struct {
 }
 
 func NewBacklinks(idx *graph.Index, target string, width int) *Backlinks {
-	return &Backlinks{idx: idx, target: target, refs: idx.Backlinks[target], width: width}
+	// Self-references (the page mentions its own name) are noise in this
+	// view — the user is already on the page. Filter them out before
+	// presenting the list.
+	src := idx.Backlinks[target]
+	refs := make([]graph.Ref, 0, len(src))
+	for _, r := range src {
+		if r.FromPage == target {
+			continue
+		}
+		refs = append(refs, r)
+	}
+	return &Backlinks{idx: idx, target: target, refs: refs, width: width}
 }
 
 // SetSize updates the cached terminal width.

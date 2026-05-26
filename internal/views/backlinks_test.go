@@ -12,15 +12,49 @@ func TestNewBacklinksLoadsRefs(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	idx := loadFixture(t)
 
+	// Hub is referenced from kb/notes and journal 2026-05-25. Hub's own
+	// page also contains `[[Hub]]` but NewBacklinks filters self-refs so
+	// the view doesn't show them — count must be exactly 2.
 	b := NewBacklinks(idx, "Hub", 80)
-	if got := len(b.refs); got < 3 {
-		t.Errorf("Hub backlinks: want >=3, got %d", got)
+	if got := len(b.refs); got != 2 {
+		t.Errorf("Hub backlinks (post self-filter): want 2, got %d", got)
+	}
+	for _, r := range b.refs {
+		if r.FromPage == "Hub" {
+			t.Errorf("self-reference leaked into refs: %+v", r)
+		}
 	}
 	if b.target != "Hub" {
 		t.Errorf("target: want \"Hub\", got %q", b.target)
 	}
 	if b.width != 80 {
 		t.Errorf("width: want 80, got %d", b.width)
+	}
+}
+
+func TestNewBacklinksFiltersSelfRefs(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	idx := loadFixture(t)
+
+	// The underlying index records the self-reference; the view filters it.
+	raw := idx.Backlinks["Hub"]
+	var hasSelf bool
+	for _, r := range raw {
+		if r.FromPage == "Hub" {
+			hasSelf = true
+			break
+		}
+	}
+	if !hasSelf {
+		t.Fatalf("fixture precondition: Hub.md should contain a self-mention, raw refs=%+v", raw)
+	}
+
+	b := NewBacklinks(idx, "Hub", 80)
+	for _, r := range b.refs {
+		if r.FromPage == "Hub" {
+			t.Errorf("self-reference leaked into NewBacklinks output: %+v", r)
+		}
 	}
 }
 
