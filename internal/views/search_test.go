@@ -338,6 +338,37 @@ func TestRunRipgrepMissingDirsReturnsNil(t *testing.T) {
 	}
 }
 
+func TestHitLabelKnownVsUnknown(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	idx := loadFixture(t)
+	s := NewSearchView(idx, 80, 24)
+
+	for _, p := range idx.Pages {
+		if got := s.hitLabel(p.Path); got != p.Name {
+			t.Errorf("known path %q: want %q, got %q", p.Path, p.Name, got)
+		}
+		break
+	}
+	if got, want := s.hitLabel("/totally/elsewhere/file.md"), "elsewhere/file.md"; got != want {
+		t.Errorf("unknown path label: want %q, got %q", want, got)
+	}
+}
+
+func TestShortPath(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"/a/b/c/file.md", "c/file.md"},
+		{"a/b.md", "a/b.md"},
+		{"singlename", "singlename"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := shortPath(c.in); got != c.want {
+			t.Errorf("shortPath(%q): want %q, got %q", c.in, c.want, got)
+		}
+	}
+}
+
 func TestSearchCmdRoundtrip(t *testing.T) {
 	skipIfNoRipgrep(t)
 	abs, err := filepath.Abs("../../testdata/fixture-graph")
