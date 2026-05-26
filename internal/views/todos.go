@@ -16,16 +16,17 @@ type Todos struct {
 	visible []graph.TodoBullet
 	sel     int
 	width   int // terminal width snapshot, for layout
+	height  int // terminal height snapshot, for scroll-window sizing
 }
 
-func NewTodos(idx *graph.Index, width int) *Todos {
-	t := &Todos{idx: idx, width: width}
+func NewTodos(idx *graph.Index, width, height int) *Todos {
+	t := &Todos{idx: idx, width: width, height: height}
 	t.recompute()
 	return t
 }
 
-// SetSize updates the cached terminal width.
-func (t *Todos) SetSize(w, _ int) { t.width = w }
+// SetSize updates the cached terminal dimensions.
+func (t *Todos) SetSize(w, h int) { t.width, t.height = w, h }
 
 var markerCycle = []string{"", "TODO", "LATER", "DOING", "WAITING"}
 
@@ -95,8 +96,10 @@ var (
 )
 
 const (
-	todosInnerWidthMax = 80 // matches picker/search/backlinks for visual uniformity
-	todosInnerWidthMin = 30
+	todosInnerWidthMax   = 80 // matches picker/search/backlinks for visual uniformity
+	todosInnerWidthMin   = 30
+	todosVisibleRowsMax  = 16
+	todosVisibleRowsMin  = 6
 )
 
 func (t *Todos) innerWidth() int {
@@ -108,6 +111,84 @@ func (t *Todos) innerWidth() int {
 		w = todosInnerWidthMin
 	}
 	return w
+}
+
+// visibleRows returns the terminal-row budget available for the scrollable
+// bullet+header area. Group headers and inter-group blank lines count
+// against this budget too — see computeWindow.
+func (t *Todos) visibleRows() int {
+	// Chrome: 2 (border) + 2 (padding) + 1 (title) + 1 (blank) + 1 (divider)
+	// + 1 (blank) + 1 (hint) ≈ 9 lines. Add 2 more to leave headroom for
+	// scroll-position hints when they're shown.
+	const chrome = 11
+	r := t.height - chrome
+	if r > todosVisibleRowsMax {
+		r = todosVisibleRowsMax
+	}
+	if r < todosVisibleRowsMin {
+		r = todosVisibleRowsMin
+	}
+	return r
+}
+
+// computeWindow chooses a [start, end) slice of t.visible to display so
+// that t.sel is always inside it, accounting for the row cost of group
+// headers and inter-group blank lines (1 row each).
+func (t *Todos) computeWindow() (start, end int) {
+	n := len(t.visible)
+	if n == 0 {
+		return 0, 0
+	}
+	budget := t.visibleRows()
+	if budget <= 0 {
+		return 0, 0
+	}
+
+	// Per-position incremental row cost when i follows prevPage at i-1.
+	// Returns the rows the i-th bullet adds: 1 for the bullet, +1 if it
+	// starts a new group (header), +1 for the blank line before the new
+	// group when prevPage is non-empty.
+	cost := func(i int, prevPage string) int {
+		c := 1
+		if t.visible[i].Page != prevPage {
+			c++
+			if prevPage != "" {
+				c++
+			}
+		}
+		return c
+	}
+
+	walkForward := func(s int) int {
+		used := 0
+		prev := ""
+		e := s
+		for i := s; i < n; i++ {
+			c := cost(i, prev)
+			if used+c > budget {
+				break
+			}
+			used += c
+			prev = t.visible[i].Page
+			e = i + 1
+		}
+		return e
+	}
+
+	// Centre the selection in the window. If t.sel ends up past the
+	// rendered end (because the chosen start left too little budget),
+	// nudge start forward until t.sel fits — guaranteed to terminate
+	// because start can rise to t.sel.
+	start = t.sel - budget/2
+	if start < 0 {
+		start = 0
+	}
+	end = walkForward(start)
+	for end <= t.sel && start < t.sel {
+		start++
+		end = walkForward(start)
+	}
+	return start, end
 }
 
 func (t *Todos) View() string {
@@ -125,14 +206,28 @@ func (t *Todos) View() string {
 	if len(t.visible) == 0 {
 		sb.WriteString(todosFaint.Render("  nothing open"))
 		sb.WriteString("\n")
+		sb.WriteString("\n")
+		sb.WriteString(todosFaint.Render("↑/↓ select · t cycle filter · enter open · esc back"))
+		return todosBorder.Width(inner + 4).Render(sb.String())
 	}
+
+	start, end := t.computeWindow()
+	above := start
+	below := len(t.visible) - end
+
+	if above > 0 {
+		sb.WriteString(todosFaint.Render(fmt.Sprintf("   ↑ %d more above", above)))
+		sb.WriteString("\n")
+	}
+
 	lastPage := ""
-	for i, b := range t.visible {
+	for i := start; i < end; i++ {
+		b := t.visible[i]
 		if b.Page != lastPage {
 			if lastPage != "" {
 				sb.WriteString("\n")
 			}
-			sb.WriteString(todosGroup.Render(b.Page))
+			sb.WriteString(todosGroup.Render(clamp(b.Page, inner)))
 			sb.WriteString("\n")
 			lastPage = b.Page
 		}
@@ -162,6 +257,12 @@ func (t *Todos) View() string {
 		sb.WriteString(row)
 		sb.WriteString("\n")
 	}
+
+	if below > 0 {
+		sb.WriteString(todosFaint.Render(fmt.Sprintf("   ↓ %d more below", below)))
+		sb.WriteString("\n")
+	}
+
 	sb.WriteString("\n")
 	sb.WriteString(todosFaint.Render("↑/↓ select · t cycle filter · enter open · esc back"))
 	return todosBorder.Width(inner + 4).Render(sb.String())

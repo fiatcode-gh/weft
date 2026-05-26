@@ -261,10 +261,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.search = NewSearchView(a.idx, a.width, a.height)
 				a.mode = modeSearch
 			case "b":
-				a.backlinks = NewBacklinks(a.idx, a.page.Page(), a.width)
+				a.backlinks = NewBacklinks(a.idx, a.page.Page(), a.width, a.height)
 				a.mode = modeBacklinks
 			case "T":
-				a.todos = NewTodos(a.idx, a.width)
+				a.todos = NewTodos(a.idx, a.width, a.height)
 				a.mode = modeTodos
 			case "?":
 				a.help = NewHelp(a.version)

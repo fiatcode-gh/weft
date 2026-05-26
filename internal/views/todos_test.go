@@ -1,6 +1,7 @@
 package views
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -12,14 +13,14 @@ import (
 func TestTodosDashboardAllFilter(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
-	td := NewTodos(loadFixture(t), 100)
+	td := NewTodos(loadFixture(t), 100, 30)
 	teatest.RequireEqualOutput(t, []byte(td.View()))
 }
 
 func TestTodosDashboardLaterFilter(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
-	td := NewTodos(loadFixture(t), 100)
+	td := NewTodos(loadFixture(t), 100, 30)
 	td.Update("t") // → TODO
 	td.Update("t") // → LATER
 	teatest.RequireEqualOutput(t, []byte(td.View()))
@@ -28,7 +29,7 @@ func TestTodosDashboardLaterFilter(t *testing.T) {
 func TestTodosUpDownBounds(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
-	td := NewTodos(loadFixture(t), 100)
+	td := NewTodos(loadFixture(t), 100, 30)
 	if len(td.visible) < 2 {
 		t.Fatalf("setup: need >=2 visible todos, got %d", len(td.visible))
 	}
@@ -54,7 +55,7 @@ func TestTodosUpDownBounds(t *testing.T) {
 func TestTodosEnterReturnsPage(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
-	td := NewTodos(loadFixture(t), 100)
+	td := NewTodos(loadFixture(t), 100, 30)
 	if len(td.visible) == 0 {
 		t.Fatal("setup: no visible todos")
 	}
@@ -71,7 +72,7 @@ func TestTodosEnterReturnsPage(t *testing.T) {
 func TestTodosFilterCycleEndsAtAll(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
-	td := NewTodos(loadFixture(t), 100)
+	td := NewTodos(loadFixture(t), 100, 30)
 	if td.filter != "" {
 		t.Fatalf("initial filter: want \"\", got %q", td.filter)
 	}
@@ -88,7 +89,7 @@ func TestTodosEscAndQCancel(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
 	for _, k := range []string{"esc", "q"} {
-		td := NewTodos(loadFixture(t), 100)
+		td := NewTodos(loadFixture(t), 100, 30)
 		page, accept, cancel := td.Update(k)
 		if page != "" || accept || !cancel {
 			t.Errorf("%s: want cancel only, got (%q,%v,%v)", k, page, accept, cancel)
@@ -107,7 +108,7 @@ func TestTodosSetSize(t *testing.T) {
 func TestTodosSelClampedOnFilter(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
-	td := NewTodos(loadFixture(t), 100)
+	td := NewTodos(loadFixture(t), 100, 30)
 	if len(td.visible) < 2 {
 		t.Skip("not enough bullets to clamp test")
 	}
@@ -123,53 +124,111 @@ func TestTodosSelClampedOnFilter(t *testing.T) {
 // continuation lines have no hanging indent (they look like sibling
 // bullets) and a wrapped selected row carries the ▶ marker only on its
 // first visible line.
-func TestTodosLongRowStaysOneLine(t *testing.T) {
+// TestTodosScrollWindowKeepsSelectionVisible asserts that the computed
+// window always contains t.sel, even when sel sits at the far ends of
+// a list much larger than the terminal-row budget.
+func TestTodosScrollWindowKeepsSelectionVisible(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
 	idx := loadFixture(t)
-	idx.Todos = append(idx.Todos, graph.TodoBullet{
+	// Replace fixture todos with 60 bullets across 12 groups so the
+	// list is comfortably larger than the visibleRows budget at any
+	// realistic terminal height.
+	idx.Todos = idx.Todos[:0]
+	for g := 0; g < 12; g++ {
+		for i := 0; i < 5; i++ {
+			idx.Todos = append(idx.Todos, graph.TodoBullet{
+				Page:       fmt.Sprintf("Page-%02d", g),
+				LineNumber: i + 1,
+				Marker:     "TODO",
+				Text:       fmt.Sprintf("item %d/%d", g, i),
+			})
+		}
+	}
+
+	td := NewTodos(idx, 80, 24)
+
+	for _, sel := range []int{0, 25, 50, len(td.visible) - 1} {
+		td.sel = sel
+		start, end := td.computeWindow()
+		if sel < start || sel >= end {
+			t.Errorf("sel %d should be in [%d,%d)", sel, start, end)
+		}
+	}
+}
+
+// TestTodosScrollHintsAppear asserts the "more above" / "more below"
+// chrome appears when bullets fall outside the rendered window.
+func TestTodosScrollHintsAppear(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	idx := loadFixture(t)
+	idx.Todos = idx.Todos[:0]
+	for g := 0; g < 8; g++ {
+		for i := 0; i < 4; i++ {
+			idx.Todos = append(idx.Todos, graph.TodoBullet{
+				Page:       fmt.Sprintf("Page-%02d", g),
+				LineNumber: i + 1,
+				Marker:     "TODO",
+				Text:       fmt.Sprintf("item %d/%d", g, i),
+			})
+		}
+	}
+
+	td := NewTodos(idx, 80, 24)
+
+	td.sel = len(td.visible) / 2
+	mid := td.View()
+	if !strings.Contains(mid, "more above") {
+		t.Errorf("mid selection: want \"more above\" hint; got:\n%s", mid)
+	}
+	if !strings.Contains(mid, "more below") {
+		t.Errorf("mid selection: want \"more below\" hint; got:\n%s", mid)
+	}
+
+	td.sel = 0
+	top := td.View()
+	if strings.Contains(top, "more above") {
+		t.Errorf("top selection: should not show \"more above\"; got:\n%s", top)
+	}
+	if !strings.Contains(top, "more below") {
+		t.Errorf("top selection: want \"more below\" hint; got:\n%s", top)
+	}
+}
+
+func TestTodosLongRowStaysOneLine(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+
+	// Build an index with a single very long bullet so the scroll window
+	// is guaranteed to include it.
+	idx := loadFixture(t)
+	idx.Todos = []graph.TodoBullet{{
 		Page:       "LongCase",
 		LineNumber: 1,
 		Marker:     "TODO",
-		Text:       strings.Repeat("really long text ", 30),
-	})
+		Text:       strings.Repeat("really long text ", 30), // ~510 chars
+	}}
 
-	td := NewTodos(idx, 80)
+	td := NewTodos(idx, 80, 30)
 	td.recompute()
-
-	target := -1
-	for i, b := range td.visible {
-		if b.Page == "LongCase" {
-			target = i
-			break
-		}
-	}
-	if target < 0 {
-		t.Fatalf("LongCase bullet not in visible list")
+	if len(td.visible) != 1 {
+		t.Fatalf("setup: want 1 visible bullet, got %d", len(td.visible))
 	}
 
-	// The LongCase block must be exactly one row tall, whether selected
-	// or not. The selected row's marker is "▶ "; the unselected row's
-	// marker is "   ". A wrap-induced extra line breaks both invariants.
+	// With clamp, the bullet renders on exactly one row whether selected
+	// or not. Without clamp, lipgloss would wrap the row across multiple
+	// lines and only the first carried the ▶ marker.
 	td.sel = 0
-	off := countTodoBlockLines(td.View(), "LongCase")
-	td.sel = target
-	on := countTodoBlockLines(td.View(), "LongCase")
-
-	if off != 1 {
-		t.Errorf("unselected long row should be one line, got %d", off)
-	}
-	if on != 1 {
-		t.Errorf("selected long row should be one line, got %d", on)
-	}
-	if off != on {
-		t.Errorf("layout shift: unselected=%d lines, selected=%d lines", off, on)
+	if got := countTodoBlockLines(td.View(), "LongCase"); got != 1 {
+		t.Errorf("selected long row should occupy exactly one bullet line, got %d", got)
 	}
 }
 
 // countTodoBlockLines counts how many rendered rows belong to the bullet
 // list under pageHeader inside a todos View() snapshot. The block ends at
-// the next blank inter-group line.
+// the next blank line OR at a scroll-position hint ("more above" /
+// "more below"), since those are chrome, not bullet rows.
 func countTodoBlockLines(view, pageHeader string) int {
 	lines := strings.Split(view, "\n")
 	start := -1
@@ -186,6 +245,9 @@ func countTodoBlockLines(view, pageHeader string) int {
 	for j := start; j < len(lines); j++ {
 		inner := strings.TrimSuffix(strings.TrimPrefix(lines[j], "│"), "│")
 		if strings.TrimSpace(inner) == "" {
+			break
+		}
+		if strings.Contains(inner, "more above") || strings.Contains(inner, "more below") {
 			break
 		}
 		n++
