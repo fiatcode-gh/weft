@@ -68,6 +68,16 @@ func TestBuildIndex(t *testing.T) {
 		t.Errorf("dangling backlink to DoesNotExist not recorded: %v", idx.Backlinks["DoesNotExist"])
 	}
 
+	// Fence-internal wiki-links must NOT be extracted. Alpha has
+	// `[[ShouldNotMatch]]` inside a fence; 2026-03-15 has `[[NotALink]]`.
+	// If either name surfaces in Backlinks, ExtractWikiLinks lost fence
+	// awareness.
+	for _, name := range []string{"ShouldNotMatch", "NotALink"} {
+		if refs := idx.Backlinks[name]; len(refs) != 0 {
+			t.Errorf("%s should not be in Backlinks (fenced); got %v", name, refs)
+		}
+	}
+
 	// Todos: 13 open across the fixture
 	if len(idx.Todos) != 13 {
 		t.Errorf("todo count: want 13, got %d (%+v)", len(idx.Todos), idx.Todos)

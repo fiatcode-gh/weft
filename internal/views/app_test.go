@@ -525,16 +525,22 @@ func TestAppPageKeyDispatch(t *testing.T) {
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("N")})
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	afterJ := a.page.Offset()
+	if afterJ == 0 {
+		t.Fatalf("setup: j should advance offset, got 0")
+	}
 
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
-	if a.page.Offset() >= afterJ && afterJ > 0 {
+	if a.page.Offset() >= afterJ {
 		t.Errorf("k should retreat from %d, got %d", afterJ, a.page.Offset())
 	}
 
 	a.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
 	afterCtrlD := a.page.Offset()
+	if afterCtrlD == 0 {
+		t.Fatalf("setup: ctrl+d should advance offset, got 0")
+	}
 	a.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
-	if a.page.Offset() >= afterCtrlD && afterCtrlD > 0 {
+	if a.page.Offset() >= afterCtrlD {
 		t.Errorf("ctrl+u should retreat from %d, got %d", afterCtrlD, a.page.Offset())
 	}
 }
