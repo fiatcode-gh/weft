@@ -73,20 +73,18 @@ func pickerChoices(idx *graph.Index) []pickerChoice {
 
 func (p *Picker) search(q string) {
 	if strings.TrimSpace(q) == "" {
-		p.matches = nil
+		// No query: show all choices (sorted by mtime in pickerChoices).
+		// scrollWindow paginates the display; capping the underlying
+		// slice would silently hide matches a user could otherwise
+		// scroll to.
+		p.matches = p.matches[:0]
 		for i, c := range p.choices {
-			if i >= 50 {
-				break
-			}
 			p.matches = append(p.matches, fuzzy.Match{Str: c.name, Index: i})
 		}
 		p.sel = 0
 		return
 	}
 	p.matches = fuzzy.Find(q, p.names)
-	if len(p.matches) > 50 {
-		p.matches = p.matches[:50]
-	}
 	p.sel = 0
 }
 

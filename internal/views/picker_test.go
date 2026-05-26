@@ -1,12 +1,15 @@
 package views
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/x/exp/teatest"
 	"github.com/sahilm/fuzzy"
+
+	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
 )
 
 func TestPickerFiltersOnQuery(t *testing.T) {
@@ -175,6 +178,42 @@ func TestPickerSetSize(t *testing.T) {
 	p.SetSize(100, 30)
 	if p.width != 100 || p.height != 30 {
 		t.Errorf("SetSize: want 100x30, got %dx%d", p.width, p.height)
+	}
+}
+
+// TestPickerNoSilentCap asserts the picker surfaces every match instead
+// of silently truncating at 50. The scroll window handles paging for
+// display; capping the underlying slice hid pages a user could otherwise
+// scroll to.
+func TestPickerNoSilentCap(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	idx := loadFixture(t)
+	for i := 0; i < 100; i++ {
+		meta := graph.PageMeta{
+			Name: fmt.Sprintf("synthetic-%03d", i),
+			Path: fmt.Sprintf("/synthetic/%03d.md", i),
+		}
+		idx.Pages = append(idx.Pages, meta)
+		idx.ByName[meta.Name] = &idx.Pages[len(idx.Pages)-1]
+	}
+
+	p := NewPicker(idx, 80, 30)
+
+	// Empty query: every choice should land in p.matches.
+	if got, want := len(p.matches), len(p.choices); got != want {
+		t.Errorf("empty-query matches: want %d, got %d", want, got)
+	}
+	if len(p.matches) < 100 {
+		t.Errorf("expected >=100 matches with synthetic pages; got %d", len(p.matches))
+	}
+
+	// Typed query: all 100 synthetic pages should match "synthetic".
+	for _, r := range "synthetic" {
+		p.Update(string(r))
+	}
+	if got := len(p.matches); got < 100 {
+		t.Errorf("typed query should not silently cap; want >=100, got %d", got)
 	}
 }
 
