@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"os"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -102,4 +103,49 @@ func equalSlices(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func TestBuildIndexJournalsSorted(t *testing.T) {
+	idx, err := BuildIndex(fixturePath(t))
+	if err != nil {
+		t.Fatalf("BuildIndex: %v", err)
+	}
+
+	want := []string{
+		"2026-01-10", "2026-03-15", "2026-04-20", "2026-05-01",
+		"2026-05-15", "2026-05-22", "2026-05-23", "2026-05-24", "2026-05-25",
+	}
+	if !equalSlices(idx.Journals, want) {
+		t.Errorf("Journals: want %v, got %v", want, idx.Journals)
+	}
+
+	// Every entry must correspond to a PageMeta with IsJournal == true.
+	for _, name := range idx.Journals {
+		meta, ok := idx.ByName[name]
+		if !ok {
+			t.Errorf("Journals contains %q but ByName doesn't", name)
+			continue
+		}
+		if !meta.IsJournal {
+			t.Errorf("Journals entry %q has IsJournal=false", name)
+		}
+	}
+}
+
+func TestBuildIndexJournalsEmptyWhenNoJournals(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pages", "Lonely.md"), []byte("- hi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	idx, err := BuildIndex(dir)
+	if err != nil {
+		t.Fatalf("BuildIndex: %v", err)
+	}
+	if len(idx.Journals) != 0 {
+		t.Errorf("Journals: want empty slice, got %v", idx.Journals)
+	}
 }

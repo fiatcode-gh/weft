@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -14,6 +15,7 @@ type Index struct {
 	ByName    map[string]*PageMeta
 	Backlinks map[string][]Ref
 	Todos     []TodoBullet
+	Journals  []string // journal page names, sorted ascending
 }
 
 // BuildIndex walks <graphPath>/pages and <graphPath>/journals once and returns
@@ -55,6 +57,15 @@ func BuildIndex(graphPath string) (*Index, error) {
 	for i := range idx.Pages {
 		idx.ByName[idx.Pages[i].Name] = &idx.Pages[i]
 	}
+
+	// Collect journal page names sorted ascending. Names are YYYY-MM-DD so
+	// lexical order matches chronological order.
+	for _, p := range idx.Pages {
+		if p.IsJournal {
+			idx.Journals = append(idx.Journals, p.Name)
+		}
+	}
+	sort.Strings(idx.Journals)
 
 	// Second pass: parse bodies for links + todos.
 	for _, p := range idx.Pages {
