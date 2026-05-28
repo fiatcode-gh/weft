@@ -52,6 +52,10 @@ type App struct {
 	width  int
 	height int
 
+	// nowFunc returns "now" for today-journal resolution. Defaults to
+	// time.Now; tests inject a fixed clock.
+	nowFunc func() time.Time
+
 	// Browser-style page history. hist[histIdx] is the entry currently on
 	// screen. histIdx == -1 before the first page is shown.
 	hist    []historyEntry
@@ -72,10 +76,16 @@ type historyEntry struct {
 // asynchronously in Init so the first frame can render a "loading" splash
 // instead of freezing the terminal while a large graph is walked.
 func New(graphPath, version string) *App {
-	return &App{graphPath: graphPath, mode: modePage, histIdx: -1, version: version}
+	return &App{
+		graphPath: graphPath,
+		mode:      modePage,
+		histIdx:   -1,
+		version:   version,
+		nowFunc:   time.Now,
+	}
 }
 
-func todayJournalName() string { return time.Now().Format("2006-01-02") }
+func (a *App) todayJournalName() string { return a.nowFunc().Format("2006-01-02") }
 
 func (a *App) Init() tea.Cmd { return a.buildIndexCmd() }
 
@@ -92,7 +102,7 @@ func (a *App) buildIndexCmd() tea.Cmd {
 // "flash from 80 cols to actual width" the previous synchronous path showed.
 func (a *App) tryInitPage() {
 	if a.page == nil && a.idx != nil && a.loadErr == nil && a.width > 0 {
-		name := todayJournalName()
+		name := a.todayJournalName()
 		a.page = NewPageView(a.idx, name, a.width, a.height)
 		a.hist = []historyEntry{{page: name, offset: 0, cursor: -1}}
 		a.histIdx = 0
