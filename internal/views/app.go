@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -156,6 +157,23 @@ func (a *App) historyForward() {
 	target := a.hist[a.histIdx]
 	a.page.SetPage(target.page)
 	a.page.Restore(target.offset, target.cursor)
+}
+
+// journalNeighbor returns the journal name adjacent to current in
+// a.idx.Journals (dir=-1 prev, dir=+1 next) and ok=true. Returns
+// ("", false) when current isn't in the sorted journal list or when
+// the neighbour would be off the ends.
+func (a *App) journalNeighbor(current string, dir int) (string, bool) {
+	js := a.idx.Journals
+	i := sort.SearchStrings(js, current)
+	if i == len(js) || js[i] != current {
+		return "", false
+	}
+	j := i + dir
+	if j < 0 || j >= len(js) {
+		return "", false
+	}
+	return js[j], true
 }
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -313,6 +331,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.navigate(today)
 				} else {
 					a.hint = "no journal for " + today
+				}
+			case "<":
+				if name, ok := a.journalNeighbor(a.page.Page(), -1); ok {
+					a.navigate(name)
+				} else if cur, exists := a.idx.ByName[a.page.Page()]; exists && cur.IsJournal {
+					a.hint = "no earlier journal"
+				}
+			case ">":
+				if name, ok := a.journalNeighbor(a.page.Page(), +1); ok {
+					a.navigate(name)
+				} else if cur, exists := a.idx.ByName[a.page.Page()]; exists && cur.IsJournal {
+					a.hint = "no later journal"
 				}
 			case "g":
 				a.page.GotoTop()

@@ -303,3 +303,85 @@ func TestPeriodIdempotentOnTodayJournal(t *testing.T) {
 		t.Errorf("after . on today: want 2026-05-23, got %q", got)
 	}
 }
+
+func TestPrevJournalWalksBackwards(t *testing.T) {
+	a := bootAppAt(t, time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC))
+	// Boot lands on 2026-05-24.
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
+	if got := a.page.Page(); got != "2026-05-23" {
+		t.Errorf("after <: want 2026-05-23, got %q", got)
+	}
+	if a.hint != "" {
+		t.Errorf("hint should be empty on successful walk, got %q", a.hint)
+	}
+}
+
+func TestNextJournalWalksForward(t *testing.T) {
+	a := bootAppAt(t, time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC))
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(">")})
+	if got := a.page.Page(); got != "2026-05-24" {
+		t.Errorf("after >: want 2026-05-24, got %q", got)
+	}
+}
+
+func TestPrevJournalSkipsGapDays(t *testing.T) {
+	// Fixture has 2026-04-20 then 2026-03-15 — large gap. < from 04-20 lands
+	// on 03-15, skipping the missing calendar days in between.
+	a := bootAppAt(t, time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC))
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
+	if got := a.page.Page(); got != "2026-03-15" {
+		t.Errorf("after < across gap: want 2026-03-15, got %q", got)
+	}
+}
+
+func TestPrevJournalAtOldestShowsHint(t *testing.T) {
+	a := bootAppAt(t, time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC))
+	startPage := a.page.Page()
+	startHistLen := len(a.hist)
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
+	if got := a.page.Page(); got != startPage {
+		t.Errorf("< at oldest: page changed from %q to %q", startPage, got)
+	}
+	if got := len(a.hist); got != startHistLen {
+		t.Errorf("< at oldest grew history: want %d, got %d", startHistLen, got)
+	}
+	if a.hint != "no earlier journal" {
+		t.Errorf("hint: want %q, got %q", "no earlier journal", a.hint)
+	}
+}
+
+func TestNextJournalAtNewestShowsHint(t *testing.T) {
+	a := bootAppAt(t, time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC))
+	startPage := a.page.Page()
+	startHistLen := len(a.hist)
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(">")})
+	if got := a.page.Page(); got != startPage {
+		t.Errorf("> at newest: page changed from %q to %q", startPage, got)
+	}
+	if got := len(a.hist); got != startHistLen {
+		t.Errorf("> at newest grew history: want %d, got %d", startHistLen, got)
+	}
+	if a.hint != "no later journal" {
+		t.Errorf("hint: want %q, got %q", "no later journal", a.hint)
+	}
+}
+
+func TestPrevNextInertOutsideJournalContext(t *testing.T) {
+	a := bootAppAt(t, time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC))
+	a.navigate("Alpha")
+	startPage := a.page.Page()
+	startHistLen := len(a.hist)
+
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(">")})
+
+	if got := a.page.Page(); got != startPage {
+		t.Errorf("<,> outside journal context: page changed from %q to %q", startPage, got)
+	}
+	if got := len(a.hist); got != startHistLen {
+		t.Errorf("<,> outside journal context grew history: want %d, got %d", startHistLen, got)
+	}
+	if a.hint != "" {
+		t.Errorf("<,> outside journal context: hint should be empty, got %q", a.hint)
+	}
+}
