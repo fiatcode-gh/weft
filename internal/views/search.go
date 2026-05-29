@@ -97,9 +97,9 @@ func (s *SearchView) Apply(msg searchDoneMsg) {
 // Update handles a key. Returns (selected hit, accept, cancel, cmd to run).
 func (s *SearchView) Update(key string, graphPath string) (hit *SearchHit, accept, cancel bool, cmd tea.Cmd) {
 	switch key {
-	case "esc":
+	case keyEsc:
 		return nil, false, true, nil
-	case "enter":
+	case keyEnter:
 		if s.running {
 			return nil, false, false, nil
 		}
@@ -114,20 +114,20 @@ func (s *SearchView) Update(key string, graphPath string) (hit *SearchHit, accep
 			h := s.hits[s.sel]
 			return &h, true, false, nil
 		}
-	case "up", "ctrl+k":
+	case keyUp, keyCtrlK:
 		if s.sel > 0 {
 			s.sel--
 		}
-	case "down", "ctrl+j":
+	case keyDown, keyCtrlJ:
 		if s.sel < len(s.hits)-1 {
 			s.sel++
 		}
-	case "backspace":
+	case keyBackspace:
 		if len(s.query) > 0 {
 			s.query = s.query[:len(s.query)-1]
 			s.hits = nil
 		}
-	case " ", "space":
+	case " ", keySpace:
 		// Both forms covered in case bubbletea reports the space key as
 		// the literal " " (default in v1) or the named "space" elsewhere.
 		s.query += " "

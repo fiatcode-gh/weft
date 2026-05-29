@@ -26,7 +26,7 @@ func (h *Help) SetSize(w, _ int) { h.width = w }
 // Update reports whether the overlay should close. There's no state to mutate.
 func (h *Help) Update(key string) (cancel bool) {
 	switch key {
-	case "esc", "?", "q":
+	case keyEsc, "?", keyQ:
 		return true
 	}
 	return false

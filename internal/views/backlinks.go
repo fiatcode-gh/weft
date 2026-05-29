@@ -38,17 +38,17 @@ func (b *Backlinks) SetSize(w, h int) { b.width, b.height = w, h }
 
 func (b *Backlinks) Update(key string) (selected string, accept, cancel bool) {
 	switch key {
-	case "esc", "b":
+	case keyEsc, "b":
 		return "", false, true
-	case "up", "k", "ctrl+k":
+	case keyUp, keyK, keyCtrlK:
 		if b.sel > 0 {
 			b.sel--
 		}
-	case "down", "j", "ctrl+j":
+	case keyDown, keyJ, keyCtrlJ:
 		if b.sel < len(b.refs)-1 {
 			b.sel++
 		}
-	case "enter":
+	case keyEnter:
 		if b.sel >= 0 && b.sel < len(b.refs) {
 			return b.refs[b.sel].FromPage, true, false
 		}

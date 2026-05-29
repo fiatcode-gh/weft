@@ -245,9 +245,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			a.tryInitPage()
 		}
-		// Propagate to any active overlay so its scroll-window budget and
-		// inner-width calculations track the new terminal size on resize.
-		// Help is content-sized and doesn't expose a SetSize.
+		// Propagate the new size to any open overlay so its scroll-window
+		// budget and inner-width tracking stay correct on resize.
 		if a.picker != nil {
 			a.picker.SetSize(m.Width, m.Height)
 		}
@@ -270,7 +269,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// While loading or in an error state, only quit + retry are honoured.
 		if a.page == nil {
 			switch key {
-			case "q", "ctrl+c":
+			case keyQ, "ctrl+c":
 				return a, tea.Quit
 			case "R":
 				if a.loadErr != nil {
@@ -344,7 +343,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		case modePage:
 			switch key {
-			case "q", "ctrl+c":
+			case keyQ, "ctrl+c":
 				return a, tea.Quit
 			case "ctrl+p":
 				a.picker = NewPicker(a.idx, a.width, a.height)
@@ -399,13 +398,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.page.CycleLink(+1)
 			case "N":
 				a.page.CycleLink(-1)
-			case "enter":
+			case keyEnter:
 				if t := a.page.FollowCursor(); t != "" {
 					a.navigate(t)
 				}
-			case "j", "down":
+			case keyJ, keyDown:
 				a.page.LineDown()
-			case "k", "up":
+			case keyK, keyUp:
 				a.page.LineUp()
 			case "ctrl+d":
 				a.page.HalfPageDown()

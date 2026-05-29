@@ -91,19 +91,19 @@ func (p *Picker) search(q string) {
 // Update handles a key. Returns (selected page name, accept, cancel).
 func (p *Picker) Update(key string) (selected string, accept bool, cancel bool) {
 	switch key {
-	case "esc":
+	case keyEsc:
 		return "", false, true
-	case "enter":
+	case keyEnter:
 		if p.sel >= 0 && p.sel < len(p.matches) {
 			return p.matches[p.sel].Str, true, false
 		}
 		return "", false, false
-	case "up", "ctrl+k":
+	case keyUp, keyCtrlK:
 		if p.sel > 0 {
 			p.sel--
 		}
 		return "", false, false
-	case "down", "ctrl+j":
+	case keyDown, keyCtrlJ:
 		if p.sel < len(p.matches)-1 {
 			p.sel++
 		}
@@ -119,13 +119,13 @@ func (p *Picker) Update(key string) (selected string, accept bool, cancel bool) 
 // Bubble Tea normally sends tea.KeyMsg; we hand-roll just enough for our overlay.
 func consumeKey(ti textinput.Model, key string) (textinput.Model, bool) {
 	switch key {
-	case "backspace":
+	case keyBackspace:
 		v := ti.Value()
 		if len(v) > 0 {
 			ti.SetValue(v[:len(v)-1])
 		}
 		return ti, true
-	case "space":
+	case keySpace:
 		// Some bubbletea code paths report the space key by name rather
 		// than as the literal " " character; handle both forms.
 		ti.SetValue(ti.Value() + " ")

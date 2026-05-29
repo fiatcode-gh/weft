@@ -61,19 +61,19 @@ func (t *Todos) recompute() {
 
 func (t *Todos) Update(key string) (page string, accept, cancel bool) {
 	switch key {
-	case "esc", "q":
+	case keyEsc, keyQ:
 		return "", false, true
 	case "t":
 		t.cycleFilter()
-	case "up", "k":
+	case keyUp, keyK:
 		if t.sel > 0 {
 			t.sel--
 		}
-	case "down", "j":
+	case keyDown, keyJ:
 		if t.sel < len(t.visible)-1 {
 			t.sel++
 		}
-	case "enter":
+	case keyEnter:
 		if t.sel >= 0 && t.sel < len(t.visible) {
 			return t.visible[t.sel].Page, true, false
 		}
