@@ -12,13 +12,6 @@ import (
 	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
 )
 
-var (
-	statusFaint = lipgloss.NewStyle().Faint(true)
-	statusRule  = lipgloss.NewStyle().Faint(true)
-	splashBold  = lipgloss.NewStyle().Bold(true)
-	splashFaint = lipgloss.NewStyle().Faint(true)
-)
-
 type modeT int
 
 const (
@@ -418,14 +411,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (a *App) View() string {
 	if a.loadErr != nil {
-		return splashBold.Render(fmt.Sprintf("peekseq — failed to index %s", a.graphPath)) +
+		return styleTitle.Render(fmt.Sprintf("peekseq — failed to index %s", a.graphPath)) +
 			"\n\n" + a.loadErr.Error() +
-			"\n\n" + splashFaint.Render("R to retry · q to quit")
+			"\n\n" + styleFaint.Render("R to retry · q to quit")
 	}
 	if a.page == nil {
-		return splashBold.Render("peekseq") +
-			"\n\n" + splashFaint.Render(fmt.Sprintf("Loading %s ...", a.graphPath)) +
-			"\n\n" + splashFaint.Render("q to quit")
+		return styleTitle.Render("peekseq") +
+			"\n\n" + styleFaint.Render(fmt.Sprintf("Loading %s ...", a.graphPath)) +
+			"\n\n" + styleFaint.Render("q to quit")
 	}
 	var overlay string
 	switch a.mode {
@@ -474,7 +467,7 @@ func (a *App) statusBar() string {
 			rightText = ind + "  " + rightText
 		}
 	}
-	right := statusFaint.Render(rightText)
+	right := styleFaint.Render(rightText)
 	width := a.width
 	if width <= 0 {
 		width = lipgloss.Width(left) + 2 + lipgloss.Width(right)
@@ -486,7 +479,7 @@ func (a *App) statusBar() string {
 		leftBudget = 1
 	}
 	left = clamp(left, leftBudget)
-	rule := statusRule.Render(strings.Repeat("─", width))
+	rule := styleFaint.Render(strings.Repeat("─", width))
 	gap := width - lipgloss.Width(left) - rightW
 	if gap < 1 {
 		gap = 1

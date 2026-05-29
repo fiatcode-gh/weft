@@ -138,14 +138,6 @@ func consumeKey(ti textinput.Model, key string) (textinput.Model, bool) {
 	return ti, false
 }
 
-var (
-	pickerBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(1, 2)
-	pickerTitle  = lipgloss.NewStyle().Bold(true)
-	pickerPrompt = lipgloss.NewStyle().Faint(true)
-	pickerSel    = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("12")).Bold(true)
-	pickerFaint  = lipgloss.NewStyle().Faint(true)
-)
-
 const (
 	pickerInnerWidthMax  = 80 // matches search/backlinks/todos for visual uniformity
 	pickerInnerWidthMin  = 30
@@ -206,24 +198,24 @@ func (p *Picker) View() string {
 	nameBudget := inner - hintCol - 2
 
 	var b strings.Builder
-	b.WriteString(pickerTitle.Render("Find a page"))
+	b.WriteString(styleTitle.Render("Find a page"))
 	b.WriteString("\n\n")
-	b.WriteString(pickerPrompt.Render("> "))
+	b.WriteString(styleFaint.Render("> "))
 	b.WriteString(clamp(p.input.Value(), inner-3))
 	b.WriteString("\n")
-	b.WriteString(pickerFaint.Render(strings.Repeat("─", inner)))
+	b.WriteString(styleFaint.Render(strings.Repeat("─", inner)))
 	b.WriteString("\n")
 	if len(p.matches) == 0 {
-		b.WriteString(pickerFaint.Render("  no matches"))
+		b.WriteString(styleFaint.Render("  no matches"))
 		b.WriteString("\n")
 		b.WriteString("\n")
-		b.WriteString(pickerFaint.Render(clamp("↑/↓ select · enter open · esc cancel", inner)))
-		return pickerBorder.Width(inner + 4).Render(b.String())
+		b.WriteString(styleFaint.Render(clamp("↑/↓ select · enter open · esc cancel", inner)))
+		return styleBorder.Width(inner + 4).Render(b.String())
 	}
 
 	start, end := p.scrollWindow()
 	if start > 0 {
-		b.WriteString(pickerFaint.Render(fmt.Sprintf("  ↑ %d more above", start)))
+		b.WriteString(styleFaint.Render(fmt.Sprintf("  ↑ %d more above", start)))
 		b.WriteString("\n")
 	}
 	for i := start; i < end; i++ {
@@ -236,10 +228,10 @@ func (p *Picker) View() string {
 		marker := "   " // 3-cell marker matches the selected " ▶ " so rows don't shift
 		var row string
 		if i == p.sel {
-			marker = pickerSel.Render(" ▶ ")
-			row = pickerSel.Render(layoutPickerRow(name, hint, nameBudget))
+			marker = styleSel.Render(" ▶ ")
+			row = styleSel.Render(layoutPickerRow(name, hint, nameBudget))
 		} else if hint != "" {
-			row = padTo(name, nameBudget) + "  " + pickerFaint.Render(hint)
+			row = padTo(name, nameBudget) + "  " + styleFaint.Render(hint)
 		} else {
 			row = name
 		}
@@ -248,14 +240,14 @@ func (p *Picker) View() string {
 		b.WriteString("\n")
 	}
 	if end < len(p.matches) {
-		b.WriteString(pickerFaint.Render(fmt.Sprintf("  ↓ %d more below", len(p.matches)-end)))
+		b.WriteString(styleFaint.Render(fmt.Sprintf("  ↓ %d more below", len(p.matches)-end)))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
-	b.WriteString(pickerFaint.Render(clamp("↑/↓ select · enter open · esc cancel", inner)))
+	b.WriteString(styleFaint.Render(clamp("↑/↓ select · enter open · esc cancel", inner)))
 	// Width(inner) locks the panel so the rounded border doesn't resize when
 	// a longer match scrolls into view.
-	return pickerBorder.Width(inner + 4).Render(b.String())
+	return styleBorder.Width(inner + 4).Render(b.String())
 }
 
 // layoutPickerRow returns the plain (unstyled) row layout used for the

@@ -142,13 +142,8 @@ func (s *SearchView) Update(key string, graphPath string) (hit *SearchHit, accep
 }
 
 var (
-	searchBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(1, 2)
-	searchTitle  = lipgloss.NewStyle().Bold(true)
-	searchPrompt = lipgloss.NewStyle().Faint(true)
-	searchSel    = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("12")).Bold(true)
-	searchFaint  = lipgloss.NewStyle().Faint(true)
-	searchHitPos = lipgloss.NewStyle().Foreground(lipgloss.Color("12"))
-	searchMatch  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11"))
+	searchHitPos = lipgloss.NewStyle().Foreground(colorHighlight)
+	searchMatch  = lipgloss.NewStyle().Bold(true).Foreground(colorCursor)
 )
 
 // matchesWithin returns the subset of h.Matches that still fits inside the
@@ -255,23 +250,23 @@ func (s *SearchView) scrollWindow() (start, end int) {
 func (s *SearchView) View() string {
 	inner := s.innerWidth()
 	var b strings.Builder
-	b.WriteString(searchTitle.Render("Search the graph"))
+	b.WriteString(styleTitle.Render("Search the graph"))
 	b.WriteString("\n\n")
-	b.WriteString(searchPrompt.Render("/ "))
+	b.WriteString(styleFaint.Render("/ "))
 	b.WriteString(clamp(s.query, inner-3))
 	switch {
 	case s.err != nil:
-		b.WriteString(searchFaint.Render(clamp(fmt.Sprintf("   error: %v", s.err), inner)))
+		b.WriteString(styleFaint.Render(clamp(fmt.Sprintf("   error: %v", s.err), inner)))
 	case s.running:
-		b.WriteString(searchFaint.Render("   searching…"))
+		b.WriteString(styleFaint.Render("   searching…"))
 	case len(s.hits) == 0 && s.query != "":
-		b.WriteString(searchFaint.Render("   press enter to search"))
+		b.WriteString(styleFaint.Render("   press enter to search"))
 	}
 	b.WriteString("\n")
-	b.WriteString(searchFaint.Render(strings.Repeat("─", inner)))
+	b.WriteString(styleFaint.Render(strings.Repeat("─", inner)))
 	b.WriteString("\n")
 	if len(s.hits) == 0 && s.query == "" {
-		b.WriteString(searchFaint.Render("  type a query and press enter"))
+		b.WriteString(styleFaint.Render("  type a query and press enter"))
 		b.WriteString("\n")
 	}
 	// rowBudget leaves room for the 3-cell marker and keeps one cell of
@@ -279,7 +274,7 @@ func (s *SearchView) View() string {
 	// inner content width and force lipgloss to wrap it.
 	rowBudget := inner - 4
 	const posCol = 22 // width reserved for "{page}:{line}" so context columns line up
-	sep := searchFaint.Render(" · ")
+	sep := styleFaint.Render(" · ")
 	sepW := lipgloss.Width(sep)
 	ctxBudget := rowBudget - posCol - sepW
 	if ctxBudget < 8 {
@@ -287,7 +282,7 @@ func (s *SearchView) View() string {
 	}
 	start, end := s.scrollWindow()
 	if start > 0 {
-		b.WriteString(searchFaint.Render(fmt.Sprintf("   ↑ %d more above", start)))
+		b.WriteString(styleFaint.Render(fmt.Sprintf("   ↑ %d more above", start)))
 		b.WriteString("\n")
 	}
 	for i := start; i < end; i++ {
@@ -303,8 +298,8 @@ func (s *SearchView) View() string {
 			// Selected rows render in one blue-bg pass — applying match
 			// emphasis on top would inject nested SGR resets that clobber
 			// the selection background.
-			marker = searchSel.Render(" ▶ ")
-			line = searchSel.Render(posStr + " · " + ctx)
+			marker = styleSel.Render(" ▶ ")
+			line = styleSel.Render(posStr + " · " + ctx)
 		} else {
 			pos := searchHitPos.Render(posStr)
 			line = pos + sep + highlightMatches(ctx, s.matchesWithin(h, len(ctx)))
@@ -314,14 +309,14 @@ func (s *SearchView) View() string {
 		b.WriteString("\n")
 	}
 	if end < len(s.hits) {
-		b.WriteString(searchFaint.Render(fmt.Sprintf("   ↓ %d more below", len(s.hits)-end)))
+		b.WriteString(styleFaint.Render(fmt.Sprintf("   ↓ %d more below", len(s.hits)-end)))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
-	b.WriteString(searchFaint.Render(clamp("↑/↓ select · enter search/open · esc cancel", inner)))
+	b.WriteString(styleFaint.Render(clamp("↑/↓ select · enter search/open · esc cancel", inner)))
 	// Width includes horizontal padding (2 cells each side) but excludes the
 	// border, so adding 4 keeps the text area at exactly `inner` cells.
-	return searchBorder.Width(inner + 4).Render(b.String())
+	return styleBorder.Width(inner + 4).Render(b.String())
 }
 
 func shortPath(p string) string {

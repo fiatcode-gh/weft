@@ -56,13 +56,7 @@ func (b *Backlinks) Update(key string) (selected string, accept, cancel bool) {
 	return "", false, false
 }
 
-var (
-	blBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(1, 2)
-	blTitle  = lipgloss.NewStyle().Bold(true)
-	blFaint  = lipgloss.NewStyle().Faint(true)
-	blPos    = lipgloss.NewStyle().Foreground(lipgloss.Color("12"))
-	blSel    = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("12")).Bold(true)
-)
+var blPos = lipgloss.NewStyle().Foreground(colorHighlight)
 
 const (
 	blInnerWidthMax  = 80 // matches picker/search/todos for visual uniformity
@@ -121,19 +115,19 @@ func (b *Backlinks) scrollWindow() (start, end int) {
 func (b *Backlinks) View() string {
 	inner := b.innerWidth()
 	var sb strings.Builder
-	sb.WriteString(blTitle.Render("Backlinks"))
-	sb.WriteString(blFaint.Render(clamp(fmt.Sprintf("   → %s   (%d)", b.target, len(b.refs)), inner-len("Backlinks"))))
+	sb.WriteString(styleTitle.Render("Backlinks"))
+	sb.WriteString(styleFaint.Render(clamp(fmt.Sprintf("   → %s   (%d)", b.target, len(b.refs)), inner-len("Backlinks"))))
 	sb.WriteString("\n\n")
-	sb.WriteString(blFaint.Render(strings.Repeat("─", inner)))
+	sb.WriteString(styleFaint.Render(strings.Repeat("─", inner)))
 	sb.WriteString("\n")
 	if len(b.refs) == 0 {
-		sb.WriteString(blFaint.Render("  no backlinks"))
+		sb.WriteString(styleFaint.Render("  no backlinks"))
 		sb.WriteString("\n")
 	}
 	rowBudget := inner - 3
 	start, end := b.scrollWindow()
 	if start > 0 {
-		sb.WriteString(blFaint.Render(fmt.Sprintf("   ↑ %d more above", start)))
+		sb.WriteString(styleFaint.Render(fmt.Sprintf("   ↑ %d more above", start)))
 		sb.WriteString("\n")
 	}
 	for i := start; i < end; i++ {
@@ -142,22 +136,22 @@ func (b *Backlinks) View() string {
 		marker := "   " // 3-cell to match selected " ▶ " width
 		var line string
 		if i == b.sel {
-			marker = blSel.Render(" ▶ ")
+			marker = styleSel.Render(" ▶ ")
 			raw := fmt.Sprintf("%s:%d  · %s", r.FromPage, r.LineNumber, ctx)
-			line = blSel.Render(clamp(raw, rowBudget))
+			line = styleSel.Render(clamp(raw, rowBudget))
 		} else {
 			pos := blPos.Render(fmt.Sprintf("%s:%d", r.FromPage, r.LineNumber))
-			line = clamp(pos+blFaint.Render("  · ")+ctx, rowBudget)
+			line = clamp(pos+styleFaint.Render("  · ")+ctx, rowBudget)
 		}
 		sb.WriteString(marker)
 		sb.WriteString(line)
 		sb.WriteString("\n")
 	}
 	if end < len(b.refs) {
-		sb.WriteString(blFaint.Render(fmt.Sprintf("   ↓ %d more below", len(b.refs)-end)))
+		sb.WriteString(styleFaint.Render(fmt.Sprintf("   ↓ %d more below", len(b.refs)-end)))
 		sb.WriteString("\n")
 	}
 	sb.WriteString("\n")
-	sb.WriteString(blFaint.Render(clamp("↑/↓ select · enter open · b or esc close", inner)))
-	return blBorder.Width(inner + 4).Render(sb.String())
+	sb.WriteString(styleFaint.Render(clamp("↑/↓ select · enter open · b or esc close", inner)))
+	return styleBorder.Width(inner + 4).Render(sb.String())
 }

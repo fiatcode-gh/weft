@@ -34,9 +34,7 @@ func (h *Help) Update(key string) (cancel bool) {
 
 var (
 	helpBorder  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 2)
-	helpTitle   = lipgloss.NewStyle().Bold(true)
-	helpKey     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
-	helpFaint   = lipgloss.NewStyle().Faint(true)
+	helpKey     = lipgloss.NewStyle().Bold(true).Foreground(colorHighlight)
 	helpSection = lipgloss.NewStyle().Faint(true).Italic(true)
 )
 
@@ -81,7 +79,7 @@ var helpSections = []struct {
 
 func (h *Help) View() string {
 	var b strings.Builder
-	b.WriteString(helpTitle.Render("Keys"))
+	b.WriteString(styleTitle.Render("Keys"))
 	b.WriteString("\n\n")
 
 	const keyCol = 10
@@ -144,5 +142,5 @@ func (h *Help) View() string {
 		}
 	}
 
-	return helpBorder.Render(body + "\n" + helpFaint.Render(footer))
+	return helpBorder.Render(body + "\n" + styleFaint.Render(footer))
 }

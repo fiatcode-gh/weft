@@ -81,25 +81,23 @@ func (t *Todos) Update(key string) (page string, accept, cancel bool) {
 	return "", false, false
 }
 
-var (
-	todosBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(1, 2)
-	todosTitle  = lipgloss.NewStyle().Bold(true)
-	todosGroup  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
-	todosFaint  = lipgloss.NewStyle().Faint(true)
-	todosSel    = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("12")).Bold(true)
-	todosMark   = map[string]lipgloss.Style{
-		"TODO":    lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true),  // red
-		"DOING":   lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Bold(true), // yellow
-		"LATER":   lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Bold(true), // blue
-		"WAITING": lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Bold(true),  // dim
-	}
-)
+var todosGroup = lipgloss.NewStyle().Bold(true).Foreground(colorHighlight)
+
+// todosMark colors each workflow marker. Mirrors the task-marker palette in
+// internal/render/page.go; intentionally not shared across the package
+// boundary (see theme.go).
+var todosMark = map[string]lipgloss.Style{
+	"TODO":    lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true), // red
+	"DOING":   lipgloss.NewStyle().Foreground(colorCursor).Bold(true),         // yellow
+	"LATER":   lipgloss.NewStyle().Foreground(colorHighlight).Bold(true),      // blue
+	"WAITING": lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Bold(true), // dim
+}
 
 const (
-	todosInnerWidthMax   = 80 // matches picker/search/backlinks for visual uniformity
-	todosInnerWidthMin   = 30
-	todosVisibleRowsMax  = 16
-	todosVisibleRowsMin  = 6
+	todosInnerWidthMax  = 80 // matches picker/search/backlinks for visual uniformity
+	todosInnerWidthMin  = 30
+	todosVisibleRowsMax = 16
+	todosVisibleRowsMin = 6
 )
 
 func (t *Todos) innerWidth() int {
@@ -198,17 +196,17 @@ func (t *Todos) View() string {
 	if t.filter != "" {
 		filterTxt = t.filter
 	}
-	sb.WriteString(todosTitle.Render("Open todos"))
-	sb.WriteString(todosFaint.Render(fmt.Sprintf("   · filter: %s   (%d)", filterTxt, len(t.visible))))
+	sb.WriteString(styleTitle.Render("Open todos"))
+	sb.WriteString(styleFaint.Render(fmt.Sprintf("   · filter: %s   (%d)", filterTxt, len(t.visible))))
 	sb.WriteString("\n\n")
-	sb.WriteString(todosFaint.Render(strings.Repeat("─", inner)))
+	sb.WriteString(styleFaint.Render(strings.Repeat("─", inner)))
 	sb.WriteString("\n")
 	if len(t.visible) == 0 {
-		sb.WriteString(todosFaint.Render("  nothing open"))
+		sb.WriteString(styleFaint.Render("  nothing open"))
 		sb.WriteString("\n")
 		sb.WriteString("\n")
-		sb.WriteString(todosFaint.Render(clamp("↑/↓ select · t cycle filter · enter open · esc back", inner)))
-		return todosBorder.Width(inner + 4).Render(sb.String())
+		sb.WriteString(styleFaint.Render(clamp("↑/↓ select · t cycle filter · enter open · esc back", inner)))
+		return styleBorder.Width(inner + 4).Render(sb.String())
 	}
 
 	start, end := t.computeWindow()
@@ -216,7 +214,7 @@ func (t *Todos) View() string {
 	below := len(t.visible) - end
 
 	if above > 0 {
-		sb.WriteString(todosFaint.Render(fmt.Sprintf("   ↑ %d more above", above)))
+		sb.WriteString(styleFaint.Render(fmt.Sprintf("   ↑ %d more above", above)))
 		sb.WriteString("\n")
 	}
 
@@ -244,8 +242,8 @@ func (t *Todos) View() string {
 		marker := "   "        // 3-cell to match selected " ▶ " width
 		var row string
 		if i == t.sel {
-			marker = todosSel.Render(" ▶ ")
-			row = todosSel.Render(clamp(fmt.Sprintf("%s %s%s", b.Marker, prio, b.Text), rowBudget))
+			marker = styleSel.Render(" ▶ ")
+			row = styleSel.Render(clamp(fmt.Sprintf("%s %s%s", b.Marker, prio, b.Text), rowBudget))
 		} else {
 			styledMarker := b.Marker
 			if st, ok := todosMark[b.Marker]; ok {
@@ -259,11 +257,11 @@ func (t *Todos) View() string {
 	}
 
 	if below > 0 {
-		sb.WriteString(todosFaint.Render(fmt.Sprintf("   ↓ %d more below", below)))
+		sb.WriteString(styleFaint.Render(fmt.Sprintf("   ↓ %d more below", below)))
 		sb.WriteString("\n")
 	}
 
 	sb.WriteString("\n")
-	sb.WriteString(todosFaint.Render(clamp("↑/↓ select · t cycle filter · enter open · esc back", inner)))
-	return todosBorder.Width(inner + 4).Render(sb.String())
+	sb.WriteString(styleFaint.Render(clamp("↑/↓ select · t cycle filter · enter open · esc back", inner)))
+	return styleBorder.Width(inner + 4).Render(sb.String())
 }
