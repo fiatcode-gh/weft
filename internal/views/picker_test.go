@@ -143,19 +143,19 @@ func TestPickerEscCancels(t *testing.T) {
 }
 
 func TestPickerScrollWindowAllFit(t *testing.T) {
-	p := &Picker{height: 24}
+	p := &Picker{listBox: listBox{height: 24}}
 	p.matches = make([]fuzzy.Match, 5)
-	start, end := p.scrollWindow()
+	start, end := scrollWindow(p.sel, len(p.matches), p.visibleRows())
 	if start != 0 || end != 5 {
 		t.Errorf("all-fit: want [0,5), got [%d,%d)", start, end)
 	}
 }
 
 func TestPickerScrollWindowAtBottom(t *testing.T) {
-	p := &Picker{height: 16}
+	p := &Picker{listBox: listBox{height: 16}}
 	p.matches = make([]fuzzy.Match, 20)
 	p.sel = 19
-	start, end := p.scrollWindow()
+	start, end := scrollWindow(p.sel, len(p.matches), p.visibleRows())
 	if end != 20 || (end-start) != p.visibleRows() {
 		t.Errorf("at bottom: want end=20 window=%d, got [%d,%d)",
 			p.visibleRows(), start, end)
@@ -166,10 +166,10 @@ func TestPickerScrollWindowAtBottom(t *testing.T) {
 }
 
 func TestPickerScrollWindowMiddle(t *testing.T) {
-	p := &Picker{height: 24}
+	p := &Picker{listBox: listBox{height: 24}}
 	p.matches = make([]fuzzy.Match, 30)
 	p.sel = 15
-	start, end := p.scrollWindow()
+	start, end := scrollWindow(p.sel, len(p.matches), p.visibleRows())
 	if p.sel < start || p.sel >= end {
 		t.Errorf("sel %d should be in window [%d,%d)", p.sel, start, end)
 	}
@@ -215,7 +215,7 @@ func TestOverlayFootersFitNarrowWidth(t *testing.T) {
 }
 
 func TestPickerSetSize(t *testing.T) {
-	p := &Picker{width: 80, height: 24}
+	p := &Picker{listBox: listBox{width: 80, height: 24}}
 	p.SetSize(100, 30)
 	if p.width != 100 || p.height != 30 {
 		t.Errorf("SetSize: want 100x30, got %dx%d", p.width, p.height)

@@ -19,14 +19,12 @@ type pickerChoice struct {
 }
 
 type Picker struct {
+	listBox
 	idx     *graph.Index
 	input   textinput.Model
 	choices []pickerChoice
 	names   []string // derived from choices, kept in lockstep for fuzzy.Find
 	matches []fuzzy.Match
-	sel     int
-	width   int       // terminal width snapshot, for layout
-	height  int       // terminal height snapshot, for scroll window sizing
 	now     time.Time // captured at construction for stable relative-time hints
 }
 
@@ -35,7 +33,7 @@ func NewPicker(idx *graph.Index, width, height int) *Picker {
 	ti.Placeholder = "Type a page name..."
 	ti.Focus()
 	ti.CharLimit = 200
-	p := &Picker{idx: idx, input: ti, width: width, height: height, now: time.Now()}
+	p := &Picker{listBox: listBox{width: width, height: height}, idx: idx, input: ti, now: time.Now()}
 	p.choices = pickerChoices(idx)
 	p.names = make([]string, len(p.choices))
 	for i, c := range p.choices {
@@ -44,9 +42,6 @@ func NewPicker(idx *graph.Index, width, height int) *Picker {
 	p.search("")
 	return p
 }
-
-// SetSize updates the cached terminal dimensions.
-func (p *Picker) SetSize(w, h int) { p.width, p.height = w, h }
 
 // pickerChoices returns the picker candidate list sorted with the most
 // recently modified files first. Only real on-disk pages and journals
@@ -99,14 +94,10 @@ func (p *Picker) Update(key string) (selected string, accept bool, cancel bool) 
 		}
 		return "", false, false
 	case keyUp, keyCtrlK:
-		if p.sel > 0 {
-			p.sel--
-		}
+		p.moveUp()
 		return "", false, false
 	case keyDown, keyCtrlJ:
-		if p.sel < len(p.matches)-1 {
-			p.sel++
-		}
+		p.moveDown(len(p.matches))
 		return "", false, false
 	}
 	// Otherwise feed the key into the text input
@@ -138,23 +129,7 @@ func consumeKey(ti textinput.Model, key string) (textinput.Model, bool) {
 	return ti, false
 }
 
-const (
-	pickerInnerWidthMax  = 80 // matches search/backlinks/todos for visual uniformity
-	pickerInnerWidthMin  = 30
-	pickerVisibleRowsMax = 14 // ceiling on simultaneously-shown matches
-	pickerVisibleRowsMin = 6
-)
-
-func (p *Picker) innerWidth() int {
-	w := p.width - 2 - 4 - 4 // border + padding + safety margin
-	if w > pickerInnerWidthMax {
-		w = pickerInnerWidthMax
-	}
-	if w < pickerInnerWidthMin {
-		w = pickerInnerWidthMin
-	}
-	return w
-}
+const pickerVisibleRowsMax = 14 // ceiling on simultaneously-shown matches
 
 // visibleRows returns how many match rows the picker will render at once.
 // The picker scrolls within this window when the match list is longer.
@@ -162,34 +137,7 @@ func (p *Picker) visibleRows() int {
 	// Picker chrome: 2 (border) + 2 (padding) + 1 (title) + 1 (blank) +
 	// 1 (prompt) + 1 (divider) + 1 (blank) + 1 (hint) ≈ 10 lines.
 	const chrome = 10
-	r := p.height - chrome
-	if r > pickerVisibleRowsMax {
-		r = pickerVisibleRowsMax
-	}
-	if r < pickerVisibleRowsMin {
-		r = pickerVisibleRowsMin
-	}
-	return r
-}
-
-// scrollWindow returns the [start, end) slice indices of matches to render
-// such that p.sel is always visible.
-func (p *Picker) scrollWindow() (start, end int) {
-	rows := p.visibleRows()
-	if rows >= len(p.matches) {
-		return 0, len(p.matches)
-	}
-	half := rows / 2
-	start = p.sel - half
-	if start < 0 {
-		start = 0
-	}
-	end = start + rows
-	if end > len(p.matches) {
-		end = len(p.matches)
-		start = end - rows
-	}
-	return start, end
+	return clampInt(p.height-chrome, listVisibleRowsMin, pickerVisibleRowsMax)
 }
 
 func (p *Picker) View() string {
@@ -213,7 +161,7 @@ func (p *Picker) View() string {
 		return styleBorder.Width(inner + 4).Render(b.String())
 	}
 
-	start, end := p.scrollWindow()
+	start, end := scrollWindow(p.sel, len(p.matches), p.visibleRows())
 	if start > 0 {
 		b.WriteString(styleFaint.Render(fmt.Sprintf("  ↑ %d more above", start)))
 		b.WriteString("\n")

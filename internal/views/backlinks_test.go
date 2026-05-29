@@ -144,13 +144,13 @@ func TestBacklinksNoRefsEnterNoop(t *testing.T) {
 }
 
 func TestBacklinksInnerWidthClamps(t *testing.T) {
-	b := &Backlinks{width: 10}
-	if got := b.innerWidth(); got != blInnerWidthMin {
-		t.Errorf("narrow term: want %d, got %d", blInnerWidthMin, got)
+	b := &Backlinks{listBox: listBox{width: 10}}
+	if got := b.innerWidth(); got != listInnerWidthMin {
+		t.Errorf("narrow term: want %d, got %d", listInnerWidthMin, got)
 	}
 	b.width = 300
-	if got := b.innerWidth(); got != blInnerWidthMax {
-		t.Errorf("wide term: want %d, got %d", blInnerWidthMax, got)
+	if got := b.innerWidth(); got != listInnerWidthMax {
+		t.Errorf("wide term: want %d, got %d", listInnerWidthMax, got)
 	}
 }
 
@@ -193,7 +193,7 @@ func TestBacklinksScrollWindowBoundsSelection(t *testing.T) {
 
 	for _, sel := range []int{0, 25, len(b.refs) - 1} {
 		b.sel = sel
-		start, end := b.scrollWindow()
+		start, end := scrollWindow(b.sel, len(b.refs), b.visibleRows())
 		if sel < start || sel >= end {
 			t.Errorf("sel %d should be in [%d,%d)", sel, start, end)
 		}

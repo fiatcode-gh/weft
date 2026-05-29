@@ -11,22 +11,17 @@ import (
 )
 
 type Todos struct {
+	listBox
 	idx     *graph.Index
 	filter  string // "", "TODO", "LATER", "DOING", "WAITING"
 	visible []graph.TodoBullet
-	sel     int
-	width   int // terminal width snapshot, for layout
-	height  int // terminal height snapshot, for scroll-window sizing
 }
 
 func NewTodos(idx *graph.Index, width, height int) *Todos {
-	t := &Todos{idx: idx, width: width, height: height}
+	t := &Todos{listBox: listBox{width: width, height: height}, idx: idx}
 	t.recompute()
 	return t
 }
-
-// SetSize updates the cached terminal dimensions.
-func (t *Todos) SetSize(w, h int) { t.width, t.height = w, h }
 
 var markerCycle = []string{"", "TODO", "LATER", "DOING", "WAITING"}
 
@@ -66,13 +61,9 @@ func (t *Todos) Update(key string) (page string, accept, cancel bool) {
 	case "t":
 		t.cycleFilter()
 	case keyUp, keyK:
-		if t.sel > 0 {
-			t.sel--
-		}
+		t.moveUp()
 	case keyDown, keyJ:
-		if t.sel < len(t.visible)-1 {
-			t.sel++
-		}
+		t.moveDown(len(t.visible))
 	case keyEnter:
 		if t.sel >= 0 && t.sel < len(t.visible) {
 			return t.visible[t.sel].Page, true, false
@@ -93,23 +84,7 @@ var todosMark = map[string]lipgloss.Style{
 	"WAITING": lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Bold(true), // dim
 }
 
-const (
-	todosInnerWidthMax  = 80 // matches picker/search/backlinks for visual uniformity
-	todosInnerWidthMin  = 30
-	todosVisibleRowsMax = 16
-	todosVisibleRowsMin = 6
-)
-
-func (t *Todos) innerWidth() int {
-	w := t.width - 2 - 4 - 4
-	if w > todosInnerWidthMax {
-		w = todosInnerWidthMax
-	}
-	if w < todosInnerWidthMin {
-		w = todosInnerWidthMin
-	}
-	return w
-}
+const todosVisibleRowsMax = 16
 
 // visibleRows returns the terminal-row budget available for the scrollable
 // bullet+header area. Group headers and inter-group blank lines count
@@ -119,14 +94,7 @@ func (t *Todos) visibleRows() int {
 	// + 1 (blank) + 1 (hint) ≈ 9 lines. Add 2 more to leave headroom for
 	// scroll-position hints when they're shown.
 	const chrome = 11
-	r := t.height - chrome
-	if r > todosVisibleRowsMax {
-		r = todosVisibleRowsMax
-	}
-	if r < todosVisibleRowsMin {
-		r = todosVisibleRowsMin
-	}
-	return r
+	return clampInt(t.height-chrome, listVisibleRowsMin, todosVisibleRowsMax)
 }
 
 // computeWindow chooses a [start, end) slice of t.visible to display so

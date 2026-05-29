@@ -436,7 +436,7 @@ func TestSearchScrollWindow(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			s.sel = c.sel
-			start, end := s.scrollWindow()
+			start, end := scrollWindow(s.sel, len(s.hits), s.visibleRows())
 			if end-start != s.visibleRows() {
 				t.Errorf("window size: want %d, got %d (start=%d end=%d)",
 					s.visibleRows(), end-start, start, end)
@@ -456,27 +456,27 @@ func TestSearchScrollWindowAllFit(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.hits = []SearchHit{{Line: 1}, {Line: 2}, {Line: 3}}
-	start, end := s.scrollWindow()
+	start, end := scrollWindow(s.sel, len(s.hits), s.visibleRows())
 	if start != 0 || end != 3 {
 		t.Errorf("all-fit: want [0,3), got [%d,%d)", start, end)
 	}
 }
 
 func TestSearchInnerWidthClamps(t *testing.T) {
-	s := &SearchView{width: 10}
-	if got := s.innerWidth(); got != searchInnerWidthMin {
-		t.Errorf("narrow term: want min %d, got %d", searchInnerWidthMin, got)
+	s := &SearchView{listBox: listBox{width: 10}}
+	if got := s.innerWidth(); got != listInnerWidthMin {
+		t.Errorf("narrow term: want min %d, got %d", listInnerWidthMin, got)
 	}
 	s.width = 200
-	if got := s.innerWidth(); got != searchInnerWidthMax {
-		t.Errorf("wide term: want max %d, got %d", searchInnerWidthMax, got)
+	if got := s.innerWidth(); got != listInnerWidthMax {
+		t.Errorf("wide term: want max %d, got %d", listInnerWidthMax, got)
 	}
 }
 
 func TestSearchVisibleRowsClamps(t *testing.T) {
-	s := &SearchView{height: 5}
-	if got := s.visibleRows(); got != searchVisibleRowsMin {
-		t.Errorf("tiny term: want min %d, got %d", searchVisibleRowsMin, got)
+	s := &SearchView{listBox: listBox{height: 5}}
+	if got := s.visibleRows(); got != listVisibleRowsMin {
+		t.Errorf("tiny term: want min %d, got %d", listVisibleRowsMin, got)
 	}
 	s.height = 100
 	if got := s.visibleRows(); got != searchVisibleRowsMax {

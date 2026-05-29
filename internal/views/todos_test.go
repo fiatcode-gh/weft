@@ -98,7 +98,7 @@ func TestTodosEscAndQCancel(t *testing.T) {
 }
 
 func TestTodosSetSize(t *testing.T) {
-	td := &Todos{width: 80}
+	td := &Todos{listBox: listBox{width: 80}}
 	td.SetSize(120, 99)
 	if td.width != 120 {
 		t.Errorf("SetSize: want width 120, got %d", td.width)

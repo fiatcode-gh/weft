@@ -32,19 +32,17 @@ type SearchSpan struct {
 }
 
 type SearchView struct {
+	listBox
 	idx        *graph.Index
 	query      string
 	hits       []SearchHit
-	sel        int
 	running    bool
 	err        error
-	width      int               // terminal width snapshot, for layout
-	height     int               // terminal height snapshot, for scroll-window sizing
 	pathToName map[string]string // file path → logical page name, for tidy row prefixes
 }
 
 func NewSearchView(idx *graph.Index, width, height int) *SearchView {
-	s := &SearchView{idx: idx, width: width, height: height}
+	s := &SearchView{listBox: listBox{width: width, height: height}, idx: idx}
 	s.pathToName = make(map[string]string, len(idx.Pages))
 	for _, p := range idx.Pages {
 		s.pathToName[p.Path] = p.Name
@@ -60,9 +58,6 @@ func (s *SearchView) hitLabel(filePath string) string {
 	}
 	return shortPath(filePath)
 }
-
-// SetSize updates the cached terminal dimensions.
-func (s *SearchView) SetSize(w, h int) { s.width, s.height = w, h }
 
 func (s *SearchView) Query() string { return s.query }
 
@@ -115,13 +110,9 @@ func (s *SearchView) Update(key string, graphPath string) (hit *SearchHit, accep
 			return &h, true, false, nil
 		}
 	case keyUp, keyCtrlK:
-		if s.sel > 0 {
-			s.sel--
-		}
+		s.moveUp()
 	case keyDown, keyCtrlJ:
-		if s.sel < len(s.hits)-1 {
-			s.sel++
-		}
+		s.moveDown(len(s.hits))
 	case keyBackspace:
 		if len(s.query) > 0 {
 			s.query = s.query[:len(s.query)-1]
@@ -189,27 +180,7 @@ func highlightMatches(ctx string, spans []SearchSpan) string {
 	return b.String()
 }
 
-const (
-	searchInnerWidthMax  = 80
-	searchInnerWidthMin  = 30
-	searchVisibleRowsMax = 14
-	searchVisibleRowsMin = 6
-)
-
-// searchInnerWidth returns the column width to budget for content lines,
-// shrinking to fit narrower terminals so the right edge of the overlay
-// never falls off-screen.
-func (s *SearchView) innerWidth() int {
-	// Border (2) + padding (4) + a 2-col safety margin on each side.
-	w := s.width - 2 - 4 - 4
-	if w > searchInnerWidthMax {
-		w = searchInnerWidthMax
-	}
-	if w < searchInnerWidthMin {
-		w = searchInnerWidthMin
-	}
-	return w
-}
+const searchVisibleRowsMax = 14
 
 // visibleRows returns how many hit rows the search overlay renders at once.
 // Hits scroll within this window when there are more of them.
@@ -217,34 +188,7 @@ func (s *SearchView) visibleRows() int {
 	// Chrome: 2 (border) + 2 (padding) + 1 (title) + 1 (blank) + 1 (prompt)
 	// + 1 (divider) + 1 (blank) + 1 (hint) ≈ 10 lines.
 	const chrome = 10
-	r := s.height - chrome
-	if r > searchVisibleRowsMax {
-		r = searchVisibleRowsMax
-	}
-	if r < searchVisibleRowsMin {
-		r = searchVisibleRowsMin
-	}
-	return r
-}
-
-// scrollWindow returns the [start, end) slice indices of hits to render
-// such that s.sel is always visible.
-func (s *SearchView) scrollWindow() (start, end int) {
-	rows := s.visibleRows()
-	if rows >= len(s.hits) {
-		return 0, len(s.hits)
-	}
-	half := rows / 2
-	start = s.sel - half
-	if start < 0 {
-		start = 0
-	}
-	end = start + rows
-	if end > len(s.hits) {
-		end = len(s.hits)
-		start = end - rows
-	}
-	return start, end
+	return clampInt(s.height-chrome, listVisibleRowsMin, searchVisibleRowsMax)
 }
 
 func (s *SearchView) View() string {
@@ -280,7 +224,7 @@ func (s *SearchView) View() string {
 	if ctxBudget < 8 {
 		ctxBudget = 8
 	}
-	start, end := s.scrollWindow()
+	start, end := scrollWindow(s.sel, len(s.hits), s.visibleRows())
 	if start > 0 {
 		b.WriteString(styleFaint.Render(fmt.Sprintf("   ↑ %d more above", start)))
 		b.WriteString("\n")
