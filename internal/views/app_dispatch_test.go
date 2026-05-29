@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -227,4 +228,78 @@ func runewidthLen(s string) int {
 		n++
 	}
 	return n
+}
+
+func TestPeriodJumpsToTodayJournal(t *testing.T) {
+	a := bootAppAt(t, time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC))
+	// Boot lands on today's journal (2026-05-23) per tryInitPage seeding.
+	// Navigate elsewhere first so we can verify . actually moves us.
+	a.navigate("Alpha")
+	startHistLen := len(a.hist)
+
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(".")})
+
+	if got := a.page.Page(); got != "2026-05-23" {
+		t.Errorf("after .: want page 2026-05-23, got %q", got)
+	}
+	if got := len(a.hist); got != startHistLen+1 {
+		t.Errorf("history len: want %d, got %d", startHistLen+1, got)
+	}
+	if a.hint != "" {
+		t.Errorf("hint should be empty on successful jump, got %q", a.hint)
+	}
+}
+
+func TestPeriodOnAbsentTodayShowsHint(t *testing.T) {
+	// 2026-06-15 has no journal in the fixture.
+	a := bootAppAt(t, time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC))
+	a.navigate("Alpha")
+	startPage := a.page.Page()
+	startHistLen := len(a.hist)
+
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(".")})
+
+	if got := a.page.Page(); got != startPage {
+		t.Errorf("after . on absent today: page changed from %q to %q", startPage, got)
+	}
+	if got := len(a.hist); got != startHistLen {
+		t.Errorf("history grew on absent today: want %d, got %d", startHistLen, got)
+	}
+	if want := "no journal for 2026-06-15"; a.hint != want {
+		t.Errorf("hint: want %q, got %q", want, a.hint)
+	}
+
+	// Status bar must surface the hint in place of "? help".
+	bar := a.statusBar()
+	if !strings.Contains(bar, "no journal for 2026-06-15") {
+		t.Errorf("status bar missing hint; got:\n%s", bar)
+	}
+	if strings.Contains(bar, "? help") {
+		t.Errorf("status bar should hide ? help while hint is set; got:\n%s", bar)
+	}
+}
+
+func TestHintClearsOnNextKey(t *testing.T) {
+	a := bootAppAt(t, time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC))
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(".")})
+	if a.hint == "" {
+		t.Fatal("setup: expected hint to be set by first .")
+	}
+	// Any subsequent key clears the hint at the top of Update.
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	if a.hint != "" {
+		t.Errorf("hint should clear on next key, got %q", a.hint)
+	}
+}
+
+func TestPeriodIdempotentOnTodayJournal(t *testing.T) {
+	a := bootAppAt(t, time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC))
+	// Boot already lands on today's journal.
+	if got := a.page.Page(); got != "2026-05-23" {
+		t.Fatalf("setup: want boot page 2026-05-23, got %q", got)
+	}
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(".")})
+	if got := a.page.Page(); got != "2026-05-23" {
+		t.Errorf("after . on today: want 2026-05-23, got %q", got)
+	}
 }

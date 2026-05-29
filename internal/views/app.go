@@ -56,6 +56,11 @@ type App struct {
 	// time.Now; tests inject a fixed clock.
 	nowFunc func() time.Time
 
+	// hint is a single-cycle right-side status replacement. Set by handlers
+	// that need to surface a transient message (e.g. "no journal for ..."),
+	// cleared at the top of the next tea.KeyMsg.
+	hint string
+
 	// Browser-style page history. hist[histIdx] is the entry currently on
 	// screen. histIdx == -1 before the first page is shown.
 	hist    []historyEntry
@@ -203,6 +208,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 	case tea.KeyMsg:
 		key := m.String()
+		a.hint = ""
 		// While loading or in an error state, only quit + retry are honoured.
 		if a.page == nil {
 			switch key {
@@ -301,6 +307,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.historyBack()
 			case "]":
 				a.historyForward()
+			case ".":
+				today := a.todayJournalName()
+				if _, ok := a.idx.ByName[today]; ok {
+					a.navigate(today)
+				} else {
+					a.hint = "no journal for " + today
+				}
 			case "g":
 				a.page.GotoTop()
 			case "G":
@@ -381,9 +394,14 @@ func (a *App) centerOverlay(content string) string {
 // overflowed the terminal width and wrapped onto a second line.
 func (a *App) statusBar() string {
 	left := a.page.StatusLine()
-	rightText := "? help"
-	if ind := a.page.ScrollIndicator(); ind != "" {
-		rightText = ind + "  " + rightText
+	var rightText string
+	if a.hint != "" {
+		rightText = a.hint
+	} else {
+		rightText = "? help"
+		if ind := a.page.ScrollIndicator(); ind != "" {
+			rightText = ind + "  " + rightText
+		}
 	}
 	right := statusFaint.Render(rightText)
 	width := a.width
