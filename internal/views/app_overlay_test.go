@@ -9,30 +9,51 @@ import (
 	"git.fiatcode.dev/fiatcode/peekseq/internal/search"
 )
 
+// activeKind returns a short name for the active overlay's concrete type, or
+// "page" when no overlay is open.
+func activeKind(a *App) string {
+	switch a.active.(type) {
+	case nil:
+		return "page"
+	case *Picker:
+		return "picker"
+	case *SearchView:
+		return "search"
+	case *Backlinks:
+		return "backlinks"
+	case *Todos:
+		return "todos"
+	case *Help:
+		return "help"
+	default:
+		return "unknown"
+	}
+}
+
 func TestAppOpensAndCancelsPicker(t *testing.T) {
 	a := bootApp(t)
-	if a.mode != modePage {
-		t.Fatalf("setup: want modePage, got %d", a.mode)
+	if activeKind(a) != "page" {
+		t.Fatalf("setup: want page, got %s", activeKind(a))
 	}
 	a.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
-	if a.mode != modePicker || a.picker == nil {
-		t.Fatalf("after ctrl+p: want modePicker with picker set, got mode=%d picker=%v", a.mode, a.picker)
+	if activeKind(a) != "picker" {
+		t.Fatalf("after ctrl+p: want picker, got %s", activeKind(a))
 	}
 	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if a.mode != modePage || a.picker != nil {
-		t.Errorf("after esc: want modePage with picker cleared, got mode=%d picker=%v", a.mode, a.picker)
+	if activeKind(a) != "page" {
+		t.Errorf("after esc: want page, got %s", activeKind(a))
 	}
 }
 
 func TestAppOpensSearchAndEscapes(t *testing.T) {
 	a := bootApp(t)
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
-	if a.mode != modeSearch || a.search == nil {
-		t.Fatalf("after /: want modeSearch with search set, got mode=%d search=%v", a.mode, a.search)
+	if activeKind(a) != "search" {
+		t.Fatalf("after /: want search, got %s", activeKind(a))
 	}
 	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if a.mode != modePage || a.search != nil {
-		t.Errorf("after esc: want modePage with search cleared, got mode=%d search=%v", a.mode, a.search)
+	if activeKind(a) != "page" {
+		t.Errorf("after esc: want page, got %s", activeKind(a))
 	}
 }
 
@@ -40,51 +61,51 @@ func TestAppOpensBacklinksAndCloses(t *testing.T) {
 	a := bootApp(t)
 	a.navigate("Hub")
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
-	if a.mode != modeBacklinks || a.backlinks == nil {
-		t.Fatalf("after b: want modeBacklinks, got mode=%d backlinks=%v", a.mode, a.backlinks)
+	if activeKind(a) != "backlinks" {
+		t.Fatalf("after b: want backlinks, got %s", activeKind(a))
 	}
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
-	if a.mode != modePage || a.backlinks != nil {
-		t.Errorf("after second b: want modePage cleared, got mode=%d backlinks=%v", a.mode, a.backlinks)
+	if activeKind(a) != "page" {
+		t.Errorf("after second b: want page, got %s", activeKind(a))
 	}
 }
 
 func TestAppOpensTodosAndCloses(t *testing.T) {
 	a := bootApp(t)
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")})
-	if a.mode != modeTodos || a.todos == nil {
-		t.Fatalf("after T: want modeTodos, got mode=%d todos=%v", a.mode, a.todos)
+	if activeKind(a) != "todos" {
+		t.Fatalf("after T: want todos, got %s", activeKind(a))
 	}
 	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if a.mode != modePage || a.todos != nil {
-		t.Errorf("after esc: want modePage cleared, got mode=%d todos=%v", a.mode, a.todos)
+	if activeKind(a) != "page" {
+		t.Errorf("after esc: want page, got %s", activeKind(a))
 	}
 }
 
 func TestAppOpensHelpAndCloses(t *testing.T) {
 	a := bootApp(t)
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
-	if a.mode != modeHelp || a.help == nil {
-		t.Fatalf("after ?: want modeHelp, got mode=%d help=%v", a.mode, a.help)
+	if activeKind(a) != "help" {
+		t.Fatalf("after ?: want help, got %s", activeKind(a))
 	}
 	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if a.mode != modePage || a.help != nil {
-		t.Errorf("after esc: want modePage cleared, got mode=%d help=%v", a.mode, a.help)
+	if activeKind(a) != "page" {
+		t.Errorf("after esc: want page, got %s", activeKind(a))
 	}
 }
 
 func TestAppPickerAcceptNavigates(t *testing.T) {
 	a := bootApp(t)
 	a.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
-	if a.mode != modePicker {
+	if activeKind(a) != "picker" {
 		t.Fatalf("setup: picker not open")
 	}
 	for _, r := range "Alp" {
 		a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 	}
 	a.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if a.mode != modePage {
-		t.Errorf("after enter: want modePage, got %d", a.mode)
+	if activeKind(a) != "page" {
+		t.Errorf("after enter: want page, got %s", activeKind(a))
 	}
 	if a.page.Page() != "Alpha" {
 		t.Errorf("after picker accept: want page Alpha, got %q", a.page.Page())
@@ -94,29 +115,27 @@ func TestAppPickerAcceptNavigates(t *testing.T) {
 func TestAppTodosAcceptNavigates(t *testing.T) {
 	a := bootApp(t)
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")})
-	if a.mode != modeTodos {
+	if activeKind(a) != "todos" {
 		t.Fatalf("setup: todos not open")
 	}
 	a.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if a.mode != modePage {
-		t.Errorf("after enter: want modePage, got %d", a.mode)
-	}
-	if a.todos != nil {
-		t.Errorf("todos not cleared")
+	if activeKind(a) != "page" {
+		t.Errorf("after enter: want page, got %s", activeKind(a))
 	}
 }
 
 func TestAppSearchDoneMsgRouting(t *testing.T) {
 	a := bootApp(t)
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
-	if a.search == nil {
-		t.Fatalf("setup: search not open")
+	s, ok := a.active.(*SearchView)
+	if !ok {
+		t.Fatalf("setup: search not open, got %s", activeKind(a))
 	}
 	a.Update(searchDoneMsg{hits: []search.Hit{
 		{FilePath: "/x", Line: 1, Context: "hello"},
 	}})
-	if len(a.search.hits) != 1 {
-		t.Errorf("searchDoneMsg should populate hits, got %d", len(a.search.hits))
+	if len(s.hits) != 1 {
+		t.Errorf("searchDoneMsg should populate hits, got %d", len(s.hits))
 	}
 }
 
@@ -156,64 +175,55 @@ func TestAppCenterOverlayPlacesContent(t *testing.T) {
 	}
 }
 
-// TestAppResizePropagatesToOverlays asserts that a WindowSizeMsg arriving
-// while an overlay is open updates the overlay's cached size. Without
-// propagation, the overlay would continue rendering at its construction-
-// time dimensions and (for backlinks/todos) scroll against the wrong row
-// budget after a resize.
+// TestAppResizePropagatesToOverlays asserts that a WindowSizeMsg arriving while
+// an overlay is open updates the overlay's cached size.
 func TestAppResizePropagatesToOverlays(t *testing.T) {
 	a := bootApp(t)
 
-	// Open each overlay, fire a new WindowSizeMsg, and verify the
-	// overlay captured the new size.
 	openers := []struct {
 		name      string
 		key       tea.KeyMsg
-		setupPage string // navigate first for the b overlay
+		setupPage string
 		read      func() (int, int)
 	}{
 		{
 			name: "picker",
 			key:  tea.KeyMsg{Type: tea.KeyCtrlP},
-			read: func() (int, int) { return a.picker.width, a.picker.height },
+			read: func() (int, int) { return a.active.(*Picker).width, a.active.(*Picker).height },
 		},
 		{
 			name: "search",
 			key:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")},
-			read: func() (int, int) { return a.search.width, a.search.height },
+			read: func() (int, int) { return a.active.(*SearchView).width, a.active.(*SearchView).height },
 		},
 		{
 			name:      "backlinks",
 			key:       tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")},
 			setupPage: "Hub",
-			read:      func() (int, int) { return a.backlinks.width, a.backlinks.height },
+			read:      func() (int, int) { return a.active.(*Backlinks).width, a.active.(*Backlinks).height },
 		},
 		{
 			name: "todos",
 			key:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")},
-			read: func() (int, int) { return a.todos.width, a.todos.height },
+			read: func() (int, int) { return a.active.(*Todos).width, a.active.(*Todos).height },
 		},
 	}
 
 	for _, o := range openers {
 		t.Run(o.name, func(t *testing.T) {
-			// Reset to page mode each iteration.
-			a.mode = modePage
+			a.active = nil // reset to page mode each iteration
 			if o.setupPage != "" {
 				a.navigate(o.setupPage)
 			}
 			a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 			a.Update(o.key)
 
-			// Trigger a resize and check the overlay's cached dims.
 			a.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 			w, h := o.read()
 			if w != 120 || h != 40 {
 				t.Errorf("%s: want 120x40 after resize, got %dx%d", o.name, w, h)
 			}
 
-			// Close the overlay (esc clears everything except backlinks
-			// which uses 'b' or esc — esc covers both).
 			a.Update(tea.KeyMsg{Type: tea.KeyEsc})
 		})
 	}

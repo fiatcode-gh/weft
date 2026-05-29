@@ -83,27 +83,27 @@ func (p *Picker) search(q string) {
 	p.sel = 0
 }
 
-// Update handles a key. Returns (selected page name, accept, cancel).
-func (p *Picker) Update(key string) (selected string, accept bool, cancel bool) {
+// Update handles a key and reports the result to the App.
+func (p *Picker) Update(key string) OverlayResult {
 	switch key {
 	case keyEsc:
-		return "", false, true
+		return OverlayResult{Cancel: true}
 	case keyEnter:
 		if p.sel >= 0 && p.sel < len(p.matches) {
-			return p.matches[p.sel].Str, true, false
+			return OverlayResult{Selected: p.matches[p.sel].Str, Accept: true}
 		}
-		return "", false, false
+		return OverlayResult{}
 	case keyUp, keyCtrlK:
 		p.moveUp()
-		return "", false, false
+		return OverlayResult{}
 	case keyDown, keyCtrlJ:
 		p.moveDown(len(p.matches))
-		return "", false, false
+		return OverlayResult{}
 	}
-	// Otherwise feed the key into the text input
+	// Otherwise feed the key into the text input.
 	p.input, _ = consumeKey(p.input, key)
 	p.search(p.input.Value())
-	return "", false, false
+	return OverlayResult{}
 }
 
 // consumeKey is a tiny adapter to feed a key string to a textinput.Model.

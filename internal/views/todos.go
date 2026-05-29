@@ -54,10 +54,10 @@ func (t *Todos) recompute() {
 	}
 }
 
-func (t *Todos) Update(key string) (page string, accept, cancel bool) {
+func (t *Todos) Update(key string) OverlayResult {
 	switch key {
 	case keyEsc, keyQ:
-		return "", false, true
+		return OverlayResult{Cancel: true}
 	case "t":
 		t.cycleFilter()
 	case keyUp, keyK:
@@ -66,10 +66,10 @@ func (t *Todos) Update(key string) (page string, accept, cancel bool) {
 		t.moveDown(len(t.visible))
 	case keyEnter:
 		if t.sel >= 0 && t.sel < len(t.visible) {
-			return t.visible[t.sel].Page, true, false
+			return OverlayResult{Selected: t.visible[t.sel].Page, Accept: true}
 		}
 	}
-	return "", false, false
+	return OverlayResult{}
 }
 
 var todosGroup = lipgloss.NewStyle().Bold(true).Foreground(colorHighlight)

@@ -120,21 +120,6 @@ func TestAppQuitsBeforePage(t *testing.T) {
 	}
 }
 
-func TestPageNameFromHitPath(t *testing.T) {
-	idx := loadFixture(t)
-	var sample, name string
-	for _, p := range idx.Pages {
-		sample, name = p.Path, p.Name
-		break
-	}
-	if got := pageNameFromHitPath(idx, sample); got != name {
-		t.Errorf("known path: want %q, got %q", name, got)
-	}
-	if got := pageNameFromHitPath(idx, "/totally/unknown/file.md"); got != "" {
-		t.Errorf("unknown path: want \"\", got %q", got)
-	}
-}
-
 func TestAppPageKeyDispatch(t *testing.T) {
 	a := bootApp(t)
 	a.navigate("Alpha")

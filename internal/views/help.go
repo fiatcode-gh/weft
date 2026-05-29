@@ -24,12 +24,12 @@ func NewHelp(version string, width int) *Help {
 func (h *Help) SetSize(w, _ int) { h.width = w }
 
 // Update reports whether the overlay should close. There's no state to mutate.
-func (h *Help) Update(key string) (cancel bool) {
+func (h *Help) Update(key string) OverlayResult {
 	switch key {
 	case keyEsc, "?", keyQ:
-		return true
+		return OverlayResult{Cancel: true}
 	}
-	return false
+	return OverlayResult{}
 }
 
 var (

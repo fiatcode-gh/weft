@@ -57,10 +57,8 @@ func TestSearchUpdateTypesIntoQuery(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	s := NewSearchView(loadFixture(t), 80, 24)
 	for _, k := range []string{"a", "l", "p"} {
-		hit, accept, cancel, cmd := s.Update(k, "/tmp/x")
-		if hit != nil || accept || cancel || cmd != nil {
-			t.Errorf("typing %q: want (nil,false,false,nil), got (%v,%v,%v,%v)",
-				k, hit, accept, cancel, cmd)
+		if res := s.Update(k); res.Accept || res.Cancel || res.Selected != "" || res.Cmd != nil {
+			t.Errorf("typing %q: want zero result, got %+v", k, res)
 		}
 	}
 	if s.query != "alp" {
@@ -75,7 +73,7 @@ func TestSearchUpdateBackspace(t *testing.T) {
 	s.SetQuery("abc")
 	s.hits = []search.Hit{{FilePath: "x", Line: 1, Context: "y"}}
 
-	s.Update("backspace", "/tmp/x")
+	s.Update("backspace")
 	if s.query != "ab" {
 		t.Errorf("after first backspace: want \"ab\", got %q", s.query)
 	}
@@ -83,9 +81,9 @@ func TestSearchUpdateBackspace(t *testing.T) {
 		t.Errorf("after backspace: hits must clear, got %+v", s.hits)
 	}
 
-	s.Update("backspace", "/tmp/x")
-	s.Update("backspace", "/tmp/x")
-	s.Update("backspace", "/tmp/x")
+	s.Update("backspace")
+	s.Update("backspace")
+	s.Update("backspace")
 	if s.query != "" {
 		t.Errorf("after draining: want \"\", got %q", s.query)
 	}
@@ -97,12 +95,12 @@ func TestSearchUpdateSpaceVariants(t *testing.T) {
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.SetQuery("foo")
 
-	s.Update(" ", "/tmp/x")
+	s.Update(" ")
 	if s.query != "foo " {
 		t.Errorf("after literal space: want \"foo \", got %q", s.query)
 	}
 
-	s.Update("space", "/tmp/x")
+	s.Update("space")
 	if s.query != "foo  " {
 		t.Errorf("after named space: want \"foo  \", got %q", s.query)
 	}
@@ -118,23 +116,23 @@ func TestSearchSelectionBounds(t *testing.T) {
 		{FilePath: "c", Line: 3, Context: "z"},
 	}
 
-	s.Update("up", "/tmp/x")
+	s.Update("up")
 	if s.sel != 0 {
 		t.Errorf("up at top: want sel 0, got %d", s.sel)
 	}
-	s.Update("down", "/tmp/x")
+	s.Update("down")
 	if s.sel != 1 {
 		t.Errorf("after down: want sel 1, got %d", s.sel)
 	}
-	s.Update("ctrl+j", "/tmp/x")
+	s.Update("ctrl+j")
 	if s.sel != 2 {
 		t.Errorf("after ctrl+j: want sel 2, got %d", s.sel)
 	}
-	s.Update("down", "/tmp/x")
+	s.Update("down")
 	if s.sel != 2 {
 		t.Errorf("down at bottom: want sel 2, got %d", s.sel)
 	}
-	s.Update("ctrl+k", "/tmp/x")
+	s.Update("ctrl+k")
 	if s.sel != 1 {
 		t.Errorf("after ctrl+k: want sel 1, got %d", s.sel)
 	}
@@ -144,10 +142,8 @@ func TestSearchEnterEmptyQueryNoop(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
 	s := NewSearchView(loadFixture(t), 80, 24)
-	hit, accept, cancel, cmd := s.Update("enter", "/tmp/x")
-	if hit != nil || accept || cancel || cmd != nil {
-		t.Errorf("enter on empty query: want all-zero, got (%v,%v,%v,%v)",
-			hit, accept, cancel, cmd)
+	if res := s.Update("enter"); res.Accept || res.Cancel || res.Selected != "" || res.Cmd != nil {
+		t.Errorf("enter on empty query: want zero result, got %+v", res)
 	}
 }
 
@@ -157,13 +153,12 @@ func TestSearchEnterFirstTimeRunsCmd(t *testing.T) {
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.SetQuery("Beta")
 
-	hit, accept, cancel, cmd := s.Update("enter", "/tmp/x")
-	if hit != nil || accept || cancel {
-		t.Errorf("enter to launch: want non-accept non-cancel nil hit, got (%v,%v,%v)",
-			hit, accept, cancel)
+	res := s.Update("enter")
+	if res.Accept || res.Cancel || res.Selected != "" {
+		t.Errorf("enter to launch: want a Cmd only, got %+v", res)
 	}
-	if cmd == nil {
-		t.Errorf("enter to launch: want non-nil cmd, got nil")
+	if res.Cmd == nil {
+		t.Errorf("enter to launch: want non-nil Cmd, got nil")
 	}
 	if !s.running {
 		t.Errorf("enter to launch: running flag should be set")
@@ -177,31 +172,39 @@ func TestSearchEnterWhileRunningIsNoop(t *testing.T) {
 	s.SetQuery("Beta")
 	s.running = true
 
-	hit, accept, cancel, cmd := s.Update("enter", "/tmp/x")
-	if hit != nil || accept || cancel || cmd != nil {
-		t.Errorf("enter while running: want all-zero, got (%v,%v,%v,%v)",
-			hit, accept, cancel, cmd)
+	if res := s.Update("enter"); res.Accept || res.Cancel || res.Selected != "" || res.Cmd != nil {
+		t.Errorf("enter while running: want zero result, got %+v", res)
 	}
 }
 
-func TestSearchEnterWithHitsOpensSelection(t *testing.T) {
+func TestSearchEnterResolvesHitToPageName(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
-	s := NewSearchView(loadFixture(t), 80, 24)
+	idx := loadFixture(t)
+	s := NewSearchView(idx, 80, 24)
 	s.SetQuery("Beta")
-	s.hits = []search.Hit{
-		{FilePath: "/p/Alpha.md", Line: 3, Context: "links to Beta"},
-		{FilePath: "/p/Hub.md", Line: 5, Context: "Beta sometimes"},
-	}
-	s.sel = 1
 
-	hit, accept, cancel, cmd := s.Update("enter", "/tmp/x")
-	if !accept || cancel || cmd != nil {
-		t.Errorf("enter with hits: want accept, got accept=%v cancel=%v cmd=%v",
-			accept, cancel, cmd)
+	// A hit whose path IS in the index resolves to that page's name.
+	want := idx.Pages[0]
+	s.hits = []search.Hit{{FilePath: want.Path, Line: 1, Context: "x"}}
+	s.sel = 0
+	res := s.Update("enter")
+	if !res.Accept || res.Cancel {
+		t.Errorf("enter with indexed hit: want Accept, got %+v", res)
 	}
-	if hit == nil || hit.FilePath != "/p/Hub.md" || hit.Line != 5 {
-		t.Errorf("returned hit: want Hub.md:5, got %+v", hit)
+	if res.Selected != want.Name {
+		t.Errorf("resolved page: want %q, got %q", want.Name, res.Selected)
+	}
+
+	// A hit whose path is NOT in the index accepts but selects nothing.
+	s.hits = []search.Hit{{FilePath: "/totally/unknown/file.md", Line: 1, Context: "x"}}
+	s.sel = 0
+	res = s.Update("enter")
+	if !res.Accept {
+		t.Errorf("enter with unknown hit: want Accept, got %+v", res)
+	}
+	if res.Selected != "" {
+		t.Errorf("unknown hit should resolve to empty page, got %q", res.Selected)
 	}
 }
 
@@ -209,10 +212,9 @@ func TestSearchEscCancels(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
 	s := NewSearchView(loadFixture(t), 80, 24)
-	hit, accept, cancel, cmd := s.Update("esc", "/tmp/x")
-	if hit != nil || accept || !cancel || cmd != nil {
-		t.Errorf("esc: want cancel only, got (%v,%v,%v,%v)",
-			hit, accept, cancel, cmd)
+	res := s.Update("esc")
+	if !res.Cancel || res.Accept || res.Cmd != nil {
+		t.Errorf("esc: want Cancel only, got %+v", res)
 	}
 }
 

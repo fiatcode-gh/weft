@@ -69,26 +69,29 @@ func (s *SearchView) Apply(msg searchDoneMsg) {
 	}
 }
 
-// Update handles a key. Returns (selected hit, accept, cancel, cmd to run).
-func (s *SearchView) Update(key string, graphPath string) (hit *search.Hit, accept, cancel bool, cmd tea.Cmd) {
+// pageName returns the logical page name for a hit's file path, or "" when the
+// file isn't in the index (e.g. a result outside pages/ and journals/).
+func (s *SearchView) pageName(filePath string) string {
+	return s.pathToName[filePath]
+}
+
+// Update handles a key and reports the result to the App.
+func (s *SearchView) Update(key string) OverlayResult {
 	switch key {
 	case keyEsc:
-		return nil, false, true, nil
+		return OverlayResult{Cancel: true}
 	case keyEnter:
-		if s.running {
-			return nil, false, false, nil
-		}
-		if s.query == "" {
-			return nil, false, false, nil
+		if s.running || s.query == "" {
+			return OverlayResult{}
 		}
 		if len(s.hits) == 0 {
 			s.running = true
-			return nil, false, false, s.SearchCmd(graphPath)
+			return OverlayResult{Cmd: s.SearchCmd(s.idx.GraphPath)}
 		}
 		if s.sel >= 0 && s.sel < len(s.hits) {
-			h := s.hits[s.sel]
-			return &h, true, false, nil
+			return OverlayResult{Selected: s.pageName(s.hits[s.sel].FilePath), Accept: true}
 		}
+		return OverlayResult{}
 	case keyUp, keyCtrlK:
 		s.moveUp()
 	case keyDown, keyCtrlJ:
@@ -99,8 +102,6 @@ func (s *SearchView) Update(key string, graphPath string) (hit *search.Hit, acce
 			s.hits = nil
 		}
 	case " ", keySpace:
-		// Both forms covered in case bubbletea reports the space key as
-		// the literal " " (default in v1) or the named "space" elsewhere.
 		s.query += " "
 		s.hits = nil
 	default:
@@ -109,7 +110,7 @@ func (s *SearchView) Update(key string, graphPath string) (hit *search.Hit, acce
 			s.hits = nil
 		}
 	}
-	return nil, false, false, nil
+	return OverlayResult{}
 }
 
 var (

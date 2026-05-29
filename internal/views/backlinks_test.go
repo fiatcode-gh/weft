@@ -108,12 +108,12 @@ func TestBacklinksEnterReturnsFromPage(t *testing.T) {
 		t.Skip("no Hub backlinks in fixture — skipping enter test")
 	}
 	b.sel = 0
-	sel, accept, cancel := b.Update("enter")
-	if !accept || cancel {
-		t.Errorf("enter: want accept=true cancel=false, got %v/%v", accept, cancel)
+	res := b.Update("enter")
+	if !res.Accept || res.Cancel {
+		t.Errorf("enter: want accept=true cancel=false, got %v/%v", res.Accept, res.Cancel)
 	}
-	if sel != b.refs[0].FromPage {
-		t.Errorf("returned page: want %q, got %q", b.refs[0].FromPage, sel)
+	if res.Selected != b.refs[0].FromPage {
+		t.Errorf("returned page: want %q, got %q", b.refs[0].FromPage, res.Selected)
 	}
 }
 
@@ -122,9 +122,9 @@ func TestBacklinksEscAndBCancel(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	b := NewBacklinks(loadFixture(t), "Hub", 80, 30)
 	for _, k := range []string{"esc", "b"} {
-		sel, accept, cancel := b.Update(k)
-		if sel != "" || accept || !cancel {
-			t.Errorf("%s: want cancel only, got (%q,%v,%v)", k, sel, accept, cancel)
+		res := b.Update(k)
+		if res.Selected != "" || res.Accept || !res.Cancel {
+			t.Errorf("%s: want cancel only, got (%q,%v,%v)", k, res.Selected, res.Accept, res.Cancel)
 		}
 	}
 }
@@ -136,10 +136,10 @@ func TestBacklinksNoRefsEnterNoop(t *testing.T) {
 	if len(b.refs) != 0 {
 		t.Fatalf("Orphan should have 0 backlinks, got %d", len(b.refs))
 	}
-	sel, accept, cancel := b.Update("enter")
-	if sel != "" || accept || cancel {
+	res := b.Update("enter")
+	if res.Selected != "" || res.Accept || res.Cancel {
 		t.Errorf("enter on empty refs: want zero-valued return, got (%q,%v,%v)",
-			sel, accept, cancel)
+			res.Selected, res.Accept, res.Cancel)
 	}
 }
 

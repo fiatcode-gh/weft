@@ -31,20 +31,20 @@ func NewBacklinks(idx *graph.Index, target string, width, height int) *Backlinks
 	return &Backlinks{listBox: listBox{width: width, height: height}, idx: idx, target: target, refs: refs}
 }
 
-func (b *Backlinks) Update(key string) (selected string, accept, cancel bool) {
+func (b *Backlinks) Update(key string) OverlayResult {
 	switch key {
 	case keyEsc, "b":
-		return "", false, true
+		return OverlayResult{Cancel: true}
 	case keyUp, keyK, keyCtrlK:
 		b.moveUp()
 	case keyDown, keyJ, keyCtrlJ:
 		b.moveDown(len(b.refs))
 	case keyEnter:
 		if b.sel >= 0 && b.sel < len(b.refs) {
-			return b.refs[b.sel].FromPage, true, false
+			return OverlayResult{Selected: b.refs[b.sel].FromPage, Accept: true}
 		}
 	}
-	return "", false, false
+	return OverlayResult{}
 }
 
 var blPos = lipgloss.NewStyle().Foreground(colorHighlight)
