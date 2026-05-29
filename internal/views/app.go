@@ -327,10 +327,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.historyForward()
 			case ".":
 				today := a.todayJournalName()
-				if _, ok := a.idx.ByName[today]; ok {
-					a.navigate(today)
-				} else {
+				if _, ok := a.idx.ByName[today]; !ok {
 					a.hint = "no journal for " + today
+				} else if a.page.Page() != today {
+					a.navigate(today)
 				}
 			case "<":
 				if name, ok := a.journalNeighbor(a.page.Page(), -1); ok {

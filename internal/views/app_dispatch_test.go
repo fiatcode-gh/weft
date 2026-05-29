@@ -298,9 +298,13 @@ func TestPeriodIdempotentOnTodayJournal(t *testing.T) {
 	if got := a.page.Page(); got != "2026-05-23" {
 		t.Fatalf("setup: want boot page 2026-05-23, got %q", got)
 	}
+	startHistLen := len(a.hist)
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(".")})
 	if got := a.page.Page(); got != "2026-05-23" {
 		t.Errorf("after . on today: want 2026-05-23, got %q", got)
+	}
+	if got := len(a.hist); got != startHistLen {
+		t.Errorf("after . on today: history grew from %d to %d", startHistLen, got)
 	}
 }
 
