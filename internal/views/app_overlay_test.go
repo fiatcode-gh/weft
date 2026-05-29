@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"git.fiatcode.dev/fiatcode/peekseq/internal/search"
 )
 
 func TestAppOpensAndCancelsPicker(t *testing.T) {
@@ -110,7 +112,7 @@ func TestAppSearchDoneMsgRouting(t *testing.T) {
 	if a.search == nil {
 		t.Fatalf("setup: search not open")
 	}
-	a.Update(searchDoneMsg{hits: []SearchHit{
+	a.Update(searchDoneMsg{hits: []search.Hit{
 		{FilePath: "/x", Line: 1, Context: "hello"},
 	}})
 	if len(a.search.hits) != 1 {

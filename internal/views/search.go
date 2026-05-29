@@ -1,41 +1,21 @@
 package views
 
 import (
-	"bufio"
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
+	"git.fiatcode.dev/fiatcode/peekseq/internal/search"
 )
-
-// SearchHit is one rg result row.
-type SearchHit struct {
-	FilePath string
-	Line     int
-	Context  string
-	// Matches are byte offsets within Context that the query matched, so the
-	// view can emphasise them in the rendered list.
-	Matches []SearchSpan
-}
-
-// SearchSpan is a [Start, End) byte range inside SearchHit.Context.
-type SearchSpan struct {
-	Start, End int
-}
 
 type SearchView struct {
 	listBox
 	idx        *graph.Index
 	query      string
-	hits       []SearchHit
+	hits       []search.Hit
 	running    bool
 	err        error
 	pathToName map[string]string // file path → logical page name, for tidy row prefixes
@@ -67,16 +47,16 @@ func (s *SearchView) SetQuery(q string) { s.query = q }
 func (s *SearchView) SearchCmd(graphPath string) tea.Cmd {
 	q := s.query
 	return func() tea.Msg {
-		out, err := runRipgrep(graphPath, q)
+		hits, err := search.Run(graphPath, q)
 		if err != nil {
 			return searchDoneMsg{err: err}
 		}
-		return searchDoneMsg{hits: parseRipgrepJSON(out)}
+		return searchDoneMsg{hits: hits}
 	}
 }
 
 type searchDoneMsg struct {
-	hits []SearchHit
+	hits []search.Hit
 	err  error
 }
 
@@ -90,7 +70,7 @@ func (s *SearchView) Apply(msg searchDoneMsg) {
 }
 
 // Update handles a key. Returns (selected hit, accept, cancel, cmd to run).
-func (s *SearchView) Update(key string, graphPath string) (hit *SearchHit, accept, cancel bool, cmd tea.Cmd) {
+func (s *SearchView) Update(key string, graphPath string) (hit *search.Hit, accept, cancel bool, cmd tea.Cmd) {
 	switch key {
 	case keyEsc:
 		return nil, false, true, nil
@@ -139,7 +119,7 @@ var (
 
 // matchesWithin returns the subset of h.Matches that still fits inside the
 // first ctxBytes bytes of the (possibly truncated) context.
-func (s *SearchView) matchesWithin(h SearchHit, ctxBytes int) []SearchSpan {
+func (s *SearchView) matchesWithin(h search.Hit, ctxBytes int) []search.Span {
 	if len(h.Matches) == 0 {
 		return nil
 	}
@@ -155,14 +135,14 @@ func (s *SearchView) matchesWithin(h SearchHit, ctxBytes int) []SearchSpan {
 		if m.Start >= end {
 			continue
 		}
-		out = append(out, SearchSpan{Start: m.Start, End: end})
+		out = append(out, search.Span{Start: m.Start, End: end})
 	}
 	return out
 }
 
 // highlightMatches emphasises each [Start,End) span of ctx with searchMatch.
 // Overlapping or out-of-range spans are skipped defensively.
-func highlightMatches(ctx string, spans []SearchSpan) string {
+func highlightMatches(ctx string, spans []search.Span) string {
 	if len(spans) == 0 {
 		return ctx
 	}
@@ -269,90 +249,4 @@ func shortPath(p string) string {
 		return p
 	}
 	return strings.Join(parts[len(parts)-2:], "/")
-}
-
-func runRipgrep(graphPath, query string) ([]byte, error) {
-	// --smart-case keeps the search case-insensitive unless the pattern
-	// contains an uppercase letter, which matches what most interactive
-	// users expect from a quick search.
-	args := []string{"--json", "--smart-case", "--", query}
-	baseArgs := len(args)
-	for _, sub := range []string{"pages", "journals"} {
-		p := filepath.Join(graphPath, sub)
-		if _, err := os.Stat(p); err == nil {
-			args = append(args, p)
-		}
-	}
-	if len(args) == baseArgs {
-		// No pages/ or journals/ dir — nothing to search.
-		return nil, nil
-	}
-	cmd := exec.Command("rg", args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-		return stdout.Bytes(), nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("rg failed: %w (%s)", err, stderr.String())
-	}
-	return stdout.Bytes(), nil
-}
-
-func parseRipgrepJSON(b []byte) []SearchHit {
-	var out []SearchHit
-	sc := bufio.NewScanner(bytes.NewReader(b))
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for sc.Scan() {
-		var env struct {
-			Type string `json:"type"`
-			Data struct {
-				Path       struct{ Text string } `json:"path"`
-				Lines      struct{ Text string } `json:"lines"`
-				LineNumber int                   `json:"line_number"`
-				Submatches []struct {
-					Start int `json:"start"`
-					End   int `json:"end"`
-				} `json:"submatches"`
-			} `json:"data"`
-		}
-		if err := json.Unmarshal(sc.Bytes(), &env); err != nil {
-			continue
-		}
-		if env.Type != "match" {
-			continue
-		}
-		ctx := strings.TrimRight(env.Data.Lines.Text, "\n")
-		// Strip leading whitespace from indented bullets so list rows line
-		// up. Match spans are byte offsets into the *original* line, so we
-		// also shift them by the number of bytes we trimmed.
-		trimmed := strings.TrimLeft(ctx, " \t")
-		shift := len(ctx) - len(trimmed)
-		ctx = trimmed
-		ctxLen := len(ctx)
-		spans := make([]SearchSpan, 0, len(env.Data.Submatches))
-		for _, sm := range env.Data.Submatches {
-			start := sm.Start - shift
-			end := sm.End - shift
-			if end <= 0 || start >= ctxLen || start >= end {
-				continue // span fell entirely inside the trimmed indent, or is degenerate
-			}
-			if start < 0 {
-				start = 0
-			}
-			if end > ctxLen {
-				end = ctxLen
-			}
-			spans = append(spans, SearchSpan{Start: start, End: end})
-		}
-		out = append(out, SearchHit{
-			FilePath: env.Data.Path.Text,
-			Line:     env.Data.LineNumber,
-			Context:  ctx,
-			Matches:  spans,
-		})
-	}
-	return out
 }
