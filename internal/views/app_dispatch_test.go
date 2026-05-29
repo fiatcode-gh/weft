@@ -292,6 +292,38 @@ func TestHintClearsOnNextKey(t *testing.T) {
 	}
 }
 
+func TestHintExpiresOnTick(t *testing.T) {
+	a := bootAppAt(t, time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC))
+	a.navigate("Alpha")
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(".")})
+	if a.hint == "" {
+		t.Fatal("setup: expected . to set a hint")
+	}
+	gen := a.hintGen
+	a.Update(hintExpireMsg{gen: gen})
+	if a.hint != "" {
+		t.Errorf("hint should clear after matching tick; got %q", a.hint)
+	}
+}
+
+func TestStaleHintTickIgnored(t *testing.T) {
+	a := bootAppAt(t, time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC))
+	a.navigate("Alpha")
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(".")})
+	staleGen := a.hintGen
+	// Second . clears the hint via the top-of-KeyMsg sweep, then re-sets it
+	// with a fresh generation. The tick scheduled by the first . is now stale.
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(".")})
+	if a.hint == "" {
+		t.Fatal("setup: expected second . to set a new hint")
+	}
+	current := a.hint
+	a.Update(hintExpireMsg{gen: staleGen})
+	if a.hint != current {
+		t.Errorf("stale tick should not clear current hint; want %q, got %q", current, a.hint)
+	}
+}
+
 func TestPeriodIdempotentOnTodayJournal(t *testing.T) {
 	a := bootAppAt(t, time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC))
 	// Boot already lands on today's journal.

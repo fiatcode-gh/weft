@@ -36,6 +36,14 @@ type indexLoadedMsg struct {
 	err error
 }
 
+// hintTTL is how long a status-bar hint stays before fading on its own.
+const hintTTL = 3 * time.Second
+
+// hintExpireMsg is delivered by the timer started in setHint. The handler
+// ignores it when gen doesn't match the current hintGen — i.e. when a newer
+// hint or keystroke has superseded the one that scheduled this tick.
+type hintExpireMsg struct{ gen int }
+
 type App struct {
 	graphPath string
 
@@ -57,10 +65,12 @@ type App struct {
 	// time.Now; tests inject a fixed clock.
 	nowFunc func() time.Time
 
-	// hint is a single-cycle right-side status replacement. Set by handlers
-	// that need to surface a transient message (e.g. "no journal for ..."),
-	// cleared at the top of the next tea.KeyMsg.
-	hint string
+	// hint is a transient right-side status replacement. Set via setHint
+	// (which schedules a hintTTL tick) and cleared either at the top of the
+	// next tea.KeyMsg or by a matching hintExpireMsg. hintGen is bumped each
+	// time a hint is set so stale ticks ignore themselves.
+	hint    string
+	hintGen int
 
 	// Browser-style page history. hist[histIdx] is the entry currently on
 	// screen. histIdx == -1 before the first page is shown.
@@ -92,6 +102,17 @@ func New(graphPath, version string) *App {
 }
 
 func (a *App) todayJournalName() string { return a.nowFunc().Format("2006-01-02") }
+
+// setHint stores s as the active status-bar hint, bumps hintGen, and returns
+// a tea.Cmd that delivers a hintExpireMsg after hintTTL. The handler clears
+// the hint only when the message's gen still matches hintGen — keystrokes or
+// follow-up hints between now and the tick make the message a no-op.
+func (a *App) setHint(s string) tea.Cmd {
+	a.hint = s
+	a.hintGen++
+	gen := a.hintGen
+	return tea.Tick(hintTTL, func(time.Time) tea.Msg { return hintExpireMsg{gen: gen} })
+}
 
 func (a *App) Init() tea.Cmd { return a.buildIndexCmd() }
 
@@ -196,6 +217,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case searchDoneMsg:
 		if a.search != nil {
 			a.search.Apply(m)
+		}
+		return a, nil
+	case hintExpireMsg:
+		if m.gen == a.hintGen {
+			a.hint = ""
 		}
 		return a, nil
 	case tea.WindowSizeMsg:
@@ -328,7 +354,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case ".":
 				today := a.todayJournalName()
 				if _, ok := a.idx.ByName[today]; !ok {
-					a.hint = "no journal for " + today
+					return a, a.setHint("no journal for " + today)
 				} else if a.page.Page() != today {
 					a.navigate(today)
 				}
@@ -336,13 +362,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if name, ok := a.journalNeighbor(a.page.Page(), -1); ok {
 					a.navigate(name)
 				} else if cur, exists := a.idx.ByName[a.page.Page()]; exists && cur.IsJournal {
-					a.hint = "no earlier journal"
+					return a, a.setHint("no earlier journal")
 				}
 			case ">":
 				if name, ok := a.journalNeighbor(a.page.Page(), +1); ok {
 					a.navigate(name)
 				} else if cur, exists := a.idx.ByName[a.page.Page()]; exists && cur.IsJournal {
-					a.hint = "no later journal"
+					return a, a.setHint("no later journal")
 				}
 			case "g":
 				a.page.GotoTop()
