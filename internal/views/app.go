@@ -180,17 +180,31 @@ func (a *App) historyForward() {
 	a.page.Restore(target.offset, target.cursor)
 }
 
-// journalNeighbor returns the journal name adjacent to current in
-// a.idx.Journals (dir=-1 prev, dir=+1 next) and ok=true. Returns
-// ("", false) when current isn't in the sorted journal list or when
-// the neighbour would be off the ends.
+// journalNeighbor returns the closest existing journal in a.idx.Journals in
+// direction dir (-1 prev, +1 next) given that current is a journal-shaped
+// name (YYYY-MM-DD).
+//
+// When current is in idx.Journals the neighbour is the immediate sibling.
+// When current is journal-shaped but absent (e.g. phantom-today: peekseq
+// opens on today's date but the file isn't on disk yet), the insertion
+// point in the sorted slice is used — dir=-1 returns the closest earlier
+// existing journal, dir=+1 the closest later one. Returns ok=false when
+// current isn't a journal-shaped name or when the chosen direction would
+// fall off the ends of the list.
 func (a *App) journalNeighbor(current string, dir int) (string, bool) {
-	js := a.idx.Journals
-	i := sort.SearchStrings(js, current)
-	if i == len(js) || js[i] != current {
+	if !graph.IsJournalPageName(current) {
 		return "", false
 	}
-	j := i + dir
+	js := a.idx.Journals
+	i := sort.SearchStrings(js, current)
+	var j int
+	if i < len(js) && js[i] == current {
+		j = i + dir
+	} else if dir < 0 {
+		j = i - 1
+	} else {
+		j = i
+	}
 	if j < 0 || j >= len(js) {
 		return "", false
 	}
@@ -359,15 +373,17 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.navigate(today)
 				}
 			case "<":
-				if name, ok := a.journalNeighbor(a.page.Page(), -1); ok {
+				page := a.page.Page()
+				if name, ok := a.journalNeighbor(page, -1); ok {
 					a.navigate(name)
-				} else if cur, exists := a.idx.ByName[a.page.Page()]; exists && cur.IsJournal {
+				} else if graph.IsJournalPageName(page) {
 					return a, a.setHint("no earlier journal")
 				}
 			case ">":
-				if name, ok := a.journalNeighbor(a.page.Page(), +1); ok {
+				page := a.page.Page()
+				if name, ok := a.journalNeighbor(page, +1); ok {
 					a.navigate(name)
-				} else if cur, exists := a.idx.ByName[a.page.Page()]; exists && cur.IsJournal {
+				} else if graph.IsJournalPageName(page) {
 					return a, a.setHint("no later journal")
 				}
 			case "g":

@@ -402,6 +402,40 @@ func TestNextJournalAtNewestShowsHint(t *testing.T) {
 	}
 }
 
+func TestPrevJournalFromPhantomToday(t *testing.T) {
+	// 2026-06-15 has no fixture journal; it's phantom-today. < should walk
+	// to the newest existing fixture journal (2026-05-25).
+	a := bootAppAt(t, time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC))
+	if got := a.page.Page(); got != "2026-06-15" {
+		t.Fatalf("setup: want boot page 2026-06-15, got %q", got)
+	}
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
+	if got := a.page.Page(); got != "2026-05-25" {
+		t.Errorf("after < from phantom today: want 2026-05-25, got %q", got)
+	}
+	if a.hint != "" {
+		t.Errorf("hint should be empty on successful walk, got %q", a.hint)
+	}
+}
+
+func TestNextJournalFromPhantomTodayShowsHint(t *testing.T) {
+	// 2026-06-15 is phantom-today; no fixture journal is later. > should
+	// surface "no later journal" without navigating.
+	a := bootAppAt(t, time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC))
+	startPage := a.page.Page()
+	startHistLen := len(a.hist)
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(">")})
+	if got := a.page.Page(); got != startPage {
+		t.Errorf("> from phantom today (no later): page changed from %q to %q", startPage, got)
+	}
+	if got := len(a.hist); got != startHistLen {
+		t.Errorf("> from phantom today: history grew from %d to %d", startHistLen, got)
+	}
+	if a.hint != "no later journal" {
+		t.Errorf("hint: want %q, got %q", "no later journal", a.hint)
+	}
+}
+
 func TestPrevNextInertOutsideJournalContext(t *testing.T) {
 	a := bootAppAt(t, time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC))
 	a.navigate("Alpha")
