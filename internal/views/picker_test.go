@@ -107,12 +107,12 @@ func TestPickerEnterReturnsSelected(t *testing.T) {
 		t.Fatal("setup: no matches")
 	}
 	want := p.matches[0].Str
-	sel, accept, cancel := p.Update("enter")
-	if !accept || cancel {
-		t.Errorf("enter: want accept=true cancel=false, got %v/%v", accept, cancel)
+	res := p.Update("enter")
+	if !res.Accept || res.Cancel {
+		t.Errorf("enter: want accept=true cancel=false, got %v/%v", res.Accept, res.Cancel)
 	}
-	if sel != want {
-		t.Errorf("returned name: want %q, got %q", want, sel)
+	if res.Selected != want {
+		t.Errorf("returned name: want %q, got %q", want, res.Selected)
 	}
 }
 
@@ -126,9 +126,9 @@ func TestPickerEnterEmptyNoop(t *testing.T) {
 	if len(p.matches) != 0 {
 		t.Fatalf("setup: query should yield no matches, got %d", len(p.matches))
 	}
-	sel, accept, cancel := p.Update("enter")
-	if sel != "" || accept || cancel {
-		t.Errorf("enter with no matches: want zeros, got (%q,%v,%v)", sel, accept, cancel)
+	res := p.Update("enter")
+	if res.Selected != "" || res.Accept || res.Cancel {
+		t.Errorf("enter with no matches: want zeros, got (%q,%v,%v)", res.Selected, res.Accept, res.Cancel)
 	}
 }
 
@@ -136,26 +136,26 @@ func TestPickerEscCancels(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
 	p := NewPicker(loadFixture(t), 80, 30)
-	sel, accept, cancel := p.Update("esc")
-	if sel != "" || accept || !cancel {
-		t.Errorf("esc: want cancel only, got (%q,%v,%v)", sel, accept, cancel)
+	res := p.Update("esc")
+	if res.Selected != "" || res.Accept || !res.Cancel {
+		t.Errorf("esc: want cancel only, got (%q,%v,%v)", res.Selected, res.Accept, res.Cancel)
 	}
 }
 
 func TestPickerScrollWindowAllFit(t *testing.T) {
-	p := &Picker{height: 24}
+	p := &Picker{listBox: listBox{height: 24}}
 	p.matches = make([]fuzzy.Match, 5)
-	start, end := p.scrollWindow()
+	start, end := scrollWindow(p.sel, len(p.matches), p.visibleRows())
 	if start != 0 || end != 5 {
 		t.Errorf("all-fit: want [0,5), got [%d,%d)", start, end)
 	}
 }
 
 func TestPickerScrollWindowAtBottom(t *testing.T) {
-	p := &Picker{height: 16}
+	p := &Picker{listBox: listBox{height: 16}}
 	p.matches = make([]fuzzy.Match, 20)
 	p.sel = 19
-	start, end := p.scrollWindow()
+	start, end := scrollWindow(p.sel, len(p.matches), p.visibleRows())
 	if end != 20 || (end-start) != p.visibleRows() {
 		t.Errorf("at bottom: want end=20 window=%d, got [%d,%d)",
 			p.visibleRows(), start, end)
@@ -166,10 +166,10 @@ func TestPickerScrollWindowAtBottom(t *testing.T) {
 }
 
 func TestPickerScrollWindowMiddle(t *testing.T) {
-	p := &Picker{height: 24}
+	p := &Picker{listBox: listBox{height: 24}}
 	p.matches = make([]fuzzy.Match, 30)
 	p.sel = 15
-	start, end := p.scrollWindow()
+	start, end := scrollWindow(p.sel, len(p.matches), p.visibleRows())
 	if p.sel < start || p.sel >= end {
 		t.Errorf("sel %d should be in window [%d,%d)", p.sel, start, end)
 	}
@@ -215,7 +215,7 @@ func TestOverlayFootersFitNarrowWidth(t *testing.T) {
 }
 
 func TestPickerSetSize(t *testing.T) {
-	p := &Picker{width: 80, height: 24}
+	p := &Picker{listBox: listBox{width: 80, height: 24}}
 	p.SetSize(100, 30)
 	if p.width != 100 || p.height != 30 {
 		t.Errorf("SetSize: want 100x30, got %dx%d", p.width, p.height)

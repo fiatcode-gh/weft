@@ -8,38 +8,14 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/exp/teatest"
+
+	"git.fiatcode.dev/fiatcode/peekseq/internal/search"
 )
 
 func skipIfNoRipgrep(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("rg"); err != nil {
 		t.Skip("rg not on PATH; install ripgrep to run search tests")
-	}
-}
-
-func TestParseRipgrepJSON(t *testing.T) {
-	// Two match lines + non-match types interleaved, with one match
-	// carrying a real submatch span so we know it's parsed.
-	in := `{"type":"begin","data":{"path":{"text":"/g/pages/Alpha.md"}}}
-{"type":"match","data":{"path":{"text":"/g/pages/Alpha.md"},"lines":{"text":"links to Beta\n"},"line_number":3,"absolute_offset":42,"submatches":[{"match":{"text":"Beta"},"start":9,"end":13}]}}
-{"type":"match","data":{"path":{"text":"/g/journals/2026_05_24.md"},"lines":{"text":"references Alpha\n"},"line_number":1,"absolute_offset":0,"submatches":[]}}
-{"type":"end","data":{"path":{"text":"/g/pages/Alpha.md"}}}
-`
-	hits := parseRipgrepJSON([]byte(in))
-	if len(hits) != 2 {
-		t.Fatalf("want 2 hits, got %d: %+v", len(hits), hits)
-	}
-	if hits[0].Line != 3 || hits[0].Context != "links to Beta" {
-		t.Errorf("hit[0]: %+v", hits[0])
-	}
-	if len(hits[0].Matches) != 1 || hits[0].Matches[0].Start != 9 || hits[0].Matches[0].End != 13 {
-		t.Errorf("hit[0].Matches: want [{9 13}], got %+v", hits[0].Matches)
-	}
-	if hits[1].FilePath != "/g/journals/2026_05_24.md" {
-		t.Errorf("hit[1]: %+v", hits[1])
-	}
-	if len(hits[1].Matches) != 0 {
-		t.Errorf("hit[1].Matches: want 0, got %d", len(hits[1].Matches))
 	}
 }
 
@@ -81,10 +57,8 @@ func TestSearchUpdateTypesIntoQuery(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	s := NewSearchView(loadFixture(t), 80, 24)
 	for _, k := range []string{"a", "l", "p"} {
-		hit, accept, cancel, cmd := s.Update(k, "/tmp/x")
-		if hit != nil || accept || cancel || cmd != nil {
-			t.Errorf("typing %q: want (nil,false,false,nil), got (%v,%v,%v,%v)",
-				k, hit, accept, cancel, cmd)
+		if res := s.Update(k); res.Accept || res.Cancel || res.Selected != "" || res.Cmd != nil {
+			t.Errorf("typing %q: want zero result, got %+v", k, res)
 		}
 	}
 	if s.query != "alp" {
@@ -97,9 +71,9 @@ func TestSearchUpdateBackspace(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.SetQuery("abc")
-	s.hits = []SearchHit{{FilePath: "x", Line: 1, Context: "y"}}
+	s.hits = []search.Hit{{FilePath: "x", Line: 1, Context: "y"}}
 
-	s.Update("backspace", "/tmp/x")
+	s.Update("backspace")
 	if s.query != "ab" {
 		t.Errorf("after first backspace: want \"ab\", got %q", s.query)
 	}
@@ -107,9 +81,9 @@ func TestSearchUpdateBackspace(t *testing.T) {
 		t.Errorf("after backspace: hits must clear, got %+v", s.hits)
 	}
 
-	s.Update("backspace", "/tmp/x")
-	s.Update("backspace", "/tmp/x")
-	s.Update("backspace", "/tmp/x")
+	s.Update("backspace")
+	s.Update("backspace")
+	s.Update("backspace")
 	if s.query != "" {
 		t.Errorf("after draining: want \"\", got %q", s.query)
 	}
@@ -121,12 +95,12 @@ func TestSearchUpdateSpaceVariants(t *testing.T) {
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.SetQuery("foo")
 
-	s.Update(" ", "/tmp/x")
+	s.Update(" ")
 	if s.query != "foo " {
 		t.Errorf("after literal space: want \"foo \", got %q", s.query)
 	}
 
-	s.Update("space", "/tmp/x")
+	s.Update("space")
 	if s.query != "foo  " {
 		t.Errorf("after named space: want \"foo  \", got %q", s.query)
 	}
@@ -136,29 +110,29 @@ func TestSearchSelectionBounds(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
 	s := NewSearchView(loadFixture(t), 80, 24)
-	s.hits = []SearchHit{
+	s.hits = []search.Hit{
 		{FilePath: "a", Line: 1, Context: "x"},
 		{FilePath: "b", Line: 2, Context: "y"},
 		{FilePath: "c", Line: 3, Context: "z"},
 	}
 
-	s.Update("up", "/tmp/x")
+	s.Update("up")
 	if s.sel != 0 {
 		t.Errorf("up at top: want sel 0, got %d", s.sel)
 	}
-	s.Update("down", "/tmp/x")
+	s.Update("down")
 	if s.sel != 1 {
 		t.Errorf("after down: want sel 1, got %d", s.sel)
 	}
-	s.Update("ctrl+j", "/tmp/x")
+	s.Update("ctrl+j")
 	if s.sel != 2 {
 		t.Errorf("after ctrl+j: want sel 2, got %d", s.sel)
 	}
-	s.Update("down", "/tmp/x")
+	s.Update("down")
 	if s.sel != 2 {
 		t.Errorf("down at bottom: want sel 2, got %d", s.sel)
 	}
-	s.Update("ctrl+k", "/tmp/x")
+	s.Update("ctrl+k")
 	if s.sel != 1 {
 		t.Errorf("after ctrl+k: want sel 1, got %d", s.sel)
 	}
@@ -168,10 +142,8 @@ func TestSearchEnterEmptyQueryNoop(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
 	s := NewSearchView(loadFixture(t), 80, 24)
-	hit, accept, cancel, cmd := s.Update("enter", "/tmp/x")
-	if hit != nil || accept || cancel || cmd != nil {
-		t.Errorf("enter on empty query: want all-zero, got (%v,%v,%v,%v)",
-			hit, accept, cancel, cmd)
+	if res := s.Update("enter"); res.Accept || res.Cancel || res.Selected != "" || res.Cmd != nil {
+		t.Errorf("enter on empty query: want zero result, got %+v", res)
 	}
 }
 
@@ -181,13 +153,12 @@ func TestSearchEnterFirstTimeRunsCmd(t *testing.T) {
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.SetQuery("Beta")
 
-	hit, accept, cancel, cmd := s.Update("enter", "/tmp/x")
-	if hit != nil || accept || cancel {
-		t.Errorf("enter to launch: want non-accept non-cancel nil hit, got (%v,%v,%v)",
-			hit, accept, cancel)
+	res := s.Update("enter")
+	if res.Accept || res.Cancel || res.Selected != "" {
+		t.Errorf("enter to launch: want a Cmd only, got %+v", res)
 	}
-	if cmd == nil {
-		t.Errorf("enter to launch: want non-nil cmd, got nil")
+	if res.Cmd == nil {
+		t.Errorf("enter to launch: want non-nil Cmd, got nil")
 	}
 	if !s.running {
 		t.Errorf("enter to launch: running flag should be set")
@@ -201,31 +172,39 @@ func TestSearchEnterWhileRunningIsNoop(t *testing.T) {
 	s.SetQuery("Beta")
 	s.running = true
 
-	hit, accept, cancel, cmd := s.Update("enter", "/tmp/x")
-	if hit != nil || accept || cancel || cmd != nil {
-		t.Errorf("enter while running: want all-zero, got (%v,%v,%v,%v)",
-			hit, accept, cancel, cmd)
+	if res := s.Update("enter"); res.Accept || res.Cancel || res.Selected != "" || res.Cmd != nil {
+		t.Errorf("enter while running: want zero result, got %+v", res)
 	}
 }
 
-func TestSearchEnterWithHitsOpensSelection(t *testing.T) {
+func TestSearchEnterResolvesHitToPageName(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
-	s := NewSearchView(loadFixture(t), 80, 24)
+	idx := loadFixture(t)
+	s := NewSearchView(idx, 80, 24)
 	s.SetQuery("Beta")
-	s.hits = []SearchHit{
-		{FilePath: "/p/Alpha.md", Line: 3, Context: "links to Beta"},
-		{FilePath: "/p/Hub.md", Line: 5, Context: "Beta sometimes"},
-	}
-	s.sel = 1
 
-	hit, accept, cancel, cmd := s.Update("enter", "/tmp/x")
-	if !accept || cancel || cmd != nil {
-		t.Errorf("enter with hits: want accept, got accept=%v cancel=%v cmd=%v",
-			accept, cancel, cmd)
+	// A hit whose path IS in the index resolves to that page's name.
+	want := idx.Pages[0]
+	s.hits = []search.Hit{{FilePath: want.Path, Line: 1, Context: "x"}}
+	s.sel = 0
+	res := s.Update("enter")
+	if !res.Accept || res.Cancel {
+		t.Errorf("enter with indexed hit: want Accept, got %+v", res)
 	}
-	if hit == nil || hit.FilePath != "/p/Hub.md" || hit.Line != 5 {
-		t.Errorf("returned hit: want Hub.md:5, got %+v", hit)
+	if res.Selected != want.Name {
+		t.Errorf("resolved page: want %q, got %q", want.Name, res.Selected)
+	}
+
+	// A hit whose path is NOT in the index accepts but selects nothing.
+	s.hits = []search.Hit{{FilePath: "/totally/unknown/file.md", Line: 1, Context: "x"}}
+	s.sel = 0
+	res = s.Update("enter")
+	if !res.Accept {
+		t.Errorf("enter with unknown hit: want Accept, got %+v", res)
+	}
+	if res.Selected != "" {
+		t.Errorf("unknown hit should resolve to empty page, got %q", res.Selected)
 	}
 }
 
@@ -233,10 +212,9 @@ func TestSearchEscCancels(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
 	s := NewSearchView(loadFixture(t), 80, 24)
-	hit, accept, cancel, cmd := s.Update("esc", "/tmp/x")
-	if hit != nil || accept || !cancel || cmd != nil {
-		t.Errorf("esc: want cancel only, got (%v,%v,%v,%v)",
-			hit, accept, cancel, cmd)
+	res := s.Update("esc")
+	if !res.Cancel || res.Accept || res.Cmd != nil {
+		t.Errorf("esc: want Cancel only, got %+v", res)
 	}
 }
 
@@ -247,7 +225,7 @@ func TestSearchApplyPopulatesHits(t *testing.T) {
 	s.running = true
 	s.sel = 5
 
-	s.Apply(searchDoneMsg{hits: []SearchHit{
+	s.Apply(searchDoneMsg{hits: []search.Hit{
 		{FilePath: "/p/A.md", Line: 1, Context: "x"},
 		{FilePath: "/p/B.md", Line: 2, Context: "y"},
 	}})
@@ -268,7 +246,7 @@ func TestSearchApplyKeepsValidSel(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.sel = 1
-	s.Apply(searchDoneMsg{hits: []SearchHit{
+	s.Apply(searchDoneMsg{hits: []search.Hit{
 		{FilePath: "/p/A.md", Line: 1}, {FilePath: "/p/B.md", Line: 2},
 		{FilePath: "/p/C.md", Line: 3},
 	}})
@@ -291,55 +269,6 @@ func TestSearchApplyRecordsError(t *testing.T) {
 	}
 }
 
-func TestRunRipgrepFindsHits(t *testing.T) {
-	skipIfNoRipgrep(t)
-	abs, err := filepath.Abs("../../testdata/fixture-graph")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	out, err := runRipgrep(abs, "Beta")
-	if err != nil {
-		t.Fatalf("runRipgrep err: %v", err)
-	}
-	hits := parseRipgrepJSON(out)
-	if len(hits) == 0 {
-		t.Fatalf("expected at least one hit for \"Beta\"")
-	}
-	for _, h := range hits {
-		if !strings.HasPrefix(h.FilePath, abs) {
-			t.Errorf("hit path outside fixture: %s", h.FilePath)
-		}
-	}
-}
-
-func TestRunRipgrepNoMatchReturnsEmpty(t *testing.T) {
-	skipIfNoRipgrep(t)
-	abs, err := filepath.Abs("../../testdata/fixture-graph")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	out, err := runRipgrep(abs, "thisstringshouldnotexistanywhere_xyzzy_1234")
-	if err != nil {
-		t.Fatalf("no-match should not error, got: %v", err)
-	}
-	if hits := parseRipgrepJSON(out); len(hits) != 0 {
-		t.Errorf("no-match: want 0 hits, got %d", len(hits))
-	}
-}
-
-func TestRunRipgrepMissingDirsReturnsNil(t *testing.T) {
-	tmp := t.TempDir()
-	out, err := runRipgrep(tmp, "anything")
-	if err != nil {
-		t.Errorf("missing dirs: want nil err, got %v", err)
-	}
-	if out != nil {
-		t.Errorf("missing dirs: want nil out, got %q", out)
-	}
-}
-
 func TestHitLabelKnownVsUnknown(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
@@ -359,18 +288,18 @@ func TestHitLabelKnownVsUnknown(t *testing.T) {
 
 func TestMatchesWithin(t *testing.T) {
 	s := &SearchView{}
-	h := SearchHit{
+	h := search.Hit{
 		Context: "the quick brown fox",
-		Matches: []SearchSpan{{Start: 4, End: 9}, {Start: 10, End: 15}, {Start: 16, End: 19}},
+		Matches: []search.Span{{Start: 4, End: 9}, {Start: 10, End: 15}, {Start: 16, End: 19}},
 	}
 	cases := []struct {
 		name  string
 		bytes int
-		want  []SearchSpan
+		want  []search.Span
 	}{
-		{"all fit", 100, []SearchSpan{{4, 9}, {10, 15}, {16, 19}}},
-		{"truncates last", 17, []SearchSpan{{4, 9}, {10, 15}, {16, 17}}},
-		{"drops out-of-range", 9, []SearchSpan{{4, 9}}},
+		{"all fit", 100, []search.Span{{Start: 4, End: 9}, {Start: 10, End: 15}, {Start: 16, End: 19}}},
+		{"truncates last", 17, []search.Span{{Start: 4, End: 9}, {Start: 10, End: 15}, {Start: 16, End: 17}}},
+		{"drops out-of-range", 9, []search.Span{{Start: 4, End: 9}}},
 		{"zero budget yields none", 0, nil},
 	}
 	for _, c := range cases {
@@ -390,7 +319,7 @@ func TestMatchesWithin(t *testing.T) {
 
 func TestMatchesWithinEmpty(t *testing.T) {
 	s := &SearchView{}
-	if got := s.matchesWithin(SearchHit{Context: "x"}, 10); got != nil {
+	if got := s.matchesWithin(search.Hit{Context: "x"}, 10); got != nil {
 		t.Errorf("empty Matches: want nil, got %+v", got)
 	}
 }
@@ -402,14 +331,14 @@ func TestHighlightMatches(t *testing.T) {
 	if got := highlightMatches("hello world", nil); got != "hello world" {
 		t.Errorf("no spans: want verbatim, got %q", got)
 	}
-	if got := highlightMatches("hi", []SearchSpan{{Start: 10, End: 12}}); got != "hi" {
+	if got := highlightMatches("hi", []search.Span{{Start: 10, End: 12}}); got != "hi" {
 		t.Errorf("out-of-range span: want \"hi\", got %q", got)
 	}
-	if got := highlightMatches("hi", []SearchSpan{{Start: 1, End: 1}}); got != "hi" {
+	if got := highlightMatches("hi", []search.Span{{Start: 1, End: 1}}); got != "hi" {
 		t.Errorf("degenerate span: want \"hi\", got %q", got)
 	}
 	in := "the quick"
-	got := highlightMatches(in, []SearchSpan{{Start: 4, End: 9}, {Start: 0, End: 3}})
+	got := highlightMatches(in, []search.Span{{Start: 4, End: 9}, {Start: 0, End: 3}})
 	if !strings.Contains(got, "quick") || !strings.HasPrefix(got, "the ") {
 		t.Errorf("expected output containing styled \"quick\" with \"the \" prefix; got %q", got)
 	}
@@ -419,9 +348,9 @@ func TestSearchScrollWindow(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
 	s := NewSearchView(loadFixture(t), 80, 24)
-	s.hits = make([]SearchHit, 20)
+	s.hits = make([]search.Hit, 20)
 	for i := range s.hits {
-		s.hits[i] = SearchHit{FilePath: "/p/X.md", Line: i + 1, Context: "y"}
+		s.hits[i] = search.Hit{FilePath: "/p/X.md", Line: i + 1, Context: "y"}
 	}
 
 	cases := []struct {
@@ -436,7 +365,7 @@ func TestSearchScrollWindow(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			s.sel = c.sel
-			start, end := s.scrollWindow()
+			start, end := scrollWindow(s.sel, len(s.hits), s.visibleRows())
 			if end-start != s.visibleRows() {
 				t.Errorf("window size: want %d, got %d (start=%d end=%d)",
 					s.visibleRows(), end-start, start, end)
@@ -455,28 +384,28 @@ func TestSearchScrollWindowAllFit(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
 	s := NewSearchView(loadFixture(t), 80, 24)
-	s.hits = []SearchHit{{Line: 1}, {Line: 2}, {Line: 3}}
-	start, end := s.scrollWindow()
+	s.hits = []search.Hit{{Line: 1}, {Line: 2}, {Line: 3}}
+	start, end := scrollWindow(s.sel, len(s.hits), s.visibleRows())
 	if start != 0 || end != 3 {
 		t.Errorf("all-fit: want [0,3), got [%d,%d)", start, end)
 	}
 }
 
 func TestSearchInnerWidthClamps(t *testing.T) {
-	s := &SearchView{width: 10}
-	if got := s.innerWidth(); got != searchInnerWidthMin {
-		t.Errorf("narrow term: want min %d, got %d", searchInnerWidthMin, got)
+	s := &SearchView{listBox: listBox{width: 10}}
+	if got := s.innerWidth(); got != listInnerWidthMin {
+		t.Errorf("narrow term: want min %d, got %d", listInnerWidthMin, got)
 	}
 	s.width = 200
-	if got := s.innerWidth(); got != searchInnerWidthMax {
-		t.Errorf("wide term: want max %d, got %d", searchInnerWidthMax, got)
+	if got := s.innerWidth(); got != listInnerWidthMax {
+		t.Errorf("wide term: want max %d, got %d", listInnerWidthMax, got)
 	}
 }
 
 func TestSearchVisibleRowsClamps(t *testing.T) {
-	s := &SearchView{height: 5}
-	if got := s.visibleRows(); got != searchVisibleRowsMin {
-		t.Errorf("tiny term: want min %d, got %d", searchVisibleRowsMin, got)
+	s := &SearchView{listBox: listBox{height: 5}}
+	if got := s.visibleRows(); got != listVisibleRowsMin {
+		t.Errorf("tiny term: want min %d, got %d", listVisibleRowsMin, got)
 	}
 	s.height = 100
 	if got := s.visibleRows(); got != searchVisibleRowsMax {
@@ -496,11 +425,11 @@ func TestSearchViewWithHits(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.SetQuery("Beta")
-	s.hits = []SearchHit{
+	s.hits = []search.Hit{
 		{FilePath: "/abs/pages/Alpha.md", Line: 3, Context: "links to Beta",
-			Matches: []SearchSpan{{Start: 9, End: 13}}},
+			Matches: []search.Span{{Start: 9, End: 13}}},
 		{FilePath: "/abs/pages/Hub.md", Line: 2, Context: "the hub mentions Beta in passing",
-			Matches: []SearchSpan{{Start: 17, End: 21}}},
+			Matches: []search.Span{{Start: 17, End: 21}}},
 	}
 	teatest.RequireEqualOutput(t, []byte(s.View()))
 }

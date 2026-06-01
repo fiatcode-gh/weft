@@ -12,24 +12,6 @@ import (
 	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
 )
 
-var (
-	statusFaint = lipgloss.NewStyle().Faint(true)
-	statusRule  = lipgloss.NewStyle().Faint(true)
-	splashBold  = lipgloss.NewStyle().Bold(true)
-	splashFaint = lipgloss.NewStyle().Faint(true)
-)
-
-type modeT int
-
-const (
-	modePage modeT = iota
-	modePicker
-	modeSearch
-	modeBacklinks
-	modeTodos
-	modeHelp
-)
-
 // indexLoadedMsg carries the result of an asynchronous graph.BuildIndex run.
 type indexLoadedMsg struct {
 	idx *graph.Index
@@ -51,13 +33,10 @@ type App struct {
 	loadErr error
 	page    *PageView
 
-	picker    *Picker
-	search    *SearchView
-	backlinks *Backlinks
-	todos     *Todos
-	help      *Help
+	// active is the overlay layered over the page, or nil when the page has
+	// focus. Set when an open-overlay key is pressed; cleared on Accept/Cancel.
+	active Overlay
 
-	mode   modeT
 	width  int
 	height int
 
@@ -94,7 +73,6 @@ type historyEntry struct {
 func New(graphPath, version string) *App {
 	return &App{
 		graphPath: graphPath,
-		mode:      modePage,
 		histIdx:   -1,
 		version:   version,
 		nowFunc:   time.Now,
@@ -229,8 +207,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 	case searchDoneMsg:
-		if a.search != nil {
-			a.search.Apply(m)
+		if s, ok := a.active.(*SearchView); ok {
+			s.Apply(m)
 		}
 		return a, nil
 	case hintExpireMsg:
@@ -245,23 +223,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			a.tryInitPage()
 		}
-		// Propagate to any active overlay so its scroll-window budget and
-		// inner-width calculations track the new terminal size on resize.
-		// Help is content-sized and doesn't expose a SetSize.
-		if a.picker != nil {
-			a.picker.SetSize(m.Width, m.Height)
-		}
-		if a.search != nil {
-			a.search.SetSize(m.Width, m.Height)
-		}
-		if a.backlinks != nil {
-			a.backlinks.SetSize(m.Width, m.Height)
-		}
-		if a.todos != nil {
-			a.todos.SetSize(m.Width, m.Height)
-		}
-		if a.help != nil {
-			a.help.SetSize(m.Width, m.Height)
+		// Propagate the new size to any open overlay so its scroll-window
+		// budget and inner-width tracking stay correct on resize.
+		if a.active != nil {
+			a.active.SetSize(m.Width, m.Height)
 		}
 		return a, nil
 	case tea.KeyMsg:
@@ -270,7 +235,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// While loading or in an error state, only quit + retry are honoured.
 		if a.page == nil {
 			switch key {
-			case "q", "ctrl+c":
+			case keyQ, "ctrl+c":
 				return a, tea.Quit
 			case "R":
 				if a.loadErr != nil {
@@ -280,138 +245,84 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return a, nil
 		}
-		switch a.mode {
-		case modePicker:
-			sel, accept, cancel := a.picker.Update(key)
-			if cancel {
-				a.mode = modePage
-				a.picker = nil
-				return a, nil
+		// An open overlay swallows all keys until it accepts or cancels.
+		if a.active != nil {
+			res := a.active.Update(key)
+			if res.Cancel {
+				a.active = nil
+				return a, res.Cmd
 			}
-			if accept {
-				a.navigate(sel)
-				a.mode = modePage
-				a.picker = nil
-			}
-			return a, nil
-		case modeSearch:
-			hit, accept, cancel, cmd := a.search.Update(key, a.idx.GraphPath)
-			if cancel {
-				a.mode = modePage
-				a.search = nil
-				return a, nil
-			}
-			if accept && hit != nil {
-				if name := pageNameFromHitPath(a.idx, hit.FilePath); name != "" {
-					a.navigate(name)
+			if res.Accept {
+				if res.Selected != "" {
+					a.navigate(res.Selected)
 				}
-				a.mode = modePage
-				a.search = nil
-				return a, nil
+				a.active = nil
 			}
-			return a, cmd
-		case modeBacklinks:
-			sel, accept, cancel := a.backlinks.Update(key)
-			if cancel {
-				a.mode = modePage
-				a.backlinks = nil
-				return a, nil
+			return a, res.Cmd
+		}
+		switch key {
+		case keyQ, "ctrl+c":
+			return a, tea.Quit
+		case "ctrl+p":
+			a.active = NewPicker(a.idx, a.width, a.height)
+		case "/":
+			a.active = NewSearchView(a.idx, a.width, a.height)
+		case "b":
+			a.active = NewBacklinks(a.idx, a.page.Page(), a.width, a.height)
+		case "T":
+			a.active = NewTodos(a.idx, a.width, a.height)
+		case "?":
+			a.active = NewHelp(a.version, a.width)
+		case "[":
+			a.historyBack()
+		case "]":
+			a.historyForward()
+		case ".":
+			today := a.todayJournalName()
+			if _, ok := a.idx.ByName[today]; !ok {
+				return a, a.setHint("no journal for " + today)
+			} else if a.page.Page() != today {
+				a.navigate(today)
 			}
-			if accept {
-				a.navigate(sel)
-				a.mode = modePage
-				a.backlinks = nil
+		case "<":
+			page := a.page.Page()
+			if name, ok := a.journalNeighbor(page, -1); ok {
+				a.navigate(name)
+			} else if graph.IsJournalPageName(page) {
+				return a, a.setHint("no earlier journal")
 			}
-			return a, nil
-		case modeTodos:
-			page, accept, cancel := a.todos.Update(key)
-			if cancel {
-				a.mode = modePage
-				a.todos = nil
-				return a, nil
+		case ">":
+			page := a.page.Page()
+			if name, ok := a.journalNeighbor(page, +1); ok {
+				a.navigate(name)
+			} else if graph.IsJournalPageName(page) {
+				return a, a.setHint("no later journal")
 			}
-			if accept {
-				a.navigate(page)
-				a.mode = modePage
-				a.todos = nil
+		case "g":
+			a.page.GotoTop()
+		case "G":
+			a.page.GotoBottom()
+		case "R":
+			// Async reindex — the response lands as indexLoadedMsg and
+			// rebuilds PageView for the current page. Errors surface in
+			// loadErr which the splash overlay renders.
+			return a, a.buildIndexCmd()
+		case "n":
+			a.page.CycleLink(+1)
+		case "N":
+			a.page.CycleLink(-1)
+		case keyEnter:
+			if t := a.page.FollowCursor(); t != "" {
+				a.navigate(t)
 			}
-			return a, nil
-		case modeHelp:
-			if a.help.Update(key) {
-				a.mode = modePage
-				a.help = nil
-			}
-			return a, nil
-		case modePage:
-			switch key {
-			case "q", "ctrl+c":
-				return a, tea.Quit
-			case "ctrl+p":
-				a.picker = NewPicker(a.idx, a.width, a.height)
-				a.mode = modePicker
-			case "/":
-				a.search = NewSearchView(a.idx, a.width, a.height)
-				a.mode = modeSearch
-			case "b":
-				a.backlinks = NewBacklinks(a.idx, a.page.Page(), a.width, a.height)
-				a.mode = modeBacklinks
-			case "T":
-				a.todos = NewTodos(a.idx, a.width, a.height)
-				a.mode = modeTodos
-			case "?":
-				a.help = NewHelp(a.version, a.width)
-				a.mode = modeHelp
-			case "[":
-				a.historyBack()
-			case "]":
-				a.historyForward()
-			case ".":
-				today := a.todayJournalName()
-				if _, ok := a.idx.ByName[today]; !ok {
-					return a, a.setHint("no journal for " + today)
-				} else if a.page.Page() != today {
-					a.navigate(today)
-				}
-			case "<":
-				page := a.page.Page()
-				if name, ok := a.journalNeighbor(page, -1); ok {
-					a.navigate(name)
-				} else if graph.IsJournalPageName(page) {
-					return a, a.setHint("no earlier journal")
-				}
-			case ">":
-				page := a.page.Page()
-				if name, ok := a.journalNeighbor(page, +1); ok {
-					a.navigate(name)
-				} else if graph.IsJournalPageName(page) {
-					return a, a.setHint("no later journal")
-				}
-			case "g":
-				a.page.GotoTop()
-			case "G":
-				a.page.GotoBottom()
-			case "R":
-				// Async reindex — the response lands as indexLoadedMsg and
-				// rebuilds PageView for the current page. Errors surface in
-				// loadErr which the splash overlay renders.
-				return a, a.buildIndexCmd()
-			case "n":
-				a.page.CycleLink(+1)
-			case "N":
-				a.page.CycleLink(-1)
-			case "enter":
-				if t := a.page.FollowCursor(); t != "" {
-					a.navigate(t)
-				}
-			case "j", "down":
-				a.page.LineDown()
-			case "k", "up":
-				a.page.LineUp()
-			case "ctrl+d":
-				a.page.HalfPageDown()
-			case "ctrl+u":
-				a.page.HalfPageUp()
-			}
+		case keyJ, keyDown:
+			a.page.LineDown()
+		case keyK, keyUp:
+			a.page.LineUp()
+		case "ctrl+d":
+			a.page.HalfPageDown()
+		case "ctrl+u":
+			a.page.HalfPageUp()
 		}
 	}
 	return a, nil
@@ -419,30 +330,17 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (a *App) View() string {
 	if a.loadErr != nil {
-		return splashBold.Render(fmt.Sprintf("peekseq — failed to index %s", a.graphPath)) +
+		return styleTitle.Render(fmt.Sprintf("peekseq — failed to index %s", a.graphPath)) +
 			"\n\n" + a.loadErr.Error() +
-			"\n\n" + splashFaint.Render("R to retry · q to quit")
+			"\n\n" + styleFaint.Render("R to retry · q to quit")
 	}
 	if a.page == nil {
-		return splashBold.Render("peekseq") +
-			"\n\n" + splashFaint.Render(fmt.Sprintf("Loading %s ...", a.graphPath)) +
-			"\n\n" + splashFaint.Render("q to quit")
+		return styleTitle.Render("peekseq") +
+			"\n\n" + styleFaint.Render(fmt.Sprintf("Loading %s ...", a.graphPath)) +
+			"\n\n" + styleFaint.Render("q to quit")
 	}
-	var overlay string
-	switch a.mode {
-	case modePicker:
-		overlay = a.picker.View()
-	case modeSearch:
-		overlay = a.search.View()
-	case modeBacklinks:
-		overlay = a.backlinks.View()
-	case modeTodos:
-		overlay = a.todos.View()
-	case modeHelp:
-		overlay = a.help.View()
-	}
-	if overlay != "" {
-		return a.centerOverlay(overlay)
+	if a.active != nil {
+		return a.centerOverlay(a.active.View())
 	}
 	return a.page.View() + "\n" + a.statusBar()
 }
@@ -475,7 +373,7 @@ func (a *App) statusBar() string {
 			rightText = ind + "  " + rightText
 		}
 	}
-	right := statusFaint.Render(rightText)
+	right := styleFaint.Render(rightText)
 	width := a.width
 	if width <= 0 {
 		width = lipgloss.Width(left) + 2 + lipgloss.Width(right)
@@ -487,19 +385,10 @@ func (a *App) statusBar() string {
 		leftBudget = 1
 	}
 	left = clamp(left, leftBudget)
-	rule := statusRule.Render(strings.Repeat("─", width))
+	rule := styleFaint.Render(strings.Repeat("─", width))
 	gap := width - lipgloss.Width(left) - rightW
 	if gap < 1 {
 		gap = 1
 	}
 	return rule + "\n" + left + strings.Repeat(" ", gap) + right
-}
-
-func pageNameFromHitPath(idx *graph.Index, abs string) string {
-	for _, p := range idx.Pages {
-		if p.Path == abs {
-			return p.Name
-		}
-	}
-	return ""
 }

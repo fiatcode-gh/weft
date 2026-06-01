@@ -24,19 +24,17 @@ func NewHelp(version string, width int) *Help {
 func (h *Help) SetSize(w, _ int) { h.width = w }
 
 // Update reports whether the overlay should close. There's no state to mutate.
-func (h *Help) Update(key string) (cancel bool) {
+func (h *Help) Update(key string) OverlayResult {
 	switch key {
-	case "esc", "?", "q":
-		return true
+	case keyEsc, "?", keyQ:
+		return OverlayResult{Cancel: true}
 	}
-	return false
+	return OverlayResult{}
 }
 
 var (
 	helpBorder  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 2)
-	helpTitle   = lipgloss.NewStyle().Bold(true)
-	helpKey     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
-	helpFaint   = lipgloss.NewStyle().Faint(true)
+	helpKey     = lipgloss.NewStyle().Bold(true).Foreground(colorHighlight)
 	helpSection = lipgloss.NewStyle().Faint(true).Italic(true)
 )
 
@@ -81,7 +79,7 @@ var helpSections = []struct {
 
 func (h *Help) View() string {
 	var b strings.Builder
-	b.WriteString(helpTitle.Render("Keys"))
+	b.WriteString(styleTitle.Render("Keys"))
 	b.WriteString("\n\n")
 
 	const keyCol = 10
@@ -144,5 +142,5 @@ func (h *Help) View() string {
 		}
 	}
 
-	return helpBorder.Render(body + "\n" + helpFaint.Render(footer))
+	return helpBorder.Render(body + "\n" + styleFaint.Render(footer))
 }

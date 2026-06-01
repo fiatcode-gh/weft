@@ -19,14 +19,12 @@ type pickerChoice struct {
 }
 
 type Picker struct {
+	listBox
 	idx     *graph.Index
 	input   textinput.Model
 	choices []pickerChoice
 	names   []string // derived from choices, kept in lockstep for fuzzy.Find
 	matches []fuzzy.Match
-	sel     int
-	width   int       // terminal width snapshot, for layout
-	height  int       // terminal height snapshot, for scroll window sizing
 	now     time.Time // captured at construction for stable relative-time hints
 }
 
@@ -35,7 +33,7 @@ func NewPicker(idx *graph.Index, width, height int) *Picker {
 	ti.Placeholder = "Type a page name..."
 	ti.Focus()
 	ti.CharLimit = 200
-	p := &Picker{idx: idx, input: ti, width: width, height: height, now: time.Now()}
+	p := &Picker{listBox: listBox{width: width, height: height}, idx: idx, input: ti, now: time.Now()}
 	p.choices = pickerChoices(idx)
 	p.names = make([]string, len(p.choices))
 	for i, c := range p.choices {
@@ -44,9 +42,6 @@ func NewPicker(idx *graph.Index, width, height int) *Picker {
 	p.search("")
 	return p
 }
-
-// SetSize updates the cached terminal dimensions.
-func (p *Picker) SetSize(w, h int) { p.width, p.height = w, h }
 
 // pickerChoices returns the picker candidate list sorted with the most
 // recently modified files first. Only real on-disk pages and journals
@@ -88,44 +83,40 @@ func (p *Picker) search(q string) {
 	p.sel = 0
 }
 
-// Update handles a key. Returns (selected page name, accept, cancel).
-func (p *Picker) Update(key string) (selected string, accept bool, cancel bool) {
+// Update handles a key and reports the result to the App.
+func (p *Picker) Update(key string) OverlayResult {
 	switch key {
-	case "esc":
-		return "", false, true
-	case "enter":
+	case keyEsc:
+		return OverlayResult{Cancel: true}
+	case keyEnter:
 		if p.sel >= 0 && p.sel < len(p.matches) {
-			return p.matches[p.sel].Str, true, false
+			return OverlayResult{Selected: p.matches[p.sel].Str, Accept: true}
 		}
-		return "", false, false
-	case "up", "ctrl+k":
-		if p.sel > 0 {
-			p.sel--
-		}
-		return "", false, false
-	case "down", "ctrl+j":
-		if p.sel < len(p.matches)-1 {
-			p.sel++
-		}
-		return "", false, false
+		return OverlayResult{}
+	case keyUp, keyCtrlK:
+		p.moveUp()
+		return OverlayResult{}
+	case keyDown, keyCtrlJ:
+		p.moveDown(len(p.matches))
+		return OverlayResult{}
 	}
-	// Otherwise feed the key into the text input
+	// Otherwise feed the key into the text input.
 	p.input, _ = consumeKey(p.input, key)
 	p.search(p.input.Value())
-	return "", false, false
+	return OverlayResult{}
 }
 
 // consumeKey is a tiny adapter to feed a key string to a textinput.Model.
 // Bubble Tea normally sends tea.KeyMsg; we hand-roll just enough for our overlay.
 func consumeKey(ti textinput.Model, key string) (textinput.Model, bool) {
 	switch key {
-	case "backspace":
+	case keyBackspace:
 		v := ti.Value()
 		if len(v) > 0 {
 			ti.SetValue(v[:len(v)-1])
 		}
 		return ti, true
-	case "space":
+	case keySpace:
 		// Some bubbletea code paths report the space key by name rather
 		// than as the literal " " character; handle both forms.
 		ti.SetValue(ti.Value() + " ")
@@ -138,31 +129,7 @@ func consumeKey(ti textinput.Model, key string) (textinput.Model, bool) {
 	return ti, false
 }
 
-var (
-	pickerBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(1, 2)
-	pickerTitle  = lipgloss.NewStyle().Bold(true)
-	pickerPrompt = lipgloss.NewStyle().Faint(true)
-	pickerSel    = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("12")).Bold(true)
-	pickerFaint  = lipgloss.NewStyle().Faint(true)
-)
-
-const (
-	pickerInnerWidthMax  = 80 // matches search/backlinks/todos for visual uniformity
-	pickerInnerWidthMin  = 30
-	pickerVisibleRowsMax = 14 // ceiling on simultaneously-shown matches
-	pickerVisibleRowsMin = 6
-)
-
-func (p *Picker) innerWidth() int {
-	w := p.width - 2 - 4 - 4 // border + padding + safety margin
-	if w > pickerInnerWidthMax {
-		w = pickerInnerWidthMax
-	}
-	if w < pickerInnerWidthMin {
-		w = pickerInnerWidthMin
-	}
-	return w
-}
+const pickerVisibleRowsMax = 14 // ceiling on simultaneously-shown matches
 
 // visibleRows returns how many match rows the picker will render at once.
 // The picker scrolls within this window when the match list is longer.
@@ -170,34 +137,7 @@ func (p *Picker) visibleRows() int {
 	// Picker chrome: 2 (border) + 2 (padding) + 1 (title) + 1 (blank) +
 	// 1 (prompt) + 1 (divider) + 1 (blank) + 1 (hint) ≈ 10 lines.
 	const chrome = 10
-	r := p.height - chrome
-	if r > pickerVisibleRowsMax {
-		r = pickerVisibleRowsMax
-	}
-	if r < pickerVisibleRowsMin {
-		r = pickerVisibleRowsMin
-	}
-	return r
-}
-
-// scrollWindow returns the [start, end) slice indices of matches to render
-// such that p.sel is always visible.
-func (p *Picker) scrollWindow() (start, end int) {
-	rows := p.visibleRows()
-	if rows >= len(p.matches) {
-		return 0, len(p.matches)
-	}
-	half := rows / 2
-	start = p.sel - half
-	if start < 0 {
-		start = 0
-	}
-	end = start + rows
-	if end > len(p.matches) {
-		end = len(p.matches)
-		start = end - rows
-	}
-	return start, end
+	return clampInt(p.height-chrome, listVisibleRowsMin, pickerVisibleRowsMax)
 }
 
 func (p *Picker) View() string {
@@ -206,24 +146,24 @@ func (p *Picker) View() string {
 	nameBudget := inner - hintCol - 2
 
 	var b strings.Builder
-	b.WriteString(pickerTitle.Render("Find a page"))
+	b.WriteString(styleTitle.Render("Find a page"))
 	b.WriteString("\n\n")
-	b.WriteString(pickerPrompt.Render("> "))
+	b.WriteString(styleFaint.Render("> "))
 	b.WriteString(clamp(p.input.Value(), inner-3))
 	b.WriteString("\n")
-	b.WriteString(pickerFaint.Render(strings.Repeat("─", inner)))
+	b.WriteString(styleFaint.Render(strings.Repeat("─", inner)))
 	b.WriteString("\n")
 	if len(p.matches) == 0 {
-		b.WriteString(pickerFaint.Render("  no matches"))
+		b.WriteString(styleFaint.Render("  no matches"))
 		b.WriteString("\n")
 		b.WriteString("\n")
-		b.WriteString(pickerFaint.Render(clamp("↑/↓ select · enter open · esc cancel", inner)))
-		return pickerBorder.Width(inner + 4).Render(b.String())
+		b.WriteString(styleFaint.Render(clamp("↑/↓ select · enter open · esc cancel", inner)))
+		return styleBorder.Width(inner + 4).Render(b.String())
 	}
 
-	start, end := p.scrollWindow()
+	start, end := scrollWindow(p.sel, len(p.matches), p.visibleRows())
 	if start > 0 {
-		b.WriteString(pickerFaint.Render(fmt.Sprintf("  ↑ %d more above", start)))
+		b.WriteString(styleFaint.Render(fmt.Sprintf("  ↑ %d more above", start)))
 		b.WriteString("\n")
 	}
 	for i := start; i < end; i++ {
@@ -236,10 +176,10 @@ func (p *Picker) View() string {
 		marker := "   " // 3-cell marker matches the selected " ▶ " so rows don't shift
 		var row string
 		if i == p.sel {
-			marker = pickerSel.Render(" ▶ ")
-			row = pickerSel.Render(layoutPickerRow(name, hint, nameBudget))
+			marker = styleSel.Render(" ▶ ")
+			row = styleSel.Render(layoutPickerRow(name, hint, nameBudget))
 		} else if hint != "" {
-			row = padTo(name, nameBudget) + "  " + pickerFaint.Render(hint)
+			row = padTo(name, nameBudget) + "  " + styleFaint.Render(hint)
 		} else {
 			row = name
 		}
@@ -248,14 +188,14 @@ func (p *Picker) View() string {
 		b.WriteString("\n")
 	}
 	if end < len(p.matches) {
-		b.WriteString(pickerFaint.Render(fmt.Sprintf("  ↓ %d more below", len(p.matches)-end)))
+		b.WriteString(styleFaint.Render(fmt.Sprintf("  ↓ %d more below", len(p.matches)-end)))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
-	b.WriteString(pickerFaint.Render(clamp("↑/↓ select · enter open · esc cancel", inner)))
+	b.WriteString(styleFaint.Render(clamp("↑/↓ select · enter open · esc cancel", inner)))
 	// Width(inner) locks the panel so the rounded border doesn't resize when
 	// a longer match scrolls into view.
-	return pickerBorder.Width(inner + 4).Render(b.String())
+	return styleBorder.Width(inner + 4).Render(b.String())
 }
 
 // layoutPickerRow returns the plain (unstyled) row layout used for the

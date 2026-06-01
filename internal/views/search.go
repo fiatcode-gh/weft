@@ -1,50 +1,28 @@
 package views
 
 import (
-	"bufio"
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
+	"git.fiatcode.dev/fiatcode/peekseq/internal/search"
 )
 
-// SearchHit is one rg result row.
-type SearchHit struct {
-	FilePath string
-	Line     int
-	Context  string
-	// Matches are byte offsets within Context that the query matched, so the
-	// view can emphasise them in the rendered list.
-	Matches []SearchSpan
-}
-
-// SearchSpan is a [Start, End) byte range inside SearchHit.Context.
-type SearchSpan struct {
-	Start, End int
-}
-
 type SearchView struct {
+	listBox
 	idx        *graph.Index
 	query      string
-	hits       []SearchHit
-	sel        int
+	hits       []search.Hit
 	running    bool
 	err        error
-	width      int               // terminal width snapshot, for layout
-	height     int               // terminal height snapshot, for scroll-window sizing
 	pathToName map[string]string // file path → logical page name, for tidy row prefixes
 }
 
 func NewSearchView(idx *graph.Index, width, height int) *SearchView {
-	s := &SearchView{idx: idx, width: width, height: height}
+	s := &SearchView{listBox: listBox{width: width, height: height}, idx: idx}
 	s.pathToName = make(map[string]string, len(idx.Pages))
 	for _, p := range idx.Pages {
 		s.pathToName[p.Path] = p.Name
@@ -61,9 +39,6 @@ func (s *SearchView) hitLabel(filePath string) string {
 	return shortPath(filePath)
 }
 
-// SetSize updates the cached terminal dimensions.
-func (s *SearchView) SetSize(w, h int) { s.width, s.height = w, h }
-
 func (s *SearchView) Query() string { return s.query }
 
 func (s *SearchView) SetQuery(q string) { s.query = q }
@@ -72,16 +47,16 @@ func (s *SearchView) SetQuery(q string) { s.query = q }
 func (s *SearchView) SearchCmd(graphPath string) tea.Cmd {
 	q := s.query
 	return func() tea.Msg {
-		out, err := runRipgrep(graphPath, q)
+		hits, err := search.Run(graphPath, q)
 		if err != nil {
 			return searchDoneMsg{err: err}
 		}
-		return searchDoneMsg{hits: parseRipgrepJSON(out)}
+		return searchDoneMsg{hits: hits}
 	}
 }
 
 type searchDoneMsg struct {
-	hits []SearchHit
+	hits []search.Hit
 	err  error
 }
 
@@ -94,42 +69,39 @@ func (s *SearchView) Apply(msg searchDoneMsg) {
 	}
 }
 
-// Update handles a key. Returns (selected hit, accept, cancel, cmd to run).
-func (s *SearchView) Update(key string, graphPath string) (hit *SearchHit, accept, cancel bool, cmd tea.Cmd) {
+// pageName returns the logical page name for a hit's file path, or "" when the
+// file isn't in the index (e.g. a result outside pages/ and journals/).
+func (s *SearchView) pageName(filePath string) string {
+	return s.pathToName[filePath]
+}
+
+// Update handles a key and reports the result to the App.
+func (s *SearchView) Update(key string) OverlayResult {
 	switch key {
-	case "esc":
-		return nil, false, true, nil
-	case "enter":
-		if s.running {
-			return nil, false, false, nil
-		}
-		if s.query == "" {
-			return nil, false, false, nil
+	case keyEsc:
+		return OverlayResult{Cancel: true}
+	case keyEnter:
+		if s.running || s.query == "" {
+			return OverlayResult{}
 		}
 		if len(s.hits) == 0 {
 			s.running = true
-			return nil, false, false, s.SearchCmd(graphPath)
+			return OverlayResult{Cmd: s.SearchCmd(s.idx.GraphPath)}
 		}
 		if s.sel >= 0 && s.sel < len(s.hits) {
-			h := s.hits[s.sel]
-			return &h, true, false, nil
+			return OverlayResult{Selected: s.pageName(s.hits[s.sel].FilePath), Accept: true}
 		}
-	case "up", "ctrl+k":
-		if s.sel > 0 {
-			s.sel--
-		}
-	case "down", "ctrl+j":
-		if s.sel < len(s.hits)-1 {
-			s.sel++
-		}
-	case "backspace":
+		return OverlayResult{}
+	case keyUp, keyCtrlK:
+		s.moveUp()
+	case keyDown, keyCtrlJ:
+		s.moveDown(len(s.hits))
+	case keyBackspace:
 		if len(s.query) > 0 {
 			s.query = s.query[:len(s.query)-1]
 			s.hits = nil
 		}
-	case " ", "space":
-		// Both forms covered in case bubbletea reports the space key as
-		// the literal " " (default in v1) or the named "space" elsewhere.
+	case " ", keySpace:
 		s.query += " "
 		s.hits = nil
 	default:
@@ -138,22 +110,17 @@ func (s *SearchView) Update(key string, graphPath string) (hit *SearchHit, accep
 			s.hits = nil
 		}
 	}
-	return nil, false, false, nil
+	return OverlayResult{}
 }
 
 var (
-	searchBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(1, 2)
-	searchTitle  = lipgloss.NewStyle().Bold(true)
-	searchPrompt = lipgloss.NewStyle().Faint(true)
-	searchSel    = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("12")).Bold(true)
-	searchFaint  = lipgloss.NewStyle().Faint(true)
-	searchHitPos = lipgloss.NewStyle().Foreground(lipgloss.Color("12"))
-	searchMatch  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11"))
+	searchHitPos = lipgloss.NewStyle().Foreground(colorHighlight)
+	searchMatch  = lipgloss.NewStyle().Bold(true).Foreground(colorCursor)
 )
 
 // matchesWithin returns the subset of h.Matches that still fits inside the
 // first ctxBytes bytes of the (possibly truncated) context.
-func (s *SearchView) matchesWithin(h SearchHit, ctxBytes int) []SearchSpan {
+func (s *SearchView) matchesWithin(h search.Hit, ctxBytes int) []search.Span {
 	if len(h.Matches) == 0 {
 		return nil
 	}
@@ -169,14 +136,14 @@ func (s *SearchView) matchesWithin(h SearchHit, ctxBytes int) []SearchSpan {
 		if m.Start >= end {
 			continue
 		}
-		out = append(out, SearchSpan{Start: m.Start, End: end})
+		out = append(out, search.Span{Start: m.Start, End: end})
 	}
 	return out
 }
 
 // highlightMatches emphasises each [Start,End) span of ctx with searchMatch.
 // Overlapping or out-of-range spans are skipped defensively.
-func highlightMatches(ctx string, spans []SearchSpan) string {
+func highlightMatches(ctx string, spans []search.Span) string {
 	if len(spans) == 0 {
 		return ctx
 	}
@@ -194,27 +161,7 @@ func highlightMatches(ctx string, spans []SearchSpan) string {
 	return b.String()
 }
 
-const (
-	searchInnerWidthMax  = 80
-	searchInnerWidthMin  = 30
-	searchVisibleRowsMax = 14
-	searchVisibleRowsMin = 6
-)
-
-// searchInnerWidth returns the column width to budget for content lines,
-// shrinking to fit narrower terminals so the right edge of the overlay
-// never falls off-screen.
-func (s *SearchView) innerWidth() int {
-	// Border (2) + padding (4) + a 2-col safety margin on each side.
-	w := s.width - 2 - 4 - 4
-	if w > searchInnerWidthMax {
-		w = searchInnerWidthMax
-	}
-	if w < searchInnerWidthMin {
-		w = searchInnerWidthMin
-	}
-	return w
-}
+const searchVisibleRowsMax = 14
 
 // visibleRows returns how many hit rows the search overlay renders at once.
 // Hits scroll within this window when there are more of them.
@@ -222,56 +169,29 @@ func (s *SearchView) visibleRows() int {
 	// Chrome: 2 (border) + 2 (padding) + 1 (title) + 1 (blank) + 1 (prompt)
 	// + 1 (divider) + 1 (blank) + 1 (hint) ≈ 10 lines.
 	const chrome = 10
-	r := s.height - chrome
-	if r > searchVisibleRowsMax {
-		r = searchVisibleRowsMax
-	}
-	if r < searchVisibleRowsMin {
-		r = searchVisibleRowsMin
-	}
-	return r
-}
-
-// scrollWindow returns the [start, end) slice indices of hits to render
-// such that s.sel is always visible.
-func (s *SearchView) scrollWindow() (start, end int) {
-	rows := s.visibleRows()
-	if rows >= len(s.hits) {
-		return 0, len(s.hits)
-	}
-	half := rows / 2
-	start = s.sel - half
-	if start < 0 {
-		start = 0
-	}
-	end = start + rows
-	if end > len(s.hits) {
-		end = len(s.hits)
-		start = end - rows
-	}
-	return start, end
+	return clampInt(s.height-chrome, listVisibleRowsMin, searchVisibleRowsMax)
 }
 
 func (s *SearchView) View() string {
 	inner := s.innerWidth()
 	var b strings.Builder
-	b.WriteString(searchTitle.Render("Search the graph"))
+	b.WriteString(styleTitle.Render("Search the graph"))
 	b.WriteString("\n\n")
-	b.WriteString(searchPrompt.Render("/ "))
+	b.WriteString(styleFaint.Render("/ "))
 	b.WriteString(clamp(s.query, inner-3))
 	switch {
 	case s.err != nil:
-		b.WriteString(searchFaint.Render(clamp(fmt.Sprintf("   error: %v", s.err), inner)))
+		b.WriteString(styleFaint.Render(clamp(fmt.Sprintf("   error: %v", s.err), inner)))
 	case s.running:
-		b.WriteString(searchFaint.Render("   searching…"))
+		b.WriteString(styleFaint.Render("   searching…"))
 	case len(s.hits) == 0 && s.query != "":
-		b.WriteString(searchFaint.Render("   press enter to search"))
+		b.WriteString(styleFaint.Render("   press enter to search"))
 	}
 	b.WriteString("\n")
-	b.WriteString(searchFaint.Render(strings.Repeat("─", inner)))
+	b.WriteString(styleFaint.Render(strings.Repeat("─", inner)))
 	b.WriteString("\n")
 	if len(s.hits) == 0 && s.query == "" {
-		b.WriteString(searchFaint.Render("  type a query and press enter"))
+		b.WriteString(styleFaint.Render("  type a query and press enter"))
 		b.WriteString("\n")
 	}
 	// rowBudget leaves room for the 3-cell marker and keeps one cell of
@@ -279,15 +199,15 @@ func (s *SearchView) View() string {
 	// inner content width and force lipgloss to wrap it.
 	rowBudget := inner - 4
 	const posCol = 22 // width reserved for "{page}:{line}" so context columns line up
-	sep := searchFaint.Render(" · ")
+	sep := styleFaint.Render(" · ")
 	sepW := lipgloss.Width(sep)
 	ctxBudget := rowBudget - posCol - sepW
 	if ctxBudget < 8 {
 		ctxBudget = 8
 	}
-	start, end := s.scrollWindow()
+	start, end := scrollWindow(s.sel, len(s.hits), s.visibleRows())
 	if start > 0 {
-		b.WriteString(searchFaint.Render(fmt.Sprintf("   ↑ %d more above", start)))
+		b.WriteString(styleFaint.Render(fmt.Sprintf("   ↑ %d more above", start)))
 		b.WriteString("\n")
 	}
 	for i := start; i < end; i++ {
@@ -303,8 +223,8 @@ func (s *SearchView) View() string {
 			// Selected rows render in one blue-bg pass — applying match
 			// emphasis on top would inject nested SGR resets that clobber
 			// the selection background.
-			marker = searchSel.Render(" ▶ ")
-			line = searchSel.Render(posStr + " · " + ctx)
+			marker = styleSel.Render(" ▶ ")
+			line = styleSel.Render(posStr + " · " + ctx)
 		} else {
 			pos := searchHitPos.Render(posStr)
 			line = pos + sep + highlightMatches(ctx, s.matchesWithin(h, len(ctx)))
@@ -314,14 +234,14 @@ func (s *SearchView) View() string {
 		b.WriteString("\n")
 	}
 	if end < len(s.hits) {
-		b.WriteString(searchFaint.Render(fmt.Sprintf("   ↓ %d more below", len(s.hits)-end)))
+		b.WriteString(styleFaint.Render(fmt.Sprintf("   ↓ %d more below", len(s.hits)-end)))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
-	b.WriteString(searchFaint.Render(clamp("↑/↓ select · enter search/open · esc cancel", inner)))
+	b.WriteString(styleFaint.Render(clamp("↑/↓ select · enter search/open · esc cancel", inner)))
 	// Width includes horizontal padding (2 cells each side) but excludes the
 	// border, so adding 4 keeps the text area at exactly `inner` cells.
-	return searchBorder.Width(inner + 4).Render(b.String())
+	return styleBorder.Width(inner + 4).Render(b.String())
 }
 
 func shortPath(p string) string {
@@ -330,90 +250,4 @@ func shortPath(p string) string {
 		return p
 	}
 	return strings.Join(parts[len(parts)-2:], "/")
-}
-
-func runRipgrep(graphPath, query string) ([]byte, error) {
-	// --smart-case keeps the search case-insensitive unless the pattern
-	// contains an uppercase letter, which matches what most interactive
-	// users expect from a quick search.
-	args := []string{"--json", "--smart-case", "--", query}
-	baseArgs := len(args)
-	for _, sub := range []string{"pages", "journals"} {
-		p := filepath.Join(graphPath, sub)
-		if _, err := os.Stat(p); err == nil {
-			args = append(args, p)
-		}
-	}
-	if len(args) == baseArgs {
-		// No pages/ or journals/ dir — nothing to search.
-		return nil, nil
-	}
-	cmd := exec.Command("rg", args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-		return stdout.Bytes(), nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("rg failed: %w (%s)", err, stderr.String())
-	}
-	return stdout.Bytes(), nil
-}
-
-func parseRipgrepJSON(b []byte) []SearchHit {
-	var out []SearchHit
-	sc := bufio.NewScanner(bytes.NewReader(b))
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for sc.Scan() {
-		var env struct {
-			Type string `json:"type"`
-			Data struct {
-				Path       struct{ Text string } `json:"path"`
-				Lines      struct{ Text string } `json:"lines"`
-				LineNumber int                   `json:"line_number"`
-				Submatches []struct {
-					Start int `json:"start"`
-					End   int `json:"end"`
-				} `json:"submatches"`
-			} `json:"data"`
-		}
-		if err := json.Unmarshal(sc.Bytes(), &env); err != nil {
-			continue
-		}
-		if env.Type != "match" {
-			continue
-		}
-		ctx := strings.TrimRight(env.Data.Lines.Text, "\n")
-		// Strip leading whitespace from indented bullets so list rows line
-		// up. Match spans are byte offsets into the *original* line, so we
-		// also shift them by the number of bytes we trimmed.
-		trimmed := strings.TrimLeft(ctx, " \t")
-		shift := len(ctx) - len(trimmed)
-		ctx = trimmed
-		ctxLen := len(ctx)
-		spans := make([]SearchSpan, 0, len(env.Data.Submatches))
-		for _, sm := range env.Data.Submatches {
-			start := sm.Start - shift
-			end := sm.End - shift
-			if end <= 0 || start >= ctxLen || start >= end {
-				continue // span fell entirely inside the trimmed indent, or is degenerate
-			}
-			if start < 0 {
-				start = 0
-			}
-			if end > ctxLen {
-				end = ctxLen
-			}
-			spans = append(spans, SearchSpan{Start: start, End: end})
-		}
-		out = append(out, SearchHit{
-			FilePath: env.Data.Path.Text,
-			Line:     env.Data.LineNumber,
-			Context:  ctx,
-			Matches:  spans,
-		})
-	}
-	return out
 }

@@ -108,12 +108,12 @@ func TestBacklinksEnterReturnsFromPage(t *testing.T) {
 		t.Skip("no Hub backlinks in fixture — skipping enter test")
 	}
 	b.sel = 0
-	sel, accept, cancel := b.Update("enter")
-	if !accept || cancel {
-		t.Errorf("enter: want accept=true cancel=false, got %v/%v", accept, cancel)
+	res := b.Update("enter")
+	if !res.Accept || res.Cancel {
+		t.Errorf("enter: want accept=true cancel=false, got %v/%v", res.Accept, res.Cancel)
 	}
-	if sel != b.refs[0].FromPage {
-		t.Errorf("returned page: want %q, got %q", b.refs[0].FromPage, sel)
+	if res.Selected != b.refs[0].FromPage {
+		t.Errorf("returned page: want %q, got %q", b.refs[0].FromPage, res.Selected)
 	}
 }
 
@@ -122,9 +122,9 @@ func TestBacklinksEscAndBCancel(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	b := NewBacklinks(loadFixture(t), "Hub", 80, 30)
 	for _, k := range []string{"esc", "b"} {
-		sel, accept, cancel := b.Update(k)
-		if sel != "" || accept || !cancel {
-			t.Errorf("%s: want cancel only, got (%q,%v,%v)", k, sel, accept, cancel)
+		res := b.Update(k)
+		if res.Selected != "" || res.Accept || !res.Cancel {
+			t.Errorf("%s: want cancel only, got (%q,%v,%v)", k, res.Selected, res.Accept, res.Cancel)
 		}
 	}
 }
@@ -136,21 +136,21 @@ func TestBacklinksNoRefsEnterNoop(t *testing.T) {
 	if len(b.refs) != 0 {
 		t.Fatalf("Orphan should have 0 backlinks, got %d", len(b.refs))
 	}
-	sel, accept, cancel := b.Update("enter")
-	if sel != "" || accept || cancel {
+	res := b.Update("enter")
+	if res.Selected != "" || res.Accept || res.Cancel {
 		t.Errorf("enter on empty refs: want zero-valued return, got (%q,%v,%v)",
-			sel, accept, cancel)
+			res.Selected, res.Accept, res.Cancel)
 	}
 }
 
 func TestBacklinksInnerWidthClamps(t *testing.T) {
-	b := &Backlinks{width: 10}
-	if got := b.innerWidth(); got != blInnerWidthMin {
-		t.Errorf("narrow term: want %d, got %d", blInnerWidthMin, got)
+	b := &Backlinks{listBox: listBox{width: 10}}
+	if got := b.innerWidth(); got != listInnerWidthMin {
+		t.Errorf("narrow term: want %d, got %d", listInnerWidthMin, got)
 	}
 	b.width = 300
-	if got := b.innerWidth(); got != blInnerWidthMax {
-		t.Errorf("wide term: want %d, got %d", blInnerWidthMax, got)
+	if got := b.innerWidth(); got != listInnerWidthMax {
+		t.Errorf("wide term: want %d, got %d", listInnerWidthMax, got)
 	}
 }
 
@@ -193,7 +193,7 @@ func TestBacklinksScrollWindowBoundsSelection(t *testing.T) {
 
 	for _, sel := range []int{0, 25, len(b.refs) - 1} {
 		b.sel = sel
-		start, end := b.scrollWindow()
+		start, end := scrollWindow(b.sel, len(b.refs), b.visibleRows())
 		if sel < start || sel >= end {
 			t.Errorf("sel %d should be in [%d,%d)", sel, start, end)
 		}

@@ -60,12 +60,12 @@ func TestTodosEnterReturnsPage(t *testing.T) {
 		t.Fatal("setup: no visible todos")
 	}
 	want := td.visible[0].Page
-	page, accept, cancel := td.Update("enter")
-	if !accept || cancel {
-		t.Errorf("enter: want accept=true cancel=false, got %v/%v", accept, cancel)
+	res := td.Update("enter")
+	if !res.Accept || res.Cancel {
+		t.Errorf("enter: want accept=true cancel=false, got %v/%v", res.Accept, res.Cancel)
 	}
-	if page != want {
-		t.Errorf("returned page: want %q, got %q", want, page)
+	if res.Selected != want {
+		t.Errorf("returned page: want %q, got %q", want, res.Selected)
 	}
 }
 
@@ -90,15 +90,15 @@ func TestTodosEscAndQCancel(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	for _, k := range []string{"esc", "q"} {
 		td := NewTodos(loadFixture(t), 100, 30)
-		page, accept, cancel := td.Update(k)
-		if page != "" || accept || !cancel {
-			t.Errorf("%s: want cancel only, got (%q,%v,%v)", k, page, accept, cancel)
+		res := td.Update(k)
+		if res.Selected != "" || res.Accept || !res.Cancel {
+			t.Errorf("%s: want cancel only, got (%q,%v,%v)", k, res.Selected, res.Accept, res.Cancel)
 		}
 	}
 }
 
 func TestTodosSetSize(t *testing.T) {
-	td := &Todos{width: 80}
+	td := &Todos{listBox: listBox{width: 80}}
 	td.SetSize(120, 99)
 	if td.width != 120 {
 		t.Errorf("SetSize: want width 120, got %d", td.width)
