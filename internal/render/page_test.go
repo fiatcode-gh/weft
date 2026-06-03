@@ -171,6 +171,24 @@ func TestRenderPageEmptyBlockFragmentIsNotALink(t *testing.T) {
 	}
 }
 
+func TestRenderPageStripsQueryAndEmbedBlocks(t *testing.T) {
+	body := "before\n{{query (and [[tag]] )}}\nstill query\n}}\nafter\n{{embed [[Other]]}}\n"
+	res, err := Render(body, 80)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain := ansi.Strip(res.Styled)
+	if strings.Contains(plain, "{{query") {
+		t.Errorf("query block leaked into output:\n%s", plain)
+	}
+	if strings.Contains(plain, "{{embed") {
+		t.Errorf("embed block leaked into output:\n%s", plain)
+	}
+	if !strings.Contains(plain, "before") || !strings.Contains(plain, "after") {
+		t.Errorf("surrounding text dropped:\n%s", plain)
+	}
+}
+
 func TestRenderTaskMarkersSurviveStyling(t *testing.T) {
 	body := strings.Join([]string{
 		"- TODO Buy milk",

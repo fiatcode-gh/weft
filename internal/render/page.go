@@ -39,6 +39,7 @@ var (
 	taskMarkerRe   = regexp.MustCompile(`^(\s*-\s+)(TODO|DOING|LATER|WAITING|DONE|CANCELED|CANCELLED|NOW)\b`)
 	logbookStartRe = regexp.MustCompile(`(?i)^\s*:LOGBOOK:\s*$`)
 	logbookEndRe   = regexp.MustCompile(`(?i)^\s*:END:\s*$`)
+	queryOrEmbedRe = regexp.MustCompile(`(?i)^\s*\{\{(query|embed)\b`)
 )
 
 var linkStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Underline(true)
@@ -151,6 +152,41 @@ func stripLogbookBlocks(body string) string {
 		case inLogbook:
 			if logbookEndRe.MatchString(line) {
 				inLogbook = false
+			}
+			continue
+		default:
+			out.WriteString(line)
+		}
+		if i < len(lines)-1 {
+			out.WriteByte('\n')
+		}
+	}
+	return out.String()
+}
+
+// stripQueryAndEmbedBlocks drops Logseq {{query …}} and {{embed …}}
+// blocks. Each block is delimited by an opening `{{query` / `{{embed`
+// at the start of a line and a closing `}}` on its own line. Fence-aware
+// so a code block containing the literal markers stays intact.
+func stripQueryAndEmbedBlocks(body string) string {
+	var out strings.Builder
+	out.Grow(len(body))
+	lines := strings.Split(body, "\n")
+	inFence := false
+	inBlock := false
+	for i, line := range lines {
+		switch {
+		case fenceRe.MatchString(line):
+			inFence = !inFence
+			out.WriteString(line)
+		case inFence:
+			out.WriteString(line)
+		case !inBlock && queryOrEmbedRe.MatchString(line):
+			inBlock = true
+			continue // drop the opening line
+		case inBlock:
+			if strings.TrimSpace(line) == "}}" {
+				inBlock = false
 			}
 			continue
 		default:
@@ -329,6 +365,7 @@ func substituteTaskSentinels(styled string, markers []string) string {
 // width is the target terminal column count.
 func Render(body string, width int) (Result, error) {
 	body = stripLogbookBlocks(body)
+	body = stripQueryAndEmbedBlocks(body)
 	pre, wikiSubs := preprocessWikiLinks(body)
 	pre, taskMarkers := preprocessTaskMarkers(pre)
 
