@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-06-03
+
+### Fixed
+
+- Wiki links wrapped in backticks (markdown inline code) are now left as literal
+  text instead of being preprocessed as links. `\`[[Foo]]\`` displays as the
+  literal `[[Foo]]` (matching the markdown spec's "inline code is literal"
+  rule) rather than as a styled wiki link. The fix is per-line: split the line
+  on backticks, process only the even-indexed (literal) parts, rejoin. The
+  pre-v1.0.0 behaviour treated backticked wiki links as ordinary links; this
+  was a real but minor markdown-conformance bug that surfaced when users
+  pasted a wiki link inside inline code.
+
 ## [1.0.0] - 2026-06-03
 
 First stable release. Read-only Logseq TUI for browsing a local graph:
@@ -19,7 +32,9 @@ dashboard. Built on Bubble Tea with a Glamour rendering pipeline.
 - Strip `{{query …}}` and `{{embed …}}` Logseq blocks from the rendered
   page (fence-aware, mirrors the existing `:LOGBOOK:` strip).
 - `[[page#block]]` wiki-links resolve to `page` and the `#block` fragment
-  is dropped with a stderr warning on lookup miss.
+  is dropped with a stderr warning on lookup miss. A wiki link inside
+  backticks (`\`[[Foo]]\``) is left literal — markdown inline code is not
+  processed for other constructs.
 - Case-insensitive page resolution via a fold-keyed index, matching
   Logseq's de facto behaviour. A `pages/` or `journals/` subdirectory
   emits a stderr warning instead of being silently dropped.

@@ -209,8 +209,65 @@ func TestRenderTaskMarkersSurviveStyling(t *testing.T) {
 
 func TestWarmupDoesNotPanic(t *testing.T) {
 	// Warmup is paid once at process start so the first page render inside
-	// the TUI doesn't pay chroma's init cost. Calling it more than once is
-	// safe and is a no-op against the renderer cache.
+	// the TUI doesn't pay chroma's syntax-highlighter init cost. Calling it more
+	// than once is safe and is a no-op against the renderer cache.
 	Warmup()
 	Warmup()
+}
+
+func TestRenderPageBacktickWrappedWikiLinkIsLiteral(t *testing.T) {
+	// Markdown inline code (backticks) is literal text — the contents are
+	// NOT processed for other markdown constructs. So `[[Foo]]` should
+	// appear in the output as the literal "[[Foo]]" text, not as a styled
+	// wiki link. peekseq's preprocessor previously matched `[[...]]` inside
+	// backticks; this test pins the fix.
+	body := "see `[[Foo]]` for the literal text\n"
+	res, err := Render(body, 80)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Links) != 0 {
+		t.Errorf("want 0 links (wiki link inside backticks should be literal), got %d (%+v)", len(res.Links), res.Links)
+	}
+	plain := ansi.Strip(res.Styled)
+	if !strings.Contains(plain, "[[Foo]]") {
+		t.Errorf("expected literal [[Foo]] in output, got:\n%s", plain)
+	}
+}
+
+func TestRenderPageMixedBacktickAndPlainLinks(t *testing.T) {
+	// On a line that mixes backtick-wrapped and plain wiki links, only the
+	// plain one should be preprocessed. The backtick-wrapped one stays
+	// literal in the output.
+	body := "code `[[Fake]]` and real [[Real]] end\n"
+	res, err := Render(body, 80)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Links) != 1 {
+		t.Fatalf("want 1 link (only the plain one), got %d (%+v)", len(res.Links), res.Links)
+	}
+	if res.Links[0].Target != "Real" {
+		t.Errorf("link target = %q, want Real", res.Links[0].Target)
+	}
+	plain := ansi.Strip(res.Styled)
+	if !strings.Contains(plain, "[[Fake]]") {
+		t.Errorf("expected literal [[Fake]] to survive, got:\n%s", plain)
+	}
+}
+
+func TestRenderPageMultipleInlineCodeSpansOnOneLine(t *testing.T) {
+	// `code1` ... `code2` alternation: both code spans should be left
+	// literal, and the plain wiki link between them preprocessed.
+	body := "first `[[A]]` middle [[B]] last `[[C]]` end\n"
+	res, err := Render(body, 80)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Links) != 1 {
+		t.Fatalf("want 1 link (only [[B]]), got %d (%+v)", len(res.Links), res.Links)
+	}
+	if res.Links[0].Target != "B" {
+		t.Errorf("link target = %q, want B", res.Links[0].Target)
+	}
 }

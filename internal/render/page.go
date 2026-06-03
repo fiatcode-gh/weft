@@ -199,6 +199,60 @@ func stripQueryAndEmbedBlocks(body string) string {
 	return out.String()
 }
 
+// replaceWikiLinksOutsideInlineCode preprocesses a single line for wiki links,
+// but only OUTSIDE backtick-delimited inline code spans. Markdown treats
+// backticked text as literal — `[[Foo]]` should display as the literal text
+// "[[Foo]]", not as a styled wiki link. Splits the line on backticks so even-
+// indexed parts are literal text (processed) and odd-indexed parts are inline
+// code (left alone), then rejoins. Per-line because inline code spans are
+// single-line; the cross-line fence state is already handled by the caller.
+//
+// The `subs` slice is appended to as matches are found; the id-encoded sentinel
+// is the same shape `preprocessWikiLinks` uses so the rest of the pipeline
+// (Glamour → sentinel substitution) is unchanged.
+func replaceWikiLinksOutsideInlineCode(line string, subs *[]linkSubst) string {
+	parts := strings.Split(line, "`")
+	for i, part := range parts {
+		if i%2 == 1 {
+			// Odd-indexed part is inside backticks (inline code). Leave the
+			// text literal so `[[Foo]]` stays as `[[Foo]]` in the output.
+			continue
+		}
+		parts[i] = wikiLinkRe.ReplaceAllStringFunc(part, func(match string) string {
+			m := wikiLinkRe.FindStringSubmatch(match)
+			target := m[1]
+			// Strip optional #block fragment: [[Alpha#summary]] -> "Alpha".
+			if j := strings.IndexByte(target, '#'); j >= 0 {
+				target = target[:j]
+			}
+			if target == "" {
+				// No page name (e.g. [[#anchor]] or [[#]]) — leave the
+				// literal text in the output so the view layer doesn't see
+				// a phantom link with an empty target. Mirrors the empty-
+				// target guard in internal/graph/parse.go.
+				return match
+			}
+			display := target
+			if m[2] != "" {
+				display = m[2]
+			}
+			id := len(*subs)
+			*subs = append(*subs, linkSubst{target: target, display: display})
+			core := fmt.Sprintf("%s%d%s", wikiSentinelStart, id, wikiSentinelEnd)
+			// Pad sentinel to the rendered link's display width so Glamour's
+			// word-wrap reserves enough columns. Otherwise a short sentinel
+			// (e.g. <id 0>) at the end of a line lets Glamour fit it within
+			// the wrap width, then post-substitution the longer link text
+			// overflows the right margin and the terminal crops it.
+			if pad := lipgloss.Width(display) - lipgloss.Width(core); pad > 0 {
+				core += strings.Repeat(wikiSentinelPad, pad)
+			}
+			return core
+		})
+	}
+	return strings.Join(parts, "`")
+}
+
 // preprocessWikiLinks replaces non-fenced [[X]] and [[X|alias]] occurrences
 // in body with sentinels that survive Glamour rendering. Returns the rewritten
 // body and a slice of substitutions indexed by the id encoded in each sentinel.
@@ -220,38 +274,7 @@ func preprocessWikiLinks(body string) (string, []linkSubst) {
 		case inFence:
 			out.WriteString(line)
 		default:
-			rewritten := wikiLinkRe.ReplaceAllStringFunc(line, func(match string) string {
-				m := wikiLinkRe.FindStringSubmatch(match)
-				target := m[1]
-				// Strip optional #block fragment: [[Alpha#summary]] -> "Alpha".
-				if i := strings.IndexByte(target, '#'); i >= 0 {
-					target = target[:i]
-				}
-				if target == "" {
-					// No page name (e.g. [[#anchor]] or [[#]]) — leave the
-					// literal text in the output so the view layer doesn't see
-					// a phantom link with an empty target. Mirrors the empty-
-					// target guard in internal/graph/parse.go.
-					return match
-				}
-				display := target
-				if m[2] != "" {
-					display = m[2]
-				}
-				id := len(subs)
-				subs = append(subs, linkSubst{target: target, display: display})
-				core := fmt.Sprintf("%s%d%s", wikiSentinelStart, id, wikiSentinelEnd)
-				// Pad sentinel to the rendered link's display width so Glamour's
-				// word-wrap reserves enough columns. Otherwise a short sentinel
-				// (e.g. <id 0>) at the end of a line lets Glamour fit it within
-				// the wrap width, then post-substitution the longer link text
-				// overflows the right margin and the terminal crops it.
-				if pad := lipgloss.Width(display) - lipgloss.Width(core); pad > 0 {
-					core += strings.Repeat(wikiSentinelPad, pad)
-				}
-				return core
-			})
-			out.WriteString(rewritten)
+			out.WriteString(replaceWikiLinksOutsideInlineCode(line, &subs))
 		}
 		if i < len(lines)-1 {
 			out.WriteByte('\n')
