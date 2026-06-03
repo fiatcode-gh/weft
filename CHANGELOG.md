@@ -6,7 +6,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [1.0.0] - <tag-date>
+## [1.0.0] - 2026-06-03
 
 First stable release. Read-only Logseq TUI for browsing a local graph:
 recency-sorted picker, ripgrep-backed search, backlinks, and a TODO
