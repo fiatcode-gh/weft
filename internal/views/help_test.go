@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/exp/teatest"
 )
 
 func TestNewHelpRendersVersion(t *testing.T) {
@@ -66,4 +67,11 @@ func TestHelpZeroWidthDisablesClamp(t *testing.T) {
 	if max < 30 {
 		t.Errorf("width=0 should keep content-sized panel; max line width %d looks clamped", max)
 	}
+}
+
+func TestHelpGolden(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	h := NewHelp("v1.0.0", 80)
+	teatest.RequireEqualOutput(t, []byte(h.View()))
 }
