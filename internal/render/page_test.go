@@ -145,6 +145,32 @@ func TestRenderPageBlockRefBecomesLink(t *testing.T) {
 	}
 }
 
+func TestRenderPageBlockRefWithAlias(t *testing.T) {
+	res, err := Render("see [[Alpha#summary|the summary]] for context\n", 80)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Links) != 1 {
+		t.Fatalf("want 1 link, got %d (%+v)", len(res.Links), res.Links)
+	}
+	if res.Links[0].Target != "Alpha" {
+		t.Errorf("target = %q, want Alpha", res.Links[0].Target)
+	}
+	if res.Links[0].Display != "the summary" {
+		t.Errorf("display = %q, want 'the summary'", res.Links[0].Display)
+	}
+}
+
+func TestRenderPageEmptyBlockFragmentIsNotALink(t *testing.T) {
+	res, err := Render("anchor: [[#summary]] here\n", 80)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Links) != 0 {
+		t.Errorf("want 0 links for [[#anchor]], got %d (%+v)", len(res.Links), res.Links)
+	}
+}
+
 func TestRenderTaskMarkersSurviveStyling(t *testing.T) {
 	body := strings.Join([]string{
 		"- TODO Buy milk",

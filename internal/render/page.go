@@ -191,6 +191,13 @@ func preprocessWikiLinks(body string) (string, []linkSubst) {
 				if i := strings.IndexByte(target, '#'); i >= 0 {
 					target = target[:i]
 				}
+				if target == "" {
+					// No page name (e.g. [[#anchor]] or [[#]]) — leave the
+					// literal text in the output so the view layer doesn't see
+					// a phantom link with an empty target. Mirrors the empty-
+					// target guard in internal/graph/parse.go.
+					return match
+				}
 				display := target
 				if m[2] != "" {
 					display = m[2]
