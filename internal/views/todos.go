@@ -66,7 +66,11 @@ func (t *Todos) Update(key string) OverlayResult {
 		t.moveDown(len(t.visible))
 	case keyEnter:
 		if t.sel >= 0 && t.sel < len(t.visible) {
-			return OverlayResult{Selected: t.visible[t.sel].Page, Accept: true}
+			return OverlayResult{
+				Selected: t.visible[t.sel].Page,
+				Line:     t.visible[t.sel].LineNumber,
+				Accept:   true,
+			}
 		}
 	}
 	return OverlayResult{}

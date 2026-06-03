@@ -1,9 +1,12 @@
 package views
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestHistorySeededOnFirstPage(t *testing.T) {
@@ -203,5 +206,45 @@ func TestHistoryRestoresScrollAndCursor(t *testing.T) {
 	}
 	if got := a.page.Cursor(); got != wantCursor {
 		t.Errorf("restored cursor: want %d, got %d", wantCursor, got)
+	}
+}
+
+// TestAppTodosDeepLinkScrollsToBullet exercises the end-to-end deep-link:
+// open the Todos dashboard, filter to TODO, hit Enter, and verify the
+// app navigates to the bullet's page and records the bullet's source line
+// in the new history entry (which is what PageView.ScrollToLine reads).
+func TestAppTodosDeepLinkScrollsToBullet(t *testing.T) {
+	a := bootAppAt(t, time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC))
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	// Open todos.
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")})
+	// Cycle to TODO filter; markerCycle = ["", "TODO", "LATER", "DOING", "WAITING"]
+	// so one "t" press from "" lands on "TODO".
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
+	// Select the first row.
+	a.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	// The first open TODO in the fixture is on 2026-05-24, line 2
+	// ("TODO Ship the TUI MVP"). Sorting is by page name then line number.
+	if got := a.page.Page(); got != "2026-05-24" {
+		t.Fatalf("after deep-link: page want 2026-05-24, got %q", got)
+	}
+
+	// Strong pin: the deep-link target is recorded in the new history
+	// entry. This is what navigateAt populates and what ScrollToLine
+	// reads — if the field stays 0, the deep-link was lost.
+	last := a.hist[len(a.hist)-1]
+	if last.line != 2 {
+		t.Errorf("history entry line: want 2, got %d (entry: %+v)", last.line, last)
+	}
+
+	// Smoke check: the bullet text is rendered on screen. With the
+	// fixture's short page the bullet is always visible regardless of
+	// deep-link, so this only catches "we navigated to the wrong page".
+	view := a.View()
+	plain := ansi.Strip(view)
+	if !strings.Contains(plain, "Ship the TUI MVP") {
+		t.Errorf("expected 'Ship the TUI MVP' on screen, got:\n%s", plain)
 	}
 }

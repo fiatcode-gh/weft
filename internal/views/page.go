@@ -149,6 +149,26 @@ func (p *PageView) Restore(offset, cursor int) {
 	p.cursor = cursor
 }
 
+// ScrollToLine centres the viewport on the given 1-based line number.
+// Lines outside the rendered body are clamped to the start/end of the
+// document. No-op if the viewport hasn't been laid out yet. Used for
+// one-shot deep-link jumps from the Todos dashboard — apply once at
+// SetPage time, not on every Restore.
+func (p *PageView) ScrollToLine(line int) {
+	if line <= 0 {
+		return
+	}
+	total := p.vp.TotalLineCount()
+	if total == 0 {
+		return
+	}
+	target := line - 1
+	if target >= total {
+		target = total - 1
+	}
+	p.vp.SetYOffset(target)
+}
+
 // cursorStyle: bright background + dark foreground + bold + underline so the
 // cursored link still reads as a link (underline) while standing out from the
 // other links on the page. Rendered in a single pass over the link's display

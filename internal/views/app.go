@@ -65,6 +65,11 @@ type historyEntry struct {
 	page   string
 	offset int
 	cursor int
+	// line is a 1-based source-line deep-link target recorded when the
+	// entry was created via navigateAt (e.g. picking a TODO from the
+	// dashboard). 0 means "no deep-link target" — Restore ignores it
+	// and the page stays at its stored offset.
+	line int
 }
 
 // New returns an App that has not yet built its index. The index is built
@@ -119,13 +124,31 @@ func (a *App) tryInitPage() {
 // history entry, any forward history is truncated, then a fresh entry for
 // the destination is pushed and becomes current.
 func (a *App) navigate(name string) {
+	a.navigateAt(name, 0)
+}
+
+// navigateAt is navigate plus a deep-link target. When targetLine > 0, the
+// new history entry stores it as the restore target and the page is
+// scrolled to that line on first display. Used by the Todos dashboard so
+// pressing Enter on a bullet lands the user on its line, not the page top.
+// Restore ignores the line — it stays a one-shot jump applied at SetPage
+// time, not a property the user can rewind into.
+func (a *App) navigateAt(name string, targetLine int) {
 	if a.histIdx >= 0 && a.histIdx < len(a.hist) {
 		a.hist[a.histIdx].offset = a.page.Offset()
 		a.hist[a.histIdx].cursor = a.page.Cursor()
 	}
-	a.hist = append(a.hist[:a.histIdx+1], historyEntry{page: name, offset: 0, cursor: -1})
+	a.hist = append(a.hist[:a.histIdx+1], historyEntry{
+		page:   name,
+		offset: 0,
+		cursor: -1,
+		line:   targetLine,
+	})
 	a.histIdx = len(a.hist) - 1
 	a.page.SetPage(name)
+	if targetLine > 0 {
+		a.page.ScrollToLine(targetLine)
+	}
 }
 
 // historyBack walks one step backward in the history stack, restoring the
@@ -261,7 +284,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if res.Accept {
 				if res.Selected != "" {
-					a.navigate(res.Selected)
+					a.navigateAt(res.Selected, res.Line)
 				}
 				a.active = nil
 			}
