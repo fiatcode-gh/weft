@@ -189,6 +189,35 @@ func TestPageFollowCursorReturnsTarget(t *testing.T) {
 	}
 }
 
+func TestPageViewRenderCacheSkipsRender(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	idx := loadFixture(t)
+	before := RenderCount()
+	a := NewPageView(idx, "Alpha", 80, 24)
+	first := RenderCount() - before
+	// Force a re-load: a SetPage on the same name should be a no-op
+	// for the cache.
+	a.SetPage("Alpha")
+	after := RenderCount() - before
+	if after != first {
+		t.Errorf("SetPage on the same page bumped render count: before=%d, after=%d", first, after)
+	}
+}
+
+func TestPageViewRendersIdenticalBodyOnRevisit(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	idx := loadFixture(t)
+	a := NewPageView(idx, "Alpha", 80, 24)
+	b := NewPageView(idx, "Beta", 80, 24)
+	c := NewPageView(idx, "Alpha", 80, 24)
+	if a.result.Styled != c.result.Styled {
+		t.Errorf("re-rendering Alpha produced different bytes")
+	}
+	_ = b
+}
+
 func TestPageLineUpDownAndHalfPageUp(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")

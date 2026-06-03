@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
@@ -11,6 +13,15 @@ import (
 	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
 	"git.fiatcode.dev/fiatcode/peekseq/internal/render"
 )
+
+// renderCount is incremented on every render.Render call inside
+// PageView. Tests assert that the per-page cache keeps it from
+// growing when re-rendering unchanged pages.
+var renderCount int64
+
+// RenderCount returns the current value of the per-page render
+// counter. Used by tests.
+func RenderCount() int64 { return renderCount }
 
 // PageView renders a single page with a wiki-link cursor.
 type PageView struct {
@@ -22,6 +33,12 @@ type PageView struct {
 	err    error
 	width  int
 	height int
+	cache  map[string]cachedPage
+}
+
+type cachedPage struct {
+	result  render.Result
+	modTime time.Time
 }
 
 func NewPageView(idx *graph.Index, page string, width, height int) *PageView {
@@ -31,6 +48,7 @@ func NewPageView(idx *graph.Index, page string, width, height int) *PageView {
 		width:  width,
 		height: height,
 		cursor: -1,
+		cache:  map[string]cachedPage{},
 		vp:     viewport.New(width, max(1, height-2)),
 	}
 	pv.load()
@@ -219,16 +237,23 @@ func (p *PageView) load() {
 	if !ok {
 		return
 	}
+	if c, hit := p.cache[meta.Name]; hit && c.modTime.Equal(meta.ModTime) {
+		p.result = c.result
+		p.vp.SetContent(p.result.Styled)
+		return
+	}
 	b, err := os.ReadFile(meta.Path)
 	if err != nil {
 		p.err = err
 		return
 	}
+	atomic.AddInt64(&renderCount, 1)
 	res, err := render.Render(strings.TrimSpace(string(b))+"\n", p.width)
 	if err != nil {
 		p.err = err
 		return
 	}
 	p.result = res
+	p.cache[meta.Name] = cachedPage{result: res, modTime: meta.ModTime}
 	p.vp.SetContent(p.result.Styled)
 }
