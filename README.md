@@ -4,7 +4,8 @@ A terminal browser for a local Logseq graph. Recency-sorted page picker, ripgrep
 
 ## Install
 
-Requires Go 1.26+ and [ripgrep](https://github.com/BurntSushi/ripgrep) on PATH.
+Requires Go 1.26+ and [ripgrep](https://github.com/BurntSushi/ripgrep) 14+ on PATH
+(the `--json` output format that the search view consumes was added in rg 14).
 
 ```bash
 go install git.fiatcode.dev/fiatcode/peekseq/cmd/peekseq@latest
@@ -71,3 +72,22 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 ## Scope
 
 Read-only. No editing, no fold/unfold, no filesystem-watch live reload (use `R`).
+
+### What is not supported
+
+A few Logseq features are intentionally out of scope for v1. None of them
+crash peekseq — they degrade to plain text or a silent no-op.
+
+- **`{{query …}}` and `{{embed …}}` blocks** are stripped from the rendered
+  page (Glamour can't render them usefully).
+- **Block references `[[page#block]]`** resolve to `page`; the `#block`
+  fragment is dropped.
+- **`alias::` / `title::` / `tags::` properties** are not extracted — they
+  appear as plain text in the page body.
+- **Case-insensitive linking** is not enforced. `[[alpha]]` on a page called
+  `Alpha` resolves correctly.
+- **`pages/` or `journals/` subdirectories** are skipped with a stderr
+  warning. Namespace pages must use the `___` filename convention.
+- **The TODO dashboard shows only open markers** (`TODO` / `LATER` /
+  `DOING` / `WAITING`). `DONE` / `CANCELED` / `NOW` bullets are styled on
+  the page but never appear in the dashboard.
