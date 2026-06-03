@@ -10,21 +10,23 @@ import (
 
 // Index is the read-only in-memory view of a Logseq graph.
 type Index struct {
-	GraphPath string
-	Pages     []PageMeta
-	ByName    map[string]*PageMeta
-	Backlinks map[string][]Ref
-	Todos     []TodoBullet
-	Journals  []string // journal page names, sorted ascending
+	GraphPath  string
+	Pages      []PageMeta
+	ByName     map[string]*PageMeta // case-preserving (filename-derived)
+	ByNameFold map[string]*PageMeta // case-folded (lowercase key) — for [[ALPHA]] → Alpha
+	Backlinks  map[string][]Ref
+	Todos      []TodoBullet
+	Journals   []string // journal page names, sorted ascending
 }
 
 // BuildIndex walks <graphPath>/pages and <graphPath>/journals once and returns
 // the populated Index. Unreadable files are logged to stderr and skipped.
 func BuildIndex(graphPath string) (*Index, error) {
 	idx := &Index{
-		GraphPath: graphPath,
-		ByName:    make(map[string]*PageMeta),
-		Backlinks: make(map[string][]Ref),
+		GraphPath:  graphPath,
+		ByName:     make(map[string]*PageMeta),
+		ByNameFold: make(map[string]*PageMeta),
+		Backlinks:  make(map[string][]Ref),
 	}
 
 	for _, sub := range []string{"pages", "journals"} {
@@ -55,7 +57,9 @@ func BuildIndex(graphPath string) (*Index, error) {
 
 	// ByName must be built after Pages is final (so pointers are stable).
 	for i := range idx.Pages {
-		idx.ByName[idx.Pages[i].Name] = &idx.Pages[i]
+		name := idx.Pages[i].Name
+		idx.ByName[name] = &idx.Pages[i]
+		idx.ByNameFold[strings.ToLower(name)] = &idx.Pages[i]
 	}
 
 	// Collect journal page names sorted ascending. Names are YYYY-MM-DD so

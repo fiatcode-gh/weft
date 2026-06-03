@@ -195,7 +195,7 @@ func (p *PageView) View() string {
 func (p *PageView) load() {
 	p.err = nil
 	p.result = render.Result{}
-	meta, ok := p.idx.ByName[p.page]
+	meta, ok := p.idx.Resolve(p.page)
 	if !ok {
 		return
 	}

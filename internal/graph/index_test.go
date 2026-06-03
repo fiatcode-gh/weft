@@ -132,6 +132,20 @@ func TestBuildIndexJournalsSorted(t *testing.T) {
 	}
 }
 
+func TestBuildIndexResolvesCaseInsensitively(t *testing.T) {
+	idx, err := BuildIndex(fixturePath(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := idx.ByNameFold["alpha"]; !ok {
+		t.Errorf("byNameFold missing 'alpha' (page is 'Alpha' in fixture)")
+	}
+	// The case-preserving name is what callers should get back.
+	if got, ok := idx.Resolve("alpha"); !ok || got.Name != "Alpha" {
+		t.Errorf("Resolve(alpha) = (%+v, %v), want Alpha/true", got, ok)
+	}
+}
+
 func TestBuildIndexJournalsEmptyWhenNoJournals(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
