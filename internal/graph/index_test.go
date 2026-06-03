@@ -137,12 +137,42 @@ func TestBuildIndexResolvesCaseInsensitively(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Fold-keyed shadow map is populated.
 	if _, ok := idx.ByNameFold["alpha"]; !ok {
 		t.Errorf("byNameFold missing 'alpha' (page is 'Alpha' in fixture)")
 	}
-	// The case-preserving name is what callers should get back.
-	if got, ok := idx.Resolve("alpha"); !ok || got.Name != "Alpha" {
-		t.Errorf("Resolve(alpha) = (%+v, %v), want Alpha/true", got, ok)
+
+	// All three case variants resolve to the same case-preserving page.
+	for _, q := range []string{"alpha", "ALPHA", "Alpha"} {
+		got, ok := idx.Resolve(q)
+		if !ok {
+			t.Errorf("Resolve(%q) = (_, false), want (_, true)", q)
+			continue
+		}
+		if got.Name != "Alpha" {
+			t.Errorf("Resolve(%q).Name = %q, want %q", q, got.Name, "Alpha")
+		}
+	}
+
+	// Missing name returns (nil, false).
+	if got, ok := idx.Resolve("does-not-exist"); ok || got != nil {
+		t.Errorf("Resolve(\"does-not-exist\") = (%+v, %v), want (nil, false)", got, ok)
+	}
+
+	// Numeric journal names are unaffected by case-folding.
+	journalPage := "2026-05-24"
+	if _, ok := idx.ByName[journalPage]; !ok {
+		if len(idx.Journals) == 0 {
+			t.Skip("no journals in fixture; skipping numeric-name assertion")
+		}
+		journalPage = idx.Journals[0]
+	}
+	got, ok := idx.Resolve(journalPage)
+	if !ok {
+		t.Errorf("Resolve(%q) = (_, false), want (_, true)", journalPage)
+	} else if got.Name != journalPage {
+		t.Errorf("Resolve(%q).Name = %q, want %q", journalPage, got.Name, journalPage)
 	}
 }
 
