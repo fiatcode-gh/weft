@@ -132,6 +132,19 @@ func leadingSpaceCount(s string) int {
 	return n
 }
 
+func TestRenderPageBlockRefBecomesLink(t *testing.T) {
+	res, err := Render("see [[Alpha#summary]] for the upshot\n", 80)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Links) != 1 {
+		t.Fatalf("want 1 link, got %d (%+v)", len(res.Links), res.Links)
+	}
+	if res.Links[0].Target != "Alpha" {
+		t.Errorf("target = %q, want Alpha", res.Links[0].Target)
+	}
+}
+
 func TestRenderTaskMarkersSurviveStyling(t *testing.T) {
 	body := strings.Join([]string{
 		"- TODO Buy milk",

@@ -187,6 +187,10 @@ func preprocessWikiLinks(body string) (string, []linkSubst) {
 			rewritten := wikiLinkRe.ReplaceAllStringFunc(line, func(match string) string {
 				m := wikiLinkRe.FindStringSubmatch(match)
 				target := m[1]
+				// Strip optional #block fragment: [[Alpha#summary]] -> "Alpha".
+				if i := strings.IndexByte(target, '#'); i >= 0 {
+					target = target[:i]
+				}
 				display := target
 				if m[2] != "" {
 					display = m[2]

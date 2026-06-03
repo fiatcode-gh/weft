@@ -41,7 +41,15 @@ func ExtractWikiLinks(body string) []LinkHit {
 			continue
 		}
 		for _, m := range wikiLinkRe.FindAllStringSubmatch(line, -1) {
-			out = append(out, LinkHit{Target: strings.TrimSpace(m[1]), Line: i + 1})
+			raw := strings.TrimSpace(m[1])
+			// Strip optional #block fragment: [[Alpha#summary]] -> "Alpha".
+			if i := strings.IndexByte(raw, '#'); i >= 0 {
+				raw = raw[:i]
+			}
+			if raw == "" {
+				continue
+			}
+			out = append(out, LinkHit{Target: raw, Line: i + 1})
 		}
 	}
 	return out
