@@ -206,3 +206,11 @@ func TestRenderTaskMarkersSurviveStyling(t *testing.T) {
 		}
 	}
 }
+
+func TestWarmupDoesNotPanic(t *testing.T) {
+	// Warmup is paid once at process start so the first page render inside
+	// the TUI doesn't pay chroma's init cost. Calling it more than once is
+	// safe and is a no-op against the renderer cache.
+	Warmup()
+	Warmup()
+}
