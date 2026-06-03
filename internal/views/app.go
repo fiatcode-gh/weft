@@ -193,6 +193,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m := msg.(type) {
 	case indexLoadedMsg:
 		if m.err != nil {
+			if a.page != nil {
+				// Mid-session reindex failed — keep the old index and
+				// tell the user via a hint. The working page stays on
+				// screen; the boot path (a.page == nil) still surfaces
+				// the splash so the user can retry.
+				return a, a.setHint("reindex failed: " + m.err.Error())
+			}
 			a.loadErr = m.err
 			return a, nil
 		}

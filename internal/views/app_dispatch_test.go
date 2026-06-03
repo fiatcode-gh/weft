@@ -110,6 +110,29 @@ func TestAppRetryFromErrorSplash(t *testing.T) {
 	}
 }
 
+// TestAppMidSessionReindexFailureKeepsPage pins the parallel mid-session
+// behaviour: when a reindex fails while the user already has a page on
+// screen, the page must stay visible. The error should surface as a
+// transient status hint, not a splash that replaces the working view.
+// (The boot path, by contrast, does show the splash — covered by
+// TestAppRetryFromErrorSplash above.)
+func TestAppMidSessionReindexFailureKeepsPage(t *testing.T) {
+	a := bootApp(t)
+	bootPage := a.page.Page()
+	// Simulate the R-then-fail path: the keypress schedules a reindex
+	// (cmd is irrelevant — the test synthesises the response below).
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
+	a.Update(indexLoadedMsg{err: errors.New("disk full")})
+
+	view := a.View()
+	if strings.Contains(view, "failed to index") {
+		t.Errorf("replaced the working page with the error splash:\n%s", view)
+	}
+	if !strings.Contains(view, bootPage) {
+		t.Errorf("expected boot page %q in the view, got:\n%s", bootPage, view)
+	}
+}
+
 func TestAppQuitsBeforePage(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
