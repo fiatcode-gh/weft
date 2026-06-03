@@ -32,3 +32,16 @@ func IsJournalFilename(name string) bool {
 func IsJournalPageName(name string) bool {
 	return journalPageNameRe.MatchString(name)
 }
+
+// Resolve returns the page whose name matches name exactly, or whose
+// case-folded form matches name's lower-case. The case-preserving
+// PageMeta is always returned, so callers see the on-disk name.
+func (idx *Index) Resolve(name string) (*PageMeta, bool) {
+	if p, ok := idx.ByName[name]; ok {
+		return p, true
+	}
+	if p, ok := idx.ByNameFold[strings.ToLower(name)]; ok {
+		return p, true
+	}
+	return nil, false
+}

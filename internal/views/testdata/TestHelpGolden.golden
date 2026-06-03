@@ -1,0 +1,36 @@
+╭─────────────────────────────────────────────╮
+│  Keys                                       │
+│                                             │
+│  Browse                                     │
+│    j / k     scroll one line                │
+│    ctrl-d    half page down                 │
+│    ctrl-u    half page up                   │
+│    g / G     top / bottom                   │
+│                                             │
+│  Links                                      │
+│    n / N     next / previous wiki-link      │
+│    enter     follow link under cursor       │
+│                                             │
+│  History                                    │
+│    [         back                           │
+│    ]         forward                        │
+│                                             │
+│  Open                                       │
+│    .         today's journal                │
+│    <         previous journal               │
+│    >         next journal                   │
+│    ctrl-p    picker — find any page         │
+│    /         search the graph (ripgrep)     │
+│    b         backlinks to the current page  │
+│    T         open todos dashboard           │
+│                                             │
+│  Maintain                                   │
+│    R         rebuild index                  │
+│                                             │
+│  Help / quit                                │
+│    ?         toggle this help               │
+│    esc       close overlay                  │
+│    q         quit                           │
+│                                             │
+│  ? or esc to close          peekseq v1.0.0  │
+╰─────────────────────────────────────────────╯

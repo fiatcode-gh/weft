@@ -29,6 +29,44 @@ func TestPickerFiltersOnQuery(t *testing.T) {
 	teatest.RequireEqualOutput(t, []byte(p.View()))
 }
 
+func TestRelativeTimeHints(t *testing.T) {
+	// Anchor "now" at a fixed mid-month, mid-day point so the day-arithmetic
+	// inside relativeTime is unambiguous regardless of when the test runs.
+	now := time.Date(2026, time.May, 25, 12, 0, 0, 0, time.UTC)
+	d := func(year, month, day int) time.Time {
+		return time.Date(year, time.Month(month), day, 12, 0, 0, 0, time.UTC)
+	}
+	cases := []struct {
+		name string
+		then time.Time
+		want string
+	}{
+		{"zero value suppressed", time.Time{}, ""},
+		{"today", d(2026, 5, 25), "today"},
+		{"yesterday", d(2026, 5, 24), "yesterday"},
+		{"3 days ago", d(2026, 5, 22), "3 days ago"},
+		{"last week", d(2026, 5, 18), "last week"},
+		{"2 weeks ago", d(2026, 5, 11), "2 weeks ago"},
+		{"3 weeks ago", d(2026, 5, 4), "3 weeks ago"},
+		{"2 months ago", d(2026, 3, 25), "2 months ago"},
+		{"last year", d(2025, 5, 25), "last year"},
+		{"3 years ago", d(2023, 5, 25), "3 years ago"},
+		{"tomorrow", d(2026, 5, 26), "tomorrow"},
+		{"in 3 days", d(2026, 5, 28), "in 3 days"},
+		{"next week", d(2026, 6, 1), "next week"},
+		{"in 3 weeks", d(2026, 6, 15), "in 3 weeks"},
+		{"in 2 months", d(2026, 7, 25), "in 2 months"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := relativeTime(now, c.then); got != c.want {
+				t.Errorf("relativeTime(now=%v, then=%v) = %q, want %q",
+					now, c.then, got, c.want)
+			}
+		})
+	}
+}
+
 func TestConsumeKeyAppendsRune(t *testing.T) {
 	ti := textinput.New()
 	ti, ok := consumeKey(ti, "x")

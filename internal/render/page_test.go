@@ -132,6 +132,63 @@ func leadingSpaceCount(s string) int {
 	return n
 }
 
+func TestRenderPageBlockRefBecomesLink(t *testing.T) {
+	res, err := Render("see [[Alpha#summary]] for the upshot\n", 80)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Links) != 1 {
+		t.Fatalf("want 1 link, got %d (%+v)", len(res.Links), res.Links)
+	}
+	if res.Links[0].Target != "Alpha" {
+		t.Errorf("target = %q, want Alpha", res.Links[0].Target)
+	}
+}
+
+func TestRenderPageBlockRefWithAlias(t *testing.T) {
+	res, err := Render("see [[Alpha#summary|the summary]] for context\n", 80)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Links) != 1 {
+		t.Fatalf("want 1 link, got %d (%+v)", len(res.Links), res.Links)
+	}
+	if res.Links[0].Target != "Alpha" {
+		t.Errorf("target = %q, want Alpha", res.Links[0].Target)
+	}
+	if res.Links[0].Display != "the summary" {
+		t.Errorf("display = %q, want 'the summary'", res.Links[0].Display)
+	}
+}
+
+func TestRenderPageEmptyBlockFragmentIsNotALink(t *testing.T) {
+	res, err := Render("anchor: [[#summary]] here\n", 80)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Links) != 0 {
+		t.Errorf("want 0 links for [[#anchor]], got %d (%+v)", len(res.Links), res.Links)
+	}
+}
+
+func TestRenderPageStripsQueryAndEmbedBlocks(t *testing.T) {
+	body := "before\n{{query (and [[tag]] )}}\nstill query\n}}\nafter\n{{embed [[Other]]}}\n"
+	res, err := Render(body, 80)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain := ansi.Strip(res.Styled)
+	if strings.Contains(plain, "{{query") {
+		t.Errorf("query block leaked into output:\n%s", plain)
+	}
+	if strings.Contains(plain, "{{embed") {
+		t.Errorf("embed block leaked into output:\n%s", plain)
+	}
+	if !strings.Contains(plain, "before") || !strings.Contains(plain, "after") {
+		t.Errorf("surrounding text dropped:\n%s", plain)
+	}
+}
+
 func TestRenderTaskMarkersSurviveStyling(t *testing.T) {
 	body := strings.Join([]string{
 		"- TODO Buy milk",
@@ -148,4 +205,12 @@ func TestRenderTaskMarkersSurviveStyling(t *testing.T) {
 			t.Errorf("missing marker %q in stripped output: %q", marker, plain)
 		}
 	}
+}
+
+func TestWarmupDoesNotPanic(t *testing.T) {
+	// Warmup is paid once at process start so the first page render inside
+	// the TUI doesn't pay chroma's init cost. Calling it more than once is
+	// safe and is a no-op against the renderer cache.
+	Warmup()
+	Warmup()
 }

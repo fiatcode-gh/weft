@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/exp/teatest"
 )
 
 func TestNewHelpRendersVersion(t *testing.T) {
@@ -65,5 +66,39 @@ func TestHelpZeroWidthDisablesClamp(t *testing.T) {
 	}
 	if max < 30 {
 		t.Errorf("width=0 should keep content-sized panel; max line width %d looks clamped", max)
+	}
+}
+
+func TestHelpGolden(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	h := NewHelp("v1.0.0", 80)
+	teatest.RequireEqualOutput(t, []byte(h.View()))
+}
+
+func TestHelpSetSizeUpdatesWidth(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	h := NewHelp("v1.0.0", 80)
+	h.SetSize(30, 10) // shrink below natural content width
+	for _, line := range strings.Split(h.View(), "\n") {
+		if lipgloss.Width(line) > 30 {
+			t.Errorf("after SetSize(30,_) line exceeds 30: w=%d line=%q",
+				lipgloss.Width(line), line)
+		}
+	}
+}
+
+func TestHelpQClosesOverlay(t *testing.T) {
+	h := NewHelp("v1.0.0", 80)
+	if res := h.Update("q"); !res.Cancel {
+		t.Errorf("q should close the help overlay; got %+v", res)
+	}
+}
+
+func TestHelpUnboundKeyIsNoop(t *testing.T) {
+	h := NewHelp("v1.0.0", 80)
+	if res := h.Update("x"); res.Accept || res.Cancel {
+		t.Errorf("unbound key should be a no-op; got %+v", res)
 	}
 }

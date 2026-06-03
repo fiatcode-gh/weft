@@ -39,6 +39,7 @@ var (
 	taskMarkerRe   = regexp.MustCompile(`^(\s*-\s+)(TODO|DOING|LATER|WAITING|DONE|CANCELED|CANCELLED|NOW)\b`)
 	logbookStartRe = regexp.MustCompile(`(?i)^\s*:LOGBOOK:\s*$`)
 	logbookEndRe   = regexp.MustCompile(`(?i)^\s*:END:\s*$`)
+	queryOrEmbedRe = regexp.MustCompile(`(?i)^\s*\{\{(query|embed)\b`)
 )
 
 var linkStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Underline(true)
@@ -163,6 +164,41 @@ func stripLogbookBlocks(body string) string {
 	return out.String()
 }
 
+// stripQueryAndEmbedBlocks drops Logseq {{query …}} and {{embed …}}
+// blocks. Each block is delimited by an opening `{{query` / `{{embed`
+// at the start of a line and a closing `}}` on its own line. Fence-aware
+// so a code block containing the literal markers stays intact.
+func stripQueryAndEmbedBlocks(body string) string {
+	var out strings.Builder
+	out.Grow(len(body))
+	lines := strings.Split(body, "\n")
+	inFence := false
+	inBlock := false
+	for i, line := range lines {
+		switch {
+		case fenceRe.MatchString(line):
+			inFence = !inFence
+			out.WriteString(line)
+		case inFence:
+			out.WriteString(line)
+		case !inBlock && queryOrEmbedRe.MatchString(line):
+			inBlock = true
+			continue // drop the opening line
+		case inBlock:
+			if strings.TrimSpace(line) == "}}" {
+				inBlock = false
+			}
+			continue
+		default:
+			out.WriteString(line)
+		}
+		if i < len(lines)-1 {
+			out.WriteByte('\n')
+		}
+	}
+	return out.String()
+}
+
 // preprocessWikiLinks replaces non-fenced [[X]] and [[X|alias]] occurrences
 // in body with sentinels that survive Glamour rendering. Returns the rewritten
 // body and a slice of substitutions indexed by the id encoded in each sentinel.
@@ -187,6 +223,17 @@ func preprocessWikiLinks(body string) (string, []linkSubst) {
 			rewritten := wikiLinkRe.ReplaceAllStringFunc(line, func(match string) string {
 				m := wikiLinkRe.FindStringSubmatch(match)
 				target := m[1]
+				// Strip optional #block fragment: [[Alpha#summary]] -> "Alpha".
+				if i := strings.IndexByte(target, '#'); i >= 0 {
+					target = target[:i]
+				}
+				if target == "" {
+					// No page name (e.g. [[#anchor]] or [[#]]) — leave the
+					// literal text in the output so the view layer doesn't see
+					// a phantom link with an empty target. Mirrors the empty-
+					// target guard in internal/graph/parse.go.
+					return match
+				}
 				display := target
 				if m[2] != "" {
 					display = m[2]
@@ -318,6 +365,7 @@ func substituteTaskSentinels(styled string, markers []string) string {
 // width is the target terminal column count.
 func Render(body string, width int) (Result, error) {
 	body = stripLogbookBlocks(body)
+	body = stripQueryAndEmbedBlocks(body)
 	pre, wikiSubs := preprocessWikiLinks(body)
 	pre, taskMarkers := preprocessTaskMarkers(pre)
 

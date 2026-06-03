@@ -20,6 +20,20 @@ func TestExtractWikiLinks(t *testing.T) {
 	}
 }
 
+func TestExtractWikiLinksStripsBlockFragment(t *testing.T) {
+	body := "intro\n[[Alpha#summary]]\n[[proj/nested#intro]]\n"
+	hits := ExtractWikiLinks(body)
+	if len(hits) != 2 {
+		t.Fatalf("want 2 hits, got %d (%+v)", len(hits), hits)
+	}
+	if hits[0].Target != "Alpha" || hits[0].Line != 2 {
+		t.Errorf("hit 0 = %+v, want {Alpha 2}", hits[0])
+	}
+	if hits[1].Target != "proj/nested" || hits[1].Line != 3 {
+		t.Errorf("hit 1 = %+v, want {proj/nested 3}", hits[1])
+	}
+}
+
 func TestExtractTodos(t *testing.T) {
 	body := "- TODO Buy milk\n" +
 		"- LATER [#A] Review the doc\n" +
