@@ -39,7 +39,11 @@ func BuildIndex(graphPath string) (*Index, error) {
 			return nil, fmt.Errorf("read %s: %w", dir, err)
 		}
 		for _, e := range entries {
-			if e.IsDir() || filepath.Ext(e.Name()) != ".md" {
+			if e.IsDir() {
+				fmt.Fprintf(os.Stderr, "peekseq: skipping subdirectory %s (peekseq does not recurse — use the ___ namespace convention instead)\n", filepath.Join(dir, e.Name()))
+				continue
+			}
+			if filepath.Ext(e.Name()) != ".md" {
 				continue
 			}
 			path := filepath.Join(dir, e.Name())

@@ -1,9 +1,11 @@
 package graph
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -191,5 +193,41 @@ func TestBuildIndexJournalsEmptyWhenNoJournals(t *testing.T) {
 	}
 	if len(idx.Journals) != 0 {
 		t.Errorf("Journals: want empty slice, got %v", idx.Journals)
+	}
+}
+
+func TestBuildIndexWarnsOnSubdirectory(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "pages", "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pages", "Alpha.md"), []byte("# Alpha\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pages", "sub", "nested.md"), []byte("# nested\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStderr := os.Stderr
+	os.Stderr = w
+	defer func() { os.Stderr = oldStderr }()
+
+	idx, err := BuildIndex(dir)
+	w.Close()
+	out, _ := io.ReadAll(r)
+	os.Stderr = oldStderr
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(idx.Pages) != 1 {
+		t.Errorf("want 1 page (the subdir file is skipped), got %d", len(idx.Pages))
+	}
+	if !strings.Contains(string(out), "skipping subdirectory") {
+		t.Errorf("expected subdirectory warning on stderr, got:\n%s", out)
 	}
 }
