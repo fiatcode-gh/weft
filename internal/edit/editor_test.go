@@ -2,6 +2,8 @@ package edit
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -77,4 +79,62 @@ func TestResolve(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestEnsureFile(t *testing.T) {
+	t.Run("missing file is created empty", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "new.md")
+
+		created, err := EnsureFile(path)
+		if err != nil {
+			t.Fatalf("EnsureFile: %v", err)
+		}
+		if !created {
+			t.Errorf("want created=true, got false")
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat: %v", err)
+		}
+		if info.Size() != 0 {
+			t.Errorf("want empty file, got %d bytes", info.Size())
+		}
+		if info.Mode().Perm() != 0o644 {
+			t.Errorf("want mode 0o644, got %v", info.Mode().Perm())
+		}
+	})
+
+	t.Run("existing file is left alone", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "existing.md")
+		if err := os.WriteFile(path, []byte("hello\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		before, _ := os.Stat(path)
+
+		created, err := EnsureFile(path)
+		if err != nil {
+			t.Fatalf("EnsureFile: %v", err)
+		}
+		if created {
+			t.Errorf("want created=false, got true")
+		}
+		after, _ := os.Stat(path)
+		if before.ModTime() != after.ModTime() {
+			t.Errorf("mtime changed: before=%v after=%v", before.ModTime(), after.ModTime())
+		}
+		body, _ := os.ReadFile(path)
+		if string(body) != "hello\n" {
+			t.Errorf("content changed: got %q", body)
+		}
+	})
+
+	t.Run("path is a directory — error", func(t *testing.T) {
+		dir := t.TempDir()
+		_, err := EnsureFile(dir)
+		if err == nil {
+			t.Errorf("want error, got nil")
+		}
+	})
 }

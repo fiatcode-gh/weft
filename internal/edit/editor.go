@@ -5,6 +5,8 @@ package edit
 
 import (
 	"errors"
+	"fmt"
+	"os"
 )
 
 // Env carries the configuration the editor-resolver reads. Decoupled
@@ -44,4 +46,26 @@ func Resolve(env Env, lookPath func(string) (string, error)) (Resolved, error) {
 		return Resolved{Binary: path}, nil
 	}
 	return Resolved{}, errNoEditor
+}
+
+// EnsureFile creates an empty file at path with mode 0o644 if it does
+// not exist. Returns (true, nil) on create, (false, nil) if the file
+// already existed, or (false, err) for any other stat/write failure
+// (including the case where path resolves to a directory).
+// This is the create-today-journal hook.
+func EnsureFile(path string) (created bool, err error) {
+	info, err := os.Stat(path)
+	if err == nil {
+		if info.IsDir() {
+			return false, fmt.Errorf("ensure %s: is a directory", path)
+		}
+		return false, nil
+	}
+	if !os.IsNotExist(err) {
+		return false, err
+	}
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		return false, err
+	}
+	return true, nil
 }
