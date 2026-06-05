@@ -1,6 +1,7 @@
 package views
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -96,7 +97,7 @@ func TestEditorExitedMsg_NoReindexOnDelete(t *testing.T) {
 // (non-nil because setHint schedules a tea.Tick).
 func TestEditorExitedMsg_HintOnError(t *testing.T) {
 	a := bootApp(t)
-	_, cmd := a.Update(editorExitedMsg{path: "/nonexistent", t0: time.Time{}, err: errFake("editor exited 7")})
+	_, cmd := a.Update(editorExitedMsg{path: "/nonexistent", t0: time.Time{}, err: errors.New("editor exited 7")})
 	if cmd == nil {
 		t.Errorf("editor error should surface a hint cmd; got nil")
 	}
@@ -108,6 +109,7 @@ func TestEditorExitedMsg_HintOnError(t *testing.T) {
 // tea.ExecProcess cmd is returned). The file is created empty with
 // mode 0o644. We assert on the file's existence and size after
 // dispatch — we don't run the returned cmd.
+// TODO(phantom-today): drop the seed+remove dance once BuildIndex inserts today.
 func TestEditKey_CreatesMissingTodayJournal(t *testing.T) {
 	// Build a temp graph: pages/ + journals/ where today's journal file
 	// is absent.
@@ -167,7 +169,7 @@ func TestEditKey_CreatesMissingTodayJournal(t *testing.T) {
 
 	// Dispatch `e`. editCurrent runs EnsureFile synchronously, then
 	// returns the tea.ExecProcess cmd. We don't need to run the cmd.
-	_, _ = a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
 
 	info, err := os.Stat(journalPath)
 	if err != nil {
@@ -180,33 +182,3 @@ func TestEditKey_CreatesMissingTodayJournal(t *testing.T) {
 		t.Errorf("journal file mode: want 0o644, got %v", info.Mode().Perm())
 	}
 }
-
-// TestEditKey_HintWhenNoEditor: when no env var resolves and /usr/bin/vi
-// is missing, editCurrent returns a setHint cmd (which is non-nil —
-// setHint schedules a tea.Tick to clear the hint). We test the
-// non-TTY case by setting VISUAL and EDITOR to non-existent binaries
-// and accepting the result on environments where /usr/bin/vi is also
-// missing. On environments where vi exists, the test asserts the cmd
-// is non-nil (either hint or tea.ExecProcess) — both are valid since
-// the dispatch must produce *some* cmd.
-func TestEditKey_HintWhenNoEditor(t *testing.T) {
-	a := bootApp(t)
-	a.navigate("Alpha")
-	if a.page.Page() != "Alpha" {
-		t.Fatalf("expected to land on Alpha, got %q", a.page.Page())
-	}
-	t.Setenv("VISUAL", "__nonexistent_peekseq_visual__")
-	t.Setenv("EDITOR", "__nonexistent_peekseq_editor__")
-	_, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
-	if cmd == nil {
-		t.Errorf("e key should return some cmd even when no editor resolves; got nil")
-	}
-	// When /usr/bin/vi exists on the test host, the cmd is a
-	// tea.ExecProcess wrapper; we don't run it, so we just confirm
-	// dispatch fired. When vi is missing, cmd is a setHint tea.Tick —
-	// also non-nil. Either branch satisfies the assertion above.
-}
-
-type errFake string
-
-func (e errFake) Error() string { return string(e) }

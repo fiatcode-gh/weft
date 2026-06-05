@@ -224,7 +224,7 @@ func (a *App) editCurrent() tea.Cmd {
 		exec.LookPath,
 	)
 	if err != nil {
-		return a.setHint(err.Error())
+		return a.setHint("cannot resolve editor: " + err.Error())
 	}
 
 	return tea.ExecProcess(exec.Command(resolved.Binary, path), func(cmdErr error) tea.Msg {
