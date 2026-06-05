@@ -2,6 +2,8 @@ package views
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"sort"
 	"strings"
 	"time"
@@ -9,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"git.fiatcode.dev/fiatcode/peekseq/internal/edit"
 	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
 )
 
@@ -16,6 +19,16 @@ import (
 type indexLoadedMsg struct {
 	idx *graph.Index
 	err error
+}
+
+// editorExitedMsg is delivered when the child editor process returns.
+// path is the file we handed to the editor; t0 is the pre-edit mtime
+// snapshot (zero if the file did not exist before EnsureFile ran).
+// err is non-nil when the editor exited non-zero or failed to launch.
+type editorExitedMsg struct {
+	path string
+	t0   time.Time
+	err  error
 }
 
 // hintTTL is how long a status-bar hint stays before fading on its own.
@@ -181,6 +194,44 @@ func (a *App) historyForward() {
 	a.page.Restore(target.offset, target.cursor)
 }
 
+// editCurrent snapshots the current page's file mtime, ensures the
+// file exists (creating an empty one for today's journal if needed),
+// resolves the user's editor, and returns a tea.ExecProcess cmd that
+// hands the file off. The child editor's exit yields an
+// editorExitedMsg, which the Update case below mtime-gates against a
+// reindex.
+func (a *App) editCurrent() tea.Cmd {
+	page := a.page.Page()
+	meta, ok := a.idx.ByName[page]
+	if !ok {
+		return a.setHint("page not in index: " + page)
+	}
+	path := meta.Path
+
+	t0, statErr := edit.SnapshotMtime(path)
+	if statErr != nil && !os.IsNotExist(statErr) {
+		return a.setHint("cannot stat: " + statErr.Error())
+	}
+
+	if t0.IsZero() {
+		if _, err := edit.EnsureFile(path); err != nil {
+			return a.setHint("cannot create journal: " + err.Error())
+		}
+	}
+
+	resolved, err := edit.Resolve(
+		edit.Env{Visual: os.Getenv("VISUAL"), Editor: os.Getenv("EDITOR")},
+		exec.LookPath,
+	)
+	if err != nil {
+		return a.setHint(err.Error())
+	}
+
+	return tea.ExecProcess(exec.Command(resolved.Binary, path), func(cmdErr error) tea.Msg {
+		return editorExitedMsg{path: path, t0: t0, err: cmdErr}
+	})
+}
+
 // journalNeighbor returns the closest existing journal in a.idx.Journals in
 // direction dir (-1 prev, +1 next) given that current is a journal-shaped
 // name (YYYY-MM-DD).
@@ -241,6 +292,21 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			s.Apply(m)
 		}
 		return a, nil
+	case editorExitedMsg:
+		if m.err != nil {
+			return a, a.setHint("editor exited: " + m.err.Error())
+		}
+		info, err := os.Stat(m.path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return a, nil
+			}
+			return a, a.setHint("cannot stat: " + err.Error())
+		}
+		if info.ModTime().Equal(m.t0) {
+			return a, nil
+		}
+		return a, a.buildIndexCmd()
 	case hintExpireMsg:
 		if m.gen == a.hintGen {
 			a.hint = ""
@@ -337,6 +403,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// rebuilds PageView for the current page. Errors surface in
 			// loadErr which the splash overlay renders.
 			return a, a.buildIndexCmd()
+		case "e":
+			return a, a.editCurrent()
 		case "n":
 			a.page.CycleLink(+1)
 		case "N":
