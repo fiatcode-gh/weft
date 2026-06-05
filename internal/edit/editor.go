@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 )
 
 // Env carries the configuration the editor-resolver reads. Decoupled
@@ -68,4 +69,17 @@ func EnsureFile(path string) (created bool, err error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// SnapshotMtime returns the file's modification time, or time.Time{}
+// (the zero value) if the file does not exist. The zero return is
+// load-bearing: it lets the caller distinguish "the file was just
+// created by EnsureFile" (t0 == 0) from "the file was on disk before
+// the user pressed e" (t0 > 0).
+func SnapshotMtime(path string) (time.Time, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return info.ModTime(), nil
 }

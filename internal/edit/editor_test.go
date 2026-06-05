@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // fakeLookPath returns a lookPath that resolves a fixed set of names and
@@ -135,6 +136,60 @@ func TestEnsureFile(t *testing.T) {
 		_, err := EnsureFile(dir)
 		if err == nil {
 			t.Errorf("want error, got nil")
+		}
+	})
+}
+
+func TestSnapshotMtime(t *testing.T) {
+	t.Run("existing file returns ModTime", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "page.md")
+		if err := os.WriteFile(path, []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		got, err := SnapshotMtime(path)
+		if err != nil {
+			t.Fatalf("SnapshotMtime: %v", err)
+		}
+		if got.IsZero() {
+			t.Errorf("want non-zero mtime, got zero")
+		}
+	})
+
+	t.Run("missing file returns zero mtime and ENOENT", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "nope.md")
+		got, err := SnapshotMtime(path)
+		if !os.IsNotExist(err) {
+			t.Errorf("want ENOENT, got %v", err)
+		}
+		if !got.IsZero() {
+			t.Errorf("want zero mtime, got %v", got)
+		}
+	})
+
+	t.Run("mtime advances after write", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "page.md")
+		if err := os.WriteFile(path, []byte("a\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		first, err := SnapshotMtime(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Sleep just past the filesystem mtime resolution (most are
+		// 1s on Linux ext4, 1ns on tmpfs; 10ms is a safe margin).
+		time.Sleep(10 * time.Millisecond)
+		if err := os.WriteFile(path, []byte("bb\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		second, err := SnapshotMtime(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !second.After(first) {
+			t.Errorf("want second > first; first=%v second=%v", first, second)
 		}
 	})
 }
