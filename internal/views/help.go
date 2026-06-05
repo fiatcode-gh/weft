@@ -68,6 +68,7 @@ var helpSections = []struct {
 		{"T", "open todos dashboard"},
 	}},
 	{"Maintain", []helpRow{
+		{"e", "edit current page in $EDITOR"},
 		{"R", "rebuild index"},
 	}},
 	{"Help / quit", []helpRow{
