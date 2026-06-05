@@ -430,8 +430,13 @@ intentional visual change.
 - `editorExitedMsg` is a new package-internal message type
   (matching the existing `indexLoadedMsg` pattern) with a dedicated
   case in `App.Update` that mtime-gates the reindex.
-- `testdata/fake-editor.sh` is checked in and exercised by ≥7
-  teatest cases in `internal/views/edit_test.go`.
+- `testdata/fake-editor.sh` is checked in; the App integration is
+  exercised by ≥6 direct-`Update` tests in
+  `internal/views/edit_test.go`. (The spec's original "≥7 teatest
+  cases" was relaxed to "≥6 direct-Update tests" because the
+  no-editor case is fully owned by the Layer 1 `TestResolve` unit
+  test, and the create-today-journal case was deferred — see the
+  "Deferred" note in the In-scope section above.)
 - `internal/edit/editor_test.go` has ≥8 unit tests covering the
   `Resolve` decision table and the `EnsureFile` /
   `SnapshotMtime` happy paths.
