@@ -73,9 +73,10 @@ func EnsureFile(path string) (created bool, err error) {
 
 // SnapshotMtime returns the file's modification time, or time.Time{}
 // (the zero value) if the file does not exist. The zero return is
-// load-bearing: it lets the caller distinguish "the file was just
-// created by EnsureFile" (t0 == 0) from "the file was on disk before
-// the user pressed e" (t0 > 0).
+// load-bearing: t0.IsZero() means the file was absent at snapshot
+// time, which tells the caller (the App's editCurrent) that it
+// should create the file before handing it to the editor. A non-zero
+// t0 means the file was on disk before the user pressed e.
 func SnapshotMtime(path string) (time.Time, error) {
 	info, err := os.Stat(path)
 	if err != nil {

@@ -178,8 +178,8 @@ func TestSnapshotMtime(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// Sleep just past the filesystem mtime resolution (most are
-		// 1s on Linux ext4, 1ns on tmpfs; 10ms is a safe margin).
+		// Sleep just past the filesystem mtime resolution (1s on
+		// FAT/vfat, 1ns on ext4/tmpfs/APFS; 10ms is a safe margin).
 		time.Sleep(10 * time.Millisecond)
 		if err := os.WriteFile(path, []byte("bb\n"), 0o644); err != nil {
 			t.Fatal(err)
