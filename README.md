@@ -1,6 +1,6 @@
-# peekseq — a read-only Logseq TUI
+# peekseq — a Logseq TUI
 
-A terminal browser for a local Logseq graph. Recency-sorted page picker, ripgrep-backed full-text search, backlinks, and a TODO dashboard. Renders pages with hanging-indent bullets, coloured workflow markers (TODO/DOING/LATER/WAITING/DONE/CANCELED/NOW), and highlighted wiki-links you can step through. Never writes to the graph.
+A terminal browser for a local Logseq graph. Recency-sorted page picker, ripgrep-backed full-text search, backlinks, and a TODO dashboard. Renders pages with hanging-indent bullets, coloured workflow markers (TODO/DOING/LATER/WAITING/DONE/CANCELED/NOW), and highlighted wiki-links you can step through. Press `e` to edit the current page in your `$EDITOR` — peekseq is otherwise read-only.
 
 ## Install
 
@@ -49,6 +49,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | `Ctrl-d/u` | half-page scroll                    |
 | `g` / `G`  | jump to top / bottom of page        |
 | `R`        | rebuild the index                   |
+| `e`        | edit current page in `$EDITOR`      |
 | `Esc`      | close an overlay                    |
 | `q`        | quit (from page view)               |
 
@@ -71,7 +72,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 
 ## Scope
 
-Read-only. No editing, no fold/unfold, no filesystem-watch live reload (use `R`).
+Read-only except for the `e` key, which hands the current page's file to `$EDITOR`. No fold/unfold, no filesystem-watch live reload (use `R`).
 
 ### What is not supported
 

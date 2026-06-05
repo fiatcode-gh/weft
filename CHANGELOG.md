@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Hand off the current page to `$VISUAL` / `$EDITOR` / `vi` with the
+  `e` key. mtime-gated reindex on return. The only disk-writing
+  surface in the project is the new `internal/edit` package; the
+  read-only invariant is otherwise unchanged.
+
 ## [1.0.1] - 2026-06-03
 
 ### Fixed

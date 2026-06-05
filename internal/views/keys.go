@@ -9,6 +9,7 @@ const (
 	keyEnter     = "enter"
 	keyUp        = "up"
 	keyDown      = "down"
+	keyE         = "e"
 	keyK         = "k"
 	keyJ         = "j"
 	keyCtrlK     = "ctrl+k"

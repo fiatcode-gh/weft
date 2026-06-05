@@ -25,12 +25,26 @@ package.
 
 - `e` key in the page view → suspend the TUI, run the editor on the
   current page's `.md` file, resume, mtime-gated reindex.
-- Today-journal create-on-edit: if today's journal page is shaped as a
-  journal name but the file does not exist on disk, `e` creates an empty
-  file in the `journals/` directory and hands *that* to the editor.
 - Status-bar hints for editor failures (missing binary, non-zero exit,
   post-edit stat failure).
 - Mtime-based change detection: no reindex when the file is unchanged.
+
+**Deferred (will be revisited in a follow-up PR)**
+
+- *Today-journal create-on-edit from the `e` key.* The spec initially
+  called for `e` to create today's journal file when it doesn't exist
+  on disk yet. Implementation surfaced a pre-existing limitation: the
+  `.` (today's journal jump) and `e` (edit current page) handlers
+  both require the page to be in `a.idx.ByName`, and `BuildIndex`
+  only lists pages whose files exist on disk. So a user whose
+  journal file for today has never been created cannot reach
+  today's journal via `.` (existing `setHint("no journal for
+  <today>")` fires), and the create-on-edit branch in `editCurrent`
+  is currently unreachable from the UI. The `EnsureFile` function
+  and the `editCurrent` create branch are kept (correct in
+  isolation; a unit test exercises them) and will become reachable
+  once a follow-up PR adds a phantom-today entry to `BuildIndex` (or
+  modifies the `.` handler to create the file when missing).
 
 **Out of scope (YAGNI)**
 
@@ -45,6 +59,8 @@ package.
   read-only when no editor is installed).
 - A bundled modal-overlay confirmation step before launching the
   editor. The `e` key is consent enough.
+- Phantom-today entry in `BuildIndex` (or `.`-key auto-create) — see
+  the "Deferred" note above. Tracked as a follow-up.
 
 ## Architecture
 
@@ -125,9 +141,7 @@ case "e":
 **`App.editCurrent()`** — the orchestrator:
 
 1. `page := a.page.Page()` — the page the user is looking at.
-2. `path := a.idx.ByName[page].Path` — file path; for today's journal
-   create-on-edit the index entry exists (the boot path always inserts
-   today) but the file may not.
+2. `path := a.idx.ByName[page].Path` — file path.
 3. `t0, statErr := edit.SnapshotMtime(path)`.
    - If `statErr` is non-nil and is *not* `os.IsNotExist` (e.g.
      EACCES on the parent directory), bail with `setHint("cannot
@@ -137,8 +151,8 @@ case "e":
 4. If `t0.IsZero()`: `edit.EnsureFile(path)`. On error → `setHint`
    "cannot create journal: <err>", no editor launch, no reindex.
 5. `resolved, err := edit.Resolve(edit.Env{Visual: os.Getenv("VISUAL"),
-   Editor: os.Getenv("EDITOR")}, exec.LookPath)`. On error → `setHint(errNoEditor.Error())`,
-   no reindex.
+   Editor: os.Getenv("EDITOR")}, exec.LookPath)`. On error →
+   `setHint("cannot resolve editor: " + err.Error())`, no reindex.
 6. Return a `tea.Cmd` that:
    - snapshots `t0` (captured by value, not by reference),
    - runs `tea.ExecProcess(exec.Command(resolved.Binary, path))`,
@@ -237,7 +251,7 @@ failure mode gets an explicit answer.
 | Failure                              | Detection                             | Behaviour                                                                                       |
 |--------------------------------------|---------------------------------------|-------------------------------------------------------------------------------------------------|
 | `VISUAL`/`EDITOR` set, binary absent | `exec.LookPath` returns ENOENT        | Skip that candidate, try the next in the chain. Eventually `errNoEditor`.                       |
-| All three missing                    | `Resolve` returns `errNoEditor`       | `setHint(errNoEditor.Error())` — `"no editor found (set $VISUAL or $EDITOR, or install vi)"`. No reindex. |
+| All three missing                    | `Resolve` returns `errNoEditor`       | `setHint("cannot resolve editor: " + errNoEditor.Error())` — `"cannot resolve editor: no editor found (set $VISUAL or $EDITOR, or install vi)"`. No reindex. |
 | Editor exits non-zero                | `tea.ExecProcess` yields `err != nil` | `setHint("editor exited: <err>")`. No reindex. We don't try to distinguish `:cq` from "saved ok". |
 | Editor killed by signal              | `err` non-nil with signal info        | Same hint.                                                                                      |
 | File deleted in editor               | `os.Stat` ENOENT post-exit            | Silent no-op. Page still renders from the *old* index entry; user can press `R` to refresh.     |
@@ -340,7 +354,6 @@ via `t.Setenv` (auto-restored after the test), instantiates an
 | `TestEdit_Append_TriggersReindex`          | `append`        | Reindex; the file now contains `edited`.                                       |
 | `TestEdit_Fail_HintNoReindex`              | `fail`          | Hint reads "editor exited: ..."; no `indexLoadedMsg`.                          |
 | `TestEdit_Delete_NoReindex`                | `delete`        | File gone; no reindex; old page still renders.                                 |
-| `TestEdit_MissingJournal_CreatesAndReindex`| `noop` (pre: file absent) | File created (empty); reindex fires.                                  |
 | `TestEdit_VisualPreferred`                 | `noop` (VISUAL and EDITOR both set) | Assert child argv[0] is VISUAL.                                       |
 | `TestEdit_EditorFallback`                  | `noop` (VISUAL=missing-bin, EDITOR=present) | Assert child argv[0] is EDITOR.                                |
 
@@ -350,6 +363,14 @@ App integration code surfaces it as a hint. There is no
 App-level teatest for it because reliably stubbing
 `/usr/bin/vi`-is-missing on CI is fragile; the unit test owns
 the case via the `lookPath` shim.
+
+The spec's original "missing-journal create" case was dropped
+because the production flow is currently unreachable from the
+UI — see the "Deferred" note in the In-scope section above. The
+`EnsureFile` function and the `editCurrent` create branch are
+exercised in unit tests (`TestEnsureFile`'s "missing file is
+created empty" subtest) and remain ready for when the phantom-today
+follow-up lands.
 
 ### Layer 3: golden files
 
@@ -409,8 +430,13 @@ intentional visual change.
 - `editorExitedMsg` is a new package-internal message type
   (matching the existing `indexLoadedMsg` pattern) with a dedicated
   case in `App.Update` that mtime-gates the reindex.
-- `testdata/fake-editor.sh` is checked in and exercised by ≥7
-  teatest cases in `internal/views/edit_test.go`.
+- `testdata/fake-editor.sh` is checked in; the App integration is
+  exercised by ≥6 direct-`Update` tests in
+  `internal/views/edit_test.go`. (The spec's original "≥7 teatest
+  cases" was relaxed to "≥6 direct-Update tests" because the
+  no-editor case is fully owned by the Layer 1 `TestResolve` unit
+  test, and the create-today-journal case was deferred — see the
+  "Deferred" note in the In-scope section above.)
 - `internal/edit/editor_test.go` has ≥8 unit tests covering the
   `Resolve` decision table and the `EnsureFile` /
   `SnapshotMtime` happy paths.

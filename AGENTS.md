@@ -1,7 +1,9 @@
 # peekseq
 
-Read-only Bubble Tea TUI for browsing a local Logseq graph. Recency-sorted picker,
-ripgrep-backed search, backlinks, TODO dashboard. Never writes to the graph.
+Bubble Tea TUI for browsing a local Logseq graph. Recency-sorted picker,
+ripgrep-backed search, backlinks, TODO dashboard. Writes only via `internal/edit/`,
+only in response to the `e` key, and only to the file currently displayed on the
+page view.
 
 ## Commands
 
@@ -27,6 +29,10 @@ an intentional UI change, run with `-update` and visually diff the golden before
 - `internal/render/` — Glamour-based page rendering (wiki-link styling, hanging-indent,
   workflow-marker colouring, `:LOGBOOK:` stripping). Has a `Warmup()` paid before the
   TUI takes the screen to avoid chroma init flicker.
+- `internal/edit/` — the single disk-writing surface in the project. Resolves
+  `$VISUAL` / `$EDITOR` / `vi`, snapshots file mtime, and exposes
+  `Resolve` / `EnsureFile` / `SnapshotMtime`. Invoked only by `App.editCurrent`
+  in response to the `e` key.
 - `internal/views/` — Bubble Tea models: `app` (root), `page`, `picker`, `search`,
   `backlinks`, `todos`, `help`.
 
@@ -41,6 +47,8 @@ an intentional UI change, run with `-update` and visually diff the golden before
   real graph** (`~/Documents/fiat-codex`) — it's mutable and will make tests flaky.
 - View tests use `teatest` (`charmbracelet/x/exp/teatest`) for golden-ish frame
   assertions; golden files live under `internal/views/testdata/`.
+- `testdata/fake-editor.sh` is a POSIX shell script that stands in for a real
+  editor in the App integration tests for the `e` key.
 
 ## Debugging the TUI
 

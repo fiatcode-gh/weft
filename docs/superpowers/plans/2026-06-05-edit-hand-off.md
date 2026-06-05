@@ -190,19 +190,24 @@ var errNoEditor = errors.New("no editor found (set $VISUAL or $EDITOR, or instal
 // Resolve picks the first available editor in the standard chain:
 // $VISUAL → $EDITOR → /usr/bin/vi. lookPath is injected so tests can
 // simulate "set but missing" / "vi missing" without touching PATH.
+// On success, Resolved.Binary is the *resolved path* from lookPath
+// (e.g. "/usr/bin/vim"), not the input name — `exec.Command` would
+// re-lookPath it anyway, but the resolved path is what the tests
+// assert against and what downstream callers should treat as the
+// final answer.
 func Resolve(env Env, lookPath func(string) (string, error)) (Resolved, error) {
 	if env.Visual != "" {
-		if _, err := lookPath(env.Visual); err == nil {
-			return Resolved{Binary: env.Visual}, nil
+		if path, err := lookPath(env.Visual); err == nil {
+			return Resolved{Binary: path}, nil
 		}
 	}
 	if env.Editor != "" {
-		if _, err := lookPath(env.Editor); err == nil {
-			return Resolved{Binary: env.Editor}, nil
+		if path, err := lookPath(env.Editor); err == nil {
+			return Resolved{Binary: path}, nil
 		}
 	}
-	if _, err := lookPath("/usr/bin/vi"); err == nil {
-		return Resolved{Binary: "/usr/bin/vi"}, nil
+	if path, err := lookPath("/usr/bin/vi"); err == nil {
+		return Resolved{Binary: path}, nil
 	}
 	return Resolved{}, errNoEditor
 }
@@ -313,11 +318,18 @@ import "os" // add to existing import block
 
 // EnsureFile creates an empty file at path with mode 0o644 if it does
 // not exist. Returns (true, nil) on create, (false, nil) if the file
-// already existed, or (false, err) for any other stat/write failure.
-// This is the create-today-journal hook.
+// already existed (and is a regular file), or (false, err) for any
+// other stat/write failure — including the case where path exists but
+// is a directory rather than a file. This is the create-today-journal
+// hook; the directory case is surfaced as an error rather than
+// silently no-op'ing because a directory at the journal-file path is
+// a user error worth reporting.
 func EnsureFile(path string) (created bool, err error) {
-	_, err = os.Stat(path)
+	info, err := os.Stat(path)
 	if err == nil {
+		if info.IsDir() {
+			return false, fmt.Errorf("ensure %s: is a directory", path)
+		}
 		return false, nil
 	}
 	if !os.IsNotExist(err) {

@@ -25,6 +25,7 @@
 │    T         open todos dashboard           │
 │                                             │
 │  Maintain                                   │
+│    e         edit current page in $EDITOR   │
 │    R         rebuild index                  │
 │                                             │
 │  Help / quit                                │
