@@ -190,19 +190,24 @@ var errNoEditor = errors.New("no editor found (set $VISUAL or $EDITOR, or instal
 // Resolve picks the first available editor in the standard chain:
 // $VISUAL → $EDITOR → /usr/bin/vi. lookPath is injected so tests can
 // simulate "set but missing" / "vi missing" without touching PATH.
+// On success, Resolved.Binary is the *resolved path* from lookPath
+// (e.g. "/usr/bin/vim"), not the input name — `exec.Command` would
+// re-lookPath it anyway, but the resolved path is what the tests
+// assert against and what downstream callers should treat as the
+// final answer.
 func Resolve(env Env, lookPath func(string) (string, error)) (Resolved, error) {
 	if env.Visual != "" {
-		if _, err := lookPath(env.Visual); err == nil {
-			return Resolved{Binary: env.Visual}, nil
+		if path, err := lookPath(env.Visual); err == nil {
+			return Resolved{Binary: path}, nil
 		}
 	}
 	if env.Editor != "" {
-		if _, err := lookPath(env.Editor); err == nil {
-			return Resolved{Binary: env.Editor}, nil
+		if path, err := lookPath(env.Editor); err == nil {
+			return Resolved{Binary: path}, nil
 		}
 	}
-	if _, err := lookPath("/usr/bin/vi"); err == nil {
-		return Resolved{Binary: "/usr/bin/vi"}, nil
+	if path, err := lookPath("/usr/bin/vi"); err == nil {
+		return Resolved{Binary: path}, nil
 	}
 	return Resolved{}, errNoEditor
 }
