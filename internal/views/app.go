@@ -214,6 +214,13 @@ func (a *App) editCurrent() tea.Cmd {
 	}
 
 	if t0.IsZero() {
+		// TODO(phantom-today): this create branch is currently
+		// unreachable from the UI — both `.` and `e` require the page
+		// to be in a.idx.ByName, and BuildIndex only lists existing
+		// files. Becomes reachable once BuildIndex (or the `.` key)
+		// inserts today's journal as a phantom entry. See
+		// docs/superpowers/specs/2026-06-05-edit-hand-off-design.md
+		// "Deferred" section.
 		if _, err := edit.EnsureFile(path); err != nil {
 			return a.setHint("cannot create journal: " + err.Error())
 		}
@@ -403,7 +410,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// rebuilds PageView for the current page. Errors surface in
 			// loadErr which the splash overlay renders.
 			return a, a.buildIndexCmd()
-		case "e":
+		case keyE:
 			return a, a.editCurrent()
 		case "n":
 			a.page.CycleLink(+1)

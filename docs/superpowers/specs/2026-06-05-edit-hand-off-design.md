@@ -151,8 +151,8 @@ case "e":
 4. If `t0.IsZero()`: `edit.EnsureFile(path)`. On error → `setHint`
    "cannot create journal: <err>", no editor launch, no reindex.
 5. `resolved, err := edit.Resolve(edit.Env{Visual: os.Getenv("VISUAL"),
-   Editor: os.Getenv("EDITOR")}, exec.LookPath)`. On error → `setHint(errNoEditor.Error())`,
-   no reindex.
+   Editor: os.Getenv("EDITOR")}, exec.LookPath)`. On error →
+   `setHint("cannot resolve editor: " + err.Error())`, no reindex.
 6. Return a `tea.Cmd` that:
    - snapshots `t0` (captured by value, not by reference),
    - runs `tea.ExecProcess(exec.Command(resolved.Binary, path))`,
@@ -251,7 +251,7 @@ failure mode gets an explicit answer.
 | Failure                              | Detection                             | Behaviour                                                                                       |
 |--------------------------------------|---------------------------------------|-------------------------------------------------------------------------------------------------|
 | `VISUAL`/`EDITOR` set, binary absent | `exec.LookPath` returns ENOENT        | Skip that candidate, try the next in the chain. Eventually `errNoEditor`.                       |
-| All three missing                    | `Resolve` returns `errNoEditor`       | `setHint(errNoEditor.Error())` — `"no editor found (set $VISUAL or $EDITOR, or install vi)"`. No reindex. |
+| All three missing                    | `Resolve` returns `errNoEditor`       | `setHint("cannot resolve editor: " + errNoEditor.Error())` — `"cannot resolve editor: no editor found (set $VISUAL or $EDITOR, or install vi)"`. No reindex. |
 | Editor exits non-zero                | `tea.ExecProcess` yields `err != nil` | `setHint("editor exited: <err>")`. No reindex. We don't try to distinguish `:cq` from "saved ok". |
 | Editor killed by signal              | `err` non-nil with signal info        | Same hint.                                                                                      |
 | File deleted in editor               | `os.Stat` ENOENT post-exit            | Silent no-op. Page still renders from the *old* index entry; user can press `R` to refresh.     |
