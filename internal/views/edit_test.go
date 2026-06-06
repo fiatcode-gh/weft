@@ -103,16 +103,11 @@ func TestEditorExitedMsg_HintOnError(t *testing.T) {
 	}
 }
 
-// TestEditKey_CreatesMissingTodayJournal: when the current page is
-// today's journal and the file does not exist on disk, dispatching
-// `e` runs EnsureFile synchronously inside editCurrent (before the
-// tea.ExecProcess cmd is returned). The file is created empty with
-// mode 0o644. We assert on the file's existence and size after
-// dispatch — we don't run the returned cmd.
-// TODO(phantom-today): drop the seed+remove dance once BuildIndex inserts today.
-func TestEditKey_CreatesMissingTodayJournal(t *testing.T) {
-	// Build a temp graph: pages/ + journals/ where today's journal file
-	// is absent.
+// TestDotKey_CreatesMissingTodayJournal_ThenEditReachable: end-to-end
+// for the new user flow. Boot with a journal file absent, press `.`
+// to create-and-navigate, then press `e` to verify the page is now
+// in the index and the editor cmd fires.
+func TestDotKey_CreatesMissingTodayJournal_ThenEditReachable(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "journals"), 0o755); err != nil {
 		t.Fatal(err)
@@ -137,21 +132,76 @@ func TestEditKey_CreatesMissingTodayJournal(t *testing.T) {
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	today := "2026-06-05"
-	if a.page.Page() != today {
-		t.Fatalf("expected boot page %q, got %q", today, a.page.Page())
+	journalPath := filepath.Join(dir, "journals", graph.FilenameFromPageName(today))
+	if _, err := os.Stat(journalPath); !os.IsNotExist(err) {
+		t.Fatalf("precondition: journal file should not exist; stat err=%v", err)
 	}
-	// BuildIndex only inserts pages whose files exist, so today's
-	// journal — file absent — is not in the index. The plan's spec
-	// assumed the boot path always inserts today; that assumption
-	// doesn't hold in this codebase, so we work around it by
-	// pre-populating a seed journal so BuildIndex picks it up, then
-	// removing the file before pressing `e` to set up the
-	// create-on-edit scenario.
-	journalPath := filepath.Join(dir, "journals", today+".md")
+
+	// Press `.`. This should create the journal file, reindex, and
+	// land on today's journal.
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(".")})
+	if a.page.Page() != today {
+		t.Errorf("after . on absent today: want page %q, got %q", today, a.page.Page())
+	}
+	if _, ok := a.idx.ByName[today]; !ok {
+		t.Errorf("after . on absent today: %q should be in idx.ByName", today)
+	}
+	info, err := os.Stat(journalPath)
+	if err != nil {
+		t.Fatalf("after . on absent today: journal file should exist; stat err=%v", err)
+	}
+	if info.Size() != 0 {
+		t.Errorf("after . on absent today: journal should be empty; got %d bytes", info.Size())
+	}
+	if info.Mode().Perm() != 0o644 {
+		t.Errorf("after . on absent today: journal mode: want 0o644, got %v", info.Mode().Perm())
+	}
+
+	// Now `e` is reachable. Dispatching it should return a non-nil
+	// cmd (the tea.ExecProcess wrapper).
+	if cmd := pressE(t, a); cmd == nil {
+		t.Errorf("after . created journal, e should return a non-nil cmd; got nil")
+	}
+}
+
+// TestEditKey_EnsureFileStillUsed: editCurrent's `t0.IsZero()` branch
+// still calls edit.EnsureFile when the page is in the index but the
+// file is missing on disk. This is reachable if a user (or external
+// tool) deletes a file between the `.` press and the `e` press. We
+// simulate the pre-condition via the same seed+remove dance the
+// earlier version of this test used; the assertion is that the file
+// is re-created empty.
+func TestEditKey_EnsureFileStillUsed(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "journals"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pages", "Anchor.md"), []byte("anchor\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	a := New(dir, "test")
+	a.nowFunc = func() time.Time { return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC) }
+	cmd := a.Init()
+	if cmd != nil {
+		a.Update(cmd())
+	}
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	today := "2026-06-05"
+	journalPath := filepath.Join(dir, "journals", graph.FilenameFromPageName(today))
+	// Seed the file so BuildIndex picks the journal up, then remove
+	// it so the `e`-time SnapshotMtime returns zero and editCurrent
+	// re-creates it.
 	if err := os.WriteFile(journalPath, []byte("seed\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	a.idx, a.loadErr = nil, nil
+	a.idx = nil
 	var idxErr error
 	if a.idx, idxErr = graph.BuildIndex(dir); idxErr != nil {
 		t.Fatal(idxErr)
@@ -167,13 +217,11 @@ func TestEditKey_CreatesMissingTodayJournal(t *testing.T) {
 		t.Fatalf("precondition: journal file should not exist; stat err=%v", err)
 	}
 
-	// Dispatch `e`. editCurrent runs EnsureFile synchronously, then
-	// returns the tea.ExecProcess cmd. We don't need to run the cmd.
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
 
 	info, err := os.Stat(journalPath)
 	if err != nil {
-		t.Fatalf("journal file should have been created; stat err=%v", err)
+		t.Fatalf("journal file should have been recreated; stat err=%v", err)
 	}
 	if info.Size() != 0 {
 		t.Errorf("journal file should be empty; got %d bytes", info.Size())

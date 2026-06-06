@@ -2,12 +2,37 @@ package views
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
 )
+
+// withJournalCleanup schedules a removal of graphPath/journals/<file>.md
+// if the file did not exist when this helper is called. Used by tests
+// that drive the `.` (today's journal) handler on a missing date — the
+// handler now creates the file as a side effect, and we don't want that
+// to leak into other tests that read the fixture. Returns the resolved
+// journal path so callers can reference it.
+func withJournalCleanup(t *testing.T, graphPath, pageName string) string {
+	t.Helper()
+	path := filepath.Join(graphPath, "journals", graph.FilenameFromPageName(pageName))
+	existed := true
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		existed = false
+	}
+	t.Cleanup(func() {
+		if !existed {
+			_ = os.Remove(path)
+		}
+	})
+	return path
+}
 
 func TestPageEdgeKeys(t *testing.T) {
 	a := bootApp(t)
@@ -258,40 +283,41 @@ func TestPeriodJumpsToTodayJournal(t *testing.T) {
 	}
 }
 
-func TestPeriodOnAbsentTodayShowsHint(t *testing.T) {
-	// 2026-06-15 has no journal in the fixture.
+func TestPeriodOnAbsentTodayCreatesAndNavigates(t *testing.T) {
+	// 2026-06-15 has no journal in the fixture. `.` now creates the
+	// file and navigates, instead of hinting "no journal for <date>".
+	abs, err := filepath.Abs("../../testdata/fixture-graph")
+	if err != nil {
+		t.Fatal(err)
+	}
+	withJournalCleanup(t, abs, "2026-06-15")
+
 	a := bootAppAt(t, time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC))
 	a.navigate("Alpha")
-	startPage := a.page.Page()
-	startHistLen := len(a.hist)
 
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(".")})
 
-	if got := a.page.Page(); got != startPage {
-		t.Errorf("after . on absent today: page changed from %q to %q", startPage, got)
+	if got := a.page.Page(); got != "2026-06-15" {
+		t.Errorf("after . on absent today: want page 2026-06-15, got %q", got)
 	}
-	if got := len(a.hist); got != startHistLen {
-		t.Errorf("history grew on absent today: want %d, got %d", startHistLen, got)
+	if _, ok := a.idx.ByName["2026-06-15"]; !ok {
+		t.Errorf("after . on absent today: 2026-06-15 should be in idx.ByName")
 	}
-	if want := "no journal for 2026-06-15"; a.hint != want {
-		t.Errorf("hint: want %q, got %q", want, a.hint)
-	}
-
-	// Status bar must surface the hint in place of "? help".
-	bar := a.statusBar()
-	if !strings.Contains(bar, "no journal for 2026-06-15") {
-		t.Errorf("status bar missing hint; got:\n%s", bar)
-	}
-	if strings.Contains(bar, "? help") {
-		t.Errorf("status bar should hide ? help while hint is set; got:\n%s", bar)
+	// The newly created file should be on disk (and removed by cleanup).
+	path := filepath.Join(abs, "journals", "2026_06_15.md")
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("after . on absent today: journal file should exist; stat err=%v", err)
 	}
 }
 
 func TestHintClearsOnNextKey(t *testing.T) {
-	a := bootAppAt(t, time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC))
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(".")})
+	// `.` on a missing journal now creates+navigates instead of
+	// setting a hint. Trigger a hint via `<` at the oldest journal
+	// instead, which still surfaces "no earlier journal".
+	a := bootAppAt(t, time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC))
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
 	if a.hint == "" {
-		t.Fatal("setup: expected hint to be set by first .")
+		t.Fatal("setup: expected hint to be set by < at oldest")
 	}
 	// Any subsequent key clears the hint at the top of Update.
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
@@ -301,11 +327,10 @@ func TestHintClearsOnNextKey(t *testing.T) {
 }
 
 func TestHintExpiresOnTick(t *testing.T) {
-	a := bootAppAt(t, time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC))
-	a.navigate("Alpha")
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(".")})
+	a := bootAppAt(t, time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC))
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
 	if a.hint == "" {
-		t.Fatal("setup: expected . to set a hint")
+		t.Fatal("setup: expected < to set a hint")
 	}
 	gen := a.hintGen
 	a.Update(hintExpireMsg{gen: gen})
@@ -315,15 +340,14 @@ func TestHintExpiresOnTick(t *testing.T) {
 }
 
 func TestStaleHintTickIgnored(t *testing.T) {
-	a := bootAppAt(t, time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC))
-	a.navigate("Alpha")
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(".")})
+	a := bootAppAt(t, time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC))
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
 	staleGen := a.hintGen
-	// Second . clears the hint via the top-of-KeyMsg sweep, then re-sets it
-	// with a fresh generation. The tick scheduled by the first . is now stale.
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(".")})
+	// Second < clears the hint via the top-of-KeyMsg sweep, then re-sets it
+	// with a fresh generation. The tick scheduled by the first < is now stale.
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
 	if a.hint == "" {
-		t.Fatal("setup: expected second . to set a new hint")
+		t.Fatal("setup: expected second < to set a new hint")
 	}
 	current := a.hint
 	a.Update(hintExpireMsg{gen: staleGen})
