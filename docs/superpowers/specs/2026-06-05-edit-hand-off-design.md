@@ -25,26 +25,15 @@ package.
 
 - `e` key in the page view → suspend the TUI, run the editor on the
   current page's `.md` file, resume, mtime-gated reindex.
+- Today-journal create-on-jump: when the user presses `.` and
+  today's journal file does not exist on disk, the file is created
+  empty (0o644) in `journals/` and the user lands on the now-existing
+  page. This makes `e` reachable on today's journal from a cold
+  start, closing the "I have to leave the TUI to start journaling"
+  gap.
 - Status-bar hints for editor failures (missing binary, non-zero exit,
   post-edit stat failure).
 - Mtime-based change detection: no reindex when the file is unchanged.
-
-**Deferred (will be revisited in a follow-up PR)**
-
-- *Today-journal create-on-edit from the `e` key.* The spec initially
-  called for `e` to create today's journal file when it doesn't exist
-  on disk yet. Implementation surfaced a pre-existing limitation: the
-  `.` (today's journal jump) and `e` (edit current page) handlers
-  both require the page to be in `a.idx.ByName`, and `BuildIndex`
-  only lists pages whose files exist on disk. So a user whose
-  journal file for today has never been created cannot reach
-  today's journal via `.` (existing `setHint("no journal for
-  <today>")` fires), and the create-on-edit branch in `editCurrent`
-  is currently unreachable from the UI. The `EnsureFile` function
-  and the `editCurrent` create branch are kept (correct in
-  isolation; a unit test exercises them) and will become reachable
-  once a follow-up PR adds a phantom-today entry to `BuildIndex` (or
-  modifies the `.` handler to create the file when missing).
 
 **Out of scope (YAGNI)**
 
@@ -59,8 +48,6 @@ package.
   read-only when no editor is installed).
 - A bundled modal-overlay confirmation step before launching the
   editor. The `e` key is consent enough.
-- Phantom-today entry in `BuildIndex` (or `.`-key auto-create) — see
-  the "Deferred" note above. Tracked as a follow-up.
 
 ## Architecture
 
@@ -364,13 +351,12 @@ App-level teatest for it because reliably stubbing
 `/usr/bin/vi`-is-missing on CI is fragile; the unit test owns
 the case via the `lookPath` shim.
 
-The spec's original "missing-journal create" case was dropped
-because the production flow is currently unreachable from the
-UI — see the "Deferred" note in the In-scope section above. The
-`EnsureFile` function and the `editCurrent` create branch are
-exercised in unit tests (`TestEnsureFile`'s "missing file is
-created empty" subtest) and remain ready for when the phantom-today
-follow-up lands.
+The spec's original "missing-journal create" case was about
+`editCurrent`'s create branch. With the `.` handler now creating
+the file on jump, the user flow is: press `.` to land on today →
+press `e` to edit. The `editCurrent` create branch remains as a
+defensive fallback for the race where a file is deleted between
+`.` and `e`. It's exercised by `TestEditKey_EnsureFileStillUsed`.
 
 ### Layer 3: golden files
 
