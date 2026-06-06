@@ -205,7 +205,34 @@ func (a *App) editCurrent() tea.Cmd {
 	page := a.page.Page()
 	meta, ok := a.idx.ByName[page]
 	if !ok {
-		return a.setHint("page not in index: " + page)
+		// Page is not in the index. The realistic case is a cold
+		// start landing on today's journal whose file doesn't exist
+		// yet — the user wants to start journaling and `e` is the
+		// natural next step. Bootstrap the journal file on demand
+		// rather than requiring a separate `.` press, and reindex
+		// so the rest of the flow has a populated idx. Non-journal
+		// pages that aren't in the index still fall through to the
+		// "page not in index" hint — those are unreachable in
+		// normal navigation (picker / wiki-links only point to
+		// indexed pages) and a missing journal is the only one
+		// worth handling automatically.
+		if !graph.IsJournalPageName(page) {
+			return a.setHint("page not in index: " + page)
+		}
+		journalPath := filepath.Join(a.graphPath, "journals", graph.FilenameFromPageName(page))
+		if _, err := edit.EnsureFile(journalPath); err != nil {
+			return a.setHint("cannot create journal: " + err.Error())
+		}
+		idx, err := graph.BuildIndex(a.graphPath)
+		if err != nil {
+			return a.setHint("reindex failed: " + err.Error())
+		}
+		a.idx = idx
+		newMeta, ok := a.idx.ByName[page]
+		if !ok {
+			return a.setHint("reindex dropped page: " + page)
+		}
+		meta = newMeta
 	}
 	path := meta.Path
 
@@ -215,12 +242,11 @@ func (a *App) editCurrent() tea.Cmd {
 	}
 
 	if t0.IsZero() {
-		// The file is absent on disk. The `.` handler already creates
-		// and reindexes when this is today's journal, so by the time
-		// the user reaches `e` the file normally exists. This branch
-		// catches the race where a file was deleted between `.` and
-		// `e` (or an external tool removed it) and recreates the
-		// empty stub so the editor can open it.
+		// Defensive: meta was in the index (so the file existed at
+		// BuildIndex time) but is gone now. Recreate the empty stub
+		// so the editor has something to open. Reachable only on a
+		// narrow race with an external tool deleting the file
+		// between boot and `e`.
 		if _, err := edit.EnsureFile(path); err != nil {
 			return a.setHint("cannot create journal: " + err.Error())
 		}

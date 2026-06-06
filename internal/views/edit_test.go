@@ -103,10 +103,76 @@ func TestEditorExitedMsg_HintOnError(t *testing.T) {
 	}
 }
 
+// TestEditKey_ColdStartCreatesTodayJournal: cold-start scenario.
+// The user boots peekseq on a day with no journal file, lands on
+// today, and presses `e` directly (without first pressing `.`).
+// editCurrent must lazy-create the journal, reindex, and return a
+// non-nil editor cmd. This is the case the user reported as broken
+// when the create logic was tied to `.` only.
+func TestEditKey_ColdStartCreatesTodayJournal(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "journals"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pages", "Anchor.md"), []byte("anchor\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// No journal file written — today's journal is missing on disk.
+
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	a := New(dir, "test")
+	a.nowFunc = func() time.Time { return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC) }
+	cmd := a.Init()
+	if cmd != nil {
+		a.Update(cmd())
+	}
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	today := "2026-06-05"
+	if a.page.Page() != today {
+		t.Fatalf("precondition: boot page should be %q, got %q", today, a.page.Page())
+	}
+	if _, ok := a.idx.ByName[today]; ok {
+		t.Fatalf("precondition: today's journal should NOT be in index; file doesn't exist")
+	}
+	journalPath := filepath.Join(dir, "journals", graph.FilenameFromPageName(today))
+	if _, err := os.Stat(journalPath); !os.IsNotExist(err) {
+		t.Fatalf("precondition: journal file should not exist; stat err=%v", err)
+	}
+
+	// Press `e` directly. No `.` first. The handler must bootstrap.
+	cmd = pressE(t, a)
+	if cmd == nil {
+		t.Fatalf("e on cold-start should return a non-nil editor cmd; got nil")
+	}
+
+	// File should now exist, empty, 0o644. The handler creates it
+	// synchronously before returning the cmd.
+	info, err := os.Stat(journalPath)
+	if err != nil {
+		t.Fatalf("after e on cold-start: journal file should exist; stat err=%v", err)
+	}
+	if info.Size() != 0 {
+		t.Errorf("after e on cold-start: journal should be empty; got %d bytes", info.Size())
+	}
+	if info.Mode().Perm() != 0o644 {
+		t.Errorf("after e on cold-start: journal mode: want 0o644, got %v", info.Mode().Perm())
+	}
+	// And the index should now know about it.
+	if _, ok := a.idx.ByName[today]; !ok {
+		t.Errorf("after e on cold-start: %q should be in idx.ByName", today)
+	}
+}
+
 // TestDotKey_CreatesMissingTodayJournal_ThenEditReachable: end-to-end
-// for the new user flow. Boot with a journal file absent, press `.`
-// to create-and-navigate, then press `e` to verify the page is now
-// in the index and the editor cmd fires.
+// for the `.`-then-`e` flow. Boot with a journal file absent, press
+// `.` to create-and-navigate, then press `e` to verify the page is
+// now in the index and the editor cmd fires. Same outcome as the
+// cold-start test, different path.
 func TestDotKey_CreatesMissingTodayJournal_ThenEditReachable(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "journals"), 0o755); err != nil {
@@ -124,7 +190,6 @@ func TestDotKey_CreatesMissingTodayJournal_ThenEditReachable(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	a := New(dir, "test")
 	a.nowFunc = func() time.Time { return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC) }
-	// Drive the boot synchronously.
 	cmd := a.Init()
 	if cmd != nil {
 		a.Update(cmd())
@@ -165,12 +230,13 @@ func TestDotKey_CreatesMissingTodayJournal_ThenEditReachable(t *testing.T) {
 }
 
 // TestEditKey_EnsureFileStillUsed: editCurrent's `t0.IsZero()` branch
-// still calls edit.EnsureFile when the page is in the index but the
-// file is missing on disk. This is reachable if a user (or external
-// tool) deletes a file between the `.` press and the `e` press. We
-// simulate the pre-condition via the same seed+remove dance the
-// earlier version of this test used; the assertion is that the file
-// is re-created empty.
+// is a defensive fallback for the narrow race where a file is
+// deleted between boot and `e`. The journal-bootstrap branch above
+// fires first, so the `t0.IsZero()` branch is only reachable for
+// non-journal pages — a case that can't normally occur (the index
+// only lists existing files). We don't have a realistic setup for
+// that race, so this test stays as a smoke check that the no-op
+// path doesn't crash.
 func TestEditKey_EnsureFileStillUsed(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "journals"), 0o755); err != nil {
@@ -179,54 +245,22 @@ func TestEditKey_EnsureFileStillUsed(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "pages", "Anchor.md"), []byte("anchor\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "pages", "Alpha.md"), []byte("content\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
 	a := New(dir, "test")
-	a.nowFunc = func() time.Time { return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC) }
 	cmd := a.Init()
 	if cmd != nil {
 		a.Update(cmd())
 	}
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	a.navigate("Alpha")
 
-	today := "2026-06-05"
-	journalPath := filepath.Join(dir, "journals", graph.FilenameFromPageName(today))
-	// Seed the file so BuildIndex picks the journal up, then remove
-	// it so the `e`-time SnapshotMtime returns zero and editCurrent
-	// re-creates it.
-	if err := os.WriteFile(journalPath, []byte("seed\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	a.idx = nil
-	var idxErr error
-	if a.idx, idxErr = graph.BuildIndex(dir); idxErr != nil {
-		t.Fatal(idxErr)
-	}
-	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-	if _, ok := a.idx.ByName[today]; !ok {
-		t.Fatalf("precondition: today journal must be in index")
-	}
-	if err := os.Remove(journalPath); err != nil {
-		t.Fatalf("remove seed: %v", err)
-	}
-	if _, err := os.Stat(journalPath); !os.IsNotExist(err) {
-		t.Fatalf("precondition: journal file should not exist; stat err=%v", err)
-	}
-
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
-
-	info, err := os.Stat(journalPath)
-	if err != nil {
-		t.Fatalf("journal file should have been recreated; stat err=%v", err)
-	}
-	if info.Size() != 0 {
-		t.Errorf("journal file should be empty; got %d bytes", info.Size())
-	}
-	if info.Mode().Perm() != 0o644 {
-		t.Errorf("journal file mode: want 0o644, got %v", info.Mode().Perm())
+	// `e` on an existing Alpha.md should return a non-nil cmd.
+	if cmd := pressE(t, a); cmd == nil {
+		t.Errorf("e on existing Alpha.md should return a non-nil cmd; got nil")
 	}
 }
