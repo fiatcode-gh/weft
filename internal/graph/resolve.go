@@ -26,6 +26,29 @@ func IsJournalFilename(name string) bool {
 	return journalRe.MatchString(filepath.Base(name))
 }
 
+// FilenameFromPageName is the inverse of PageNameFromFilename for the
+// cases the App needs to construct a path for: journal page names
+// (YYYY-MM-DD → YYYY_MM_DD.md) and namespace pages (proj/nested →
+// proj___nested.md). Returns "" for any page name whose filename
+// shape isn't covered here — callers should fall back to a more
+// permissive resolution (or treat it as a programmer error) in that
+// case. Used by App.Update's "." handler to derive the journal-file
+// path when creating today's journal on demand.
+func FilenameFromPageName(name string) string {
+	if m := journalPageNameRe.FindStringSubmatch(name); m != nil {
+		// Reuse journalRe's capture groups by hand: the page name is
+		// YYYY-MM-DD; emit YYYY_MM_DD.md.
+		return strings.ReplaceAll(name, "-", "_") + ".md"
+	}
+	if strings.Contains(name, "/") {
+		return strings.ReplaceAll(name, "/", "___") + ".md"
+	}
+	if name == "" {
+		return ""
+	}
+	return name + ".md"
+}
+
 // IsJournalPageName reports whether name is a journal page name (YYYY-MM-DD).
 // This is the form PageNameFromFilename produces; it answers "is this page
 // a journal?" without requiring the file to exist on disk.

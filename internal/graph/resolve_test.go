@@ -57,3 +57,22 @@ func TestIsJournalPageName(t *testing.T) {
 		}
 	}
 }
+
+func TestFilenameFromPageName(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"2026-05-24", "2026_05_24.md"},
+		{"2026-01-01", "2026_01_01.md"},
+		{"proj/nested", "proj___nested.md"},
+		{"a/b/c", "a___b___c.md"},
+		{"Alpha", "Alpha.md"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		got := FilenameFromPageName(c.in)
+		if got != c.want {
+			t.Errorf("FilenameFromPageName(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
