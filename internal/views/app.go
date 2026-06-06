@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -214,13 +215,12 @@ func (a *App) editCurrent() tea.Cmd {
 	}
 
 	if t0.IsZero() {
-		// TODO(phantom-today): this create branch is currently
-		// unreachable from the UI — both `.` and `e` require the page
-		// to be in a.idx.ByName, and BuildIndex only lists existing
-		// files. Becomes reachable once BuildIndex (or the `.` key)
-		// inserts today's journal as a phantom entry. See
-		// docs/superpowers/specs/2026-06-05-edit-hand-off-design.md
-		// "Deferred" section.
+		// The file is absent on disk. The `.` handler already creates
+		// and reindexes when this is today's journal, so by the time
+		// the user reaches `e` the file normally exists. This branch
+		// catches the race where a file was deleted between `.` and
+		// `e` (or an external tool removed it) and recreates the
+		// empty stub so the editor can open it.
 		if _, err := edit.EnsureFile(path); err != nil {
 			return a.setHint("cannot create journal: " + err.Error())
 		}
@@ -383,8 +383,26 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case ".":
 			today := a.todayJournalName()
 			if _, ok := a.idx.ByName[today]; !ok {
-				return a, a.setHint("no journal for " + today)
-			} else if a.page.Page() != today {
+				// Today's journal file is missing on disk. Create
+				// it (via the same internal/edit hook that `e` uses)
+				// and rebuild the index synchronously so the
+				// navigate below lands on a now-existing journal.
+				// BuildIndex is fast on small graphs and matches the
+				// reindex shape used by the `R` key.
+				journalPath := filepath.Join(a.graphPath, "journals", graph.FilenameFromPageName(today))
+				if _, err := edit.EnsureFile(journalPath); err != nil {
+					return a, a.setHint("cannot create journal: " + err.Error())
+				}
+				idx, err := graph.BuildIndex(a.graphPath)
+				if err != nil {
+					return a, a.setHint("reindex failed: " + err.Error())
+				}
+				a.idx = idx
+				if a.page != nil {
+					a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
+				}
+			}
+			if a.page.Page() != today {
 				a.navigate(today)
 			}
 		case "<":
