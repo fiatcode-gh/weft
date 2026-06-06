@@ -1,6 +1,6 @@
 # peekseq — a Logseq TUI
 
-A terminal browser for a local Logseq graph. Recency-sorted page picker, ripgrep-backed full-text search, backlinks, and a TODO dashboard. Renders pages with hanging-indent bullets, coloured workflow markers (TODO/DOING/LATER/WAITING/DONE/CANCELED/NOW), and highlighted wiki-links you can step through. Press `e` to edit the current page in your `$EDITOR` — peekseq is otherwise read-only.
+A terminal browser for a local Logseq graph. Recency-sorted page picker, ripgrep-backed full-text search, backlinks, and a TODO dashboard. Renders pages with hanging-indent bullets, coloured workflow markers (TODO/DOING/LATER/WAITING/DONE/CANCELED/NOW), and highlighted wiki-links you can step through. Press `e` to edit the current page in your `$EDITOR`; press `.` to jump to today's journal (which peekseq creates on a cold start).
 
 ## Install
 
@@ -43,7 +43,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | `n` / `N`  | cycle the wiki-link cursor          |
 | `Enter`    | follow link / open selection        |
 | `[` / `]`  | back / forward in page history      |
-| `.`        | jump to today's journal             |
+| `.`        | jump to today's journal (creates it if missing) |
 | `<` / `>`  | previous / next journal (on a journal page) |
 | `j` / `k`  | scroll one line                     |
 | `Ctrl-d/u` | half-page scroll                    |
@@ -72,7 +72,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 
 ## Scope
 
-Read-only except for the `e` key, which hands the current page's file to `$EDITOR`. No fold/unfold, no filesystem-watch live reload (use `R`).
+Read-only except for the `e` key, which hands the current page's file to `$EDITOR`, and the `.` key, which creates today's journal if it doesn't exist. No fold/unfold, no filesystem-watch live reload (use `R`).
 
 ### What is not supported
 

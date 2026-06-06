@@ -1,9 +1,9 @@
 # peekseq
 
 Bubble Tea TUI for browsing a local Logseq graph. Recency-sorted picker,
-ripgrep-backed search, backlinks, TODO dashboard. Writes only via `internal/edit/`,
-only in response to the `e` key, and only to the file currently displayed on the
-page view.
+ripgrep-backed search, backlinks, TODO dashboard. Writes only via `internal/edit/`, only in response to the `e` key
+(or the `.` key, when creating today's journal on a cold start), and only to the
+file currently displayed on the page view.
 
 ## Commands
 
