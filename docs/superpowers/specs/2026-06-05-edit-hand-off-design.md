@@ -25,12 +25,15 @@ package.
 
 - `e` key in the page view → suspend the TUI, run the editor on the
   current page's `.md` file, resume, mtime-gated reindex.
-- Today-journal create-on-jump: when the user presses `.` and
-  today's journal file does not exist on disk, the file is created
-  empty (0o644) in `journals/` and the user lands on the now-existing
-  page. This makes `e` reachable on today's journal from a cold
-  start, closing the "I have to leave the TUI to start journaling"
-  gap.
+- Today-journal lazy-create: when `e` is pressed and the current
+  page is today's journal but the file doesn't exist on disk
+  (cold-start scenario), `editCurrent` creates the empty file in
+  `journals/`, reindexes, and proceeds to the editor. The file
+  is only created when the user actually wants to edit, so a
+  cold start that just browses doesn't litter the journal
+  directory with empty files. The `.` key's create-on-jump
+  behaviour is preserved as a separate path (still useful for
+  jumping to today without editing).
 - Status-bar hints for editor failures (missing binary, non-zero exit,
   post-edit stat failure).
 - Mtime-based change detection: no reindex when the file is unchanged.
@@ -128,7 +131,14 @@ case "e":
 **`App.editCurrent()`** — the orchestrator:
 
 1. `page := a.page.Page()` — the page the user is looking at.
-2. `path := a.idx.ByName[page].Path` — file path.
+2. `path := a.idx.ByName[page].Path` — file path. If the page is
+   not in the index (cold-start phantom-today: boot lands the
+   user on today, file missing) AND the page is a journal-shaped
+   name, `editCurrent` creates the empty journal file via
+   `edit.EnsureFile`, rebuilds the index synchronously, and
+   proceeds with the now-populated path. Non-journal pages that
+   aren't in the index still fall through to a "page not in
+   index" hint — those are unreachable in normal navigation.
 3. `t0, statErr := edit.SnapshotMtime(path)`.
    - If `statErr` is non-nil and is *not* `os.IsNotExist` (e.g.
      EACCES on the parent directory), bail with `setHint("cannot

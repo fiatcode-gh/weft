@@ -12,9 +12,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `e` key. mtime-gated reindex on return. The only disk-writing
   surface in the project is the new `internal/edit` package; the
   read-only invariant is otherwise unchanged.
-- Pressing `.` on a missing today's-journal file creates an empty
-  journal and lands you on it, so `e` is reachable on a cold start
-  without leaving the TUI.
+- Pressing `e` on today's journal on a cold start creates the
+  empty file and opens the editor — no need to first press `.`.
+  The file is only created when the user actually wants to edit,
+  not on every boot, so a cold start that just browses doesn't
+  leave behind empty journal stubs.
 
 ## [1.0.1] - 2026-06-03
 

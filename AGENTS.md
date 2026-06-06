@@ -2,8 +2,10 @@
 
 Bubble Tea TUI for browsing a local Logseq graph. Recency-sorted picker,
 ripgrep-backed search, backlinks, TODO dashboard. Writes only via `internal/edit/`, only in response to the `e` key
-(or the `.` key, when creating today's journal on a cold start), and only to the
-file currently displayed on the page view.
+(or the `.` key, when navigating to today's journal on a cold start), and only to
+the file currently displayed on the page view. The `e` key on a missing
+today's-journal file creates the empty stub on demand; a cold start that
+doesn't press `e` (or `.`) doesn't create any file.
 
 ## Commands
 

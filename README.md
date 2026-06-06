@@ -1,6 +1,6 @@
 # peekseq — a Logseq TUI
 
-A terminal browser for a local Logseq graph. Recency-sorted page picker, ripgrep-backed full-text search, backlinks, and a TODO dashboard. Renders pages with hanging-indent bullets, coloured workflow markers (TODO/DOING/LATER/WAITING/DONE/CANCELED/NOW), and highlighted wiki-links you can step through. Press `e` to edit the current page in your `$EDITOR`; press `.` to jump to today's journal (which peekseq creates on a cold start).
+A terminal browser for a local Logseq graph. Recency-sorted page picker, ripgrep-backed full-text search, backlinks, and a TODO dashboard. Renders pages with hanging-indent bullets, coloured workflow markers (TODO/DOING/LATER/WAITING/DONE/CANCELED/NOW), and highlighted wiki-links you can step through. Press `e` to edit the current page in your `$EDITOR`; `e` on a missing today's-journal file creates it on demand. Press `.` to jump to today's journal.
 
 ## Install
 
