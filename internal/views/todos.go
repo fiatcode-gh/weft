@@ -67,9 +67,10 @@ func (t *Todos) Update(key string) OverlayResult {
 	case keyEnter:
 		if t.sel >= 0 && t.sel < len(t.visible) {
 			return OverlayResult{
-				Selected: t.visible[t.sel].Page,
-				Line:     t.visible[t.sel].LineNumber,
-				Accept:   true,
+				Selected:    t.visible[t.sel].Page,
+				TaskOrdinal: t.visible[t.sel].Ordinal,
+				DeepLink:    true,
+				Accept:      true,
 			}
 		}
 	}

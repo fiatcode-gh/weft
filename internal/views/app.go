@@ -79,11 +79,11 @@ type historyEntry struct {
 	page   string
 	offset int
 	cursor int
-	// line is a 1-based source-line deep-link target recorded when the
-	// entry was created via navigateAt (e.g. picking a TODO from the
-	// dashboard). 0 means "no deep-link target" — Restore ignores it
-	// and the page stays at its stored offset.
-	line int
+	// taskOrdinal is the 0-based open-todo deep-link target recorded when the
+	// entry was created via navigateToTask (e.g. picking a TODO from the
+	// dashboard). -1 means "no deep-link" — Restore ignores it and the page
+	// stays at its stored offset.
+	taskOrdinal int
 }
 
 // New returns an App that has not yet built its index. The index is built
@@ -128,7 +128,7 @@ func (a *App) tryInitPage() {
 	if a.page == nil && a.idx != nil && a.loadErr == nil && a.width > 0 {
 		name := a.todayJournalName()
 		a.page = NewPageView(a.idx, name, a.width, a.height)
-		a.hist = []historyEntry{{page: name, offset: 0, cursor: -1}}
+		a.hist = []historyEntry{{page: name, offset: 0, cursor: -1, taskOrdinal: -1}}
 		a.histIdx = 0
 	}
 }
@@ -138,30 +138,27 @@ func (a *App) tryInitPage() {
 // history entry, any forward history is truncated, then a fresh entry for
 // the destination is pushed and becomes current.
 func (a *App) navigate(name string) {
-	a.navigateAt(name, 0)
+	a.navigateToTask(name, -1)
 }
 
-// navigateAt is navigate plus a deep-link target. When targetLine > 0, the
-// new history entry stores it as the restore target and the page is
-// scrolled to that line on first display. Used by the Todos dashboard so
-// pressing Enter on a bullet lands the user on its line, not the page top.
-// Restore ignores the line — it stays a one-shot jump applied at SetPage
-// time, not a property the user can rewind into.
-func (a *App) navigateAt(name string, targetLine int) {
+// navigateToTask is navigate plus an open-todo deep-link target. When
+// ordinal >= 0 the new history entry stores it and the page is scrolled to
+// that todo on first display. Restore ignores it — it stays a one-shot jump.
+func (a *App) navigateToTask(name string, ordinal int) {
 	if a.histIdx >= 0 && a.histIdx < len(a.hist) {
 		a.hist[a.histIdx].offset = a.page.Offset()
 		a.hist[a.histIdx].cursor = a.page.Cursor()
 	}
 	a.hist = append(a.hist[:a.histIdx+1], historyEntry{
-		page:   name,
-		offset: 0,
-		cursor: -1,
-		line:   targetLine,
+		page:        name,
+		offset:      0,
+		cursor:      -1,
+		taskOrdinal: ordinal,
 	})
 	a.histIdx = len(a.hist) - 1
 	a.page.SetPage(name)
-	if targetLine > 0 {
-		a.page.ScrollToLine(targetLine)
+	if ordinal >= 0 {
+		a.page.ScrollToTask(ordinal)
 	}
 }
 
@@ -398,7 +395,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if res.Accept {
 				if res.Selected != "" {
-					a.navigateAt(res.Selected, res.Line)
+					if res.DeepLink {
+						a.navigateToTask(res.Selected, res.TaskOrdinal)
+					} else {
+						a.navigate(res.Selected)
+					}
 				}
 				a.active = nil
 			}

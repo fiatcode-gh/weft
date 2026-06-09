@@ -1,8 +1,11 @@
 package views
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/x/exp/teatest"
@@ -239,5 +242,51 @@ func TestPageLineUpDownAndHalfPageUp(t *testing.T) {
 	if got := pv.Offset(); got >= bottom {
 		t.Errorf("after HalfPageUp from bottom: offset should retreat from %d, got %d",
 			bottom, got)
+	}
+}
+
+func TestScrollToTaskCentresOnTodo(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var b strings.Builder
+	for i := 0; i < 40; i++ {
+		fmt.Fprintf(&b, "- filler bullet number %d\n", i)
+	}
+	b.WriteString("- TODO deep link target\n")
+	for i := 0; i < 10; i++ {
+		fmt.Fprintf(&b, "- trailing bullet %d\n", i)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pages", "Long.md"), []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, err := graph.BuildIndex(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pv := NewPageView(idx, "Long", 80, 20)
+
+	pv.ScrollToTask(0) // the page's single open todo
+	off := pv.Offset()
+	if off == 0 {
+		t.Fatalf("ScrollToTask did not scroll a below-the-fold todo into view")
+	}
+	// The target row must sit inside the viewport window.
+	row := strings.Count(pv.result.Styled[:pv.result.Tasks[0]], "\n")
+	if row < off || row >= off+pv.vp.Height {
+		t.Errorf("target row %d outside viewport [%d,%d)", row, off, off+pv.vp.Height)
+	}
+}
+
+func TestScrollToTaskOutOfRangeNoop(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	pv := NewPageView(loadFixture(t), "Alpha", 80, 24)
+	pv.ScrollToTask(99) // no such ordinal
+	if pv.Offset() != 0 {
+		t.Errorf("out-of-range ScrollToTask should be a no-op, got offset %d", pv.Offset())
 	}
 }
