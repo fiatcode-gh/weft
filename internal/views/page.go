@@ -169,9 +169,9 @@ func (p *PageView) Restore(offset, cursor int) {
 
 // ScrollToTask centres the viewport on the open todo at the given 0-based
 // ordinal (its position among the page's open todos in document order, as
-// recorded in render.Result.Tasks). No-op when the ordinal is out of range
-// or the viewport hasn't been laid out yet. One-shot deep-link jump applied
-// at SetPage time — not a property Restore rewinds into.
+// recorded in render.Result.Tasks). No-op when the ordinal is out of range.
+// One-shot deep-link jump applied at SetPage time — not a property Restore
+// rewinds into.
 func (p *PageView) ScrollToTask(ordinal int) {
 	if ordinal < 0 || ordinal >= len(p.result.Tasks) {
 		return

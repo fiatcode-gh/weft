@@ -256,3 +256,33 @@ func TestBuildIndexAssignsTodoOrdinals(t *testing.T) {
 		t.Errorf("ordinals: want [0 1], got %v", got)
 	}
 }
+
+func TestBuildIndexTodoOrdinalsSkipDoneAndCountPriority(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "- TODO [#A] first with priority\n- DONE done in the middle\n- LATER third open\n"
+	if err := os.WriteFile(filepath.Join(dir, "pages", "Q.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, err := BuildIndex(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []struct {
+		text    string
+		ordinal int
+	}
+	for _, b := range idx.Todos {
+		if b.Page == "Q" {
+			got = append(got, struct {
+				text    string
+				ordinal int
+			}{b.Text, b.Ordinal})
+		}
+	}
+	if len(got) != 2 || got[0].ordinal != 0 || got[1].ordinal != 1 {
+		t.Fatalf("ordinals: want two todos with ordinals 0,1, got %+v", got)
+	}
+}

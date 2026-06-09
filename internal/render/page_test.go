@@ -322,3 +322,35 @@ func TestRenderOpenTaskExcludesPunctuationAdjacentMarker(t *testing.T) {
 		t.Errorf("recorded task offset lands on wrong row %d: %q", row, lines)
 	}
 }
+
+func TestRenderOpenTaskOrdinalAlignmentWithInterleavedAndPriority(t *testing.T) {
+	// Open-todo offsets are recorded in document order, skipping DONE even
+	// when it sits between two open todos, and a priority marker is still
+	// counted — keeping render's Tasks index aligned with graph's ordinal.
+	body := strings.Join([]string{
+		"- TODO [#A] first with priority",
+		"- DONE done in the middle",
+		"- LATER third open",
+	}, "\n")
+	out, err := Render(body, 80)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if len(out.Tasks) != 2 {
+		t.Fatalf("open task count: want 2 (DONE skipped), got %d", len(out.Tasks))
+	}
+	lines := strings.Split(ansi.Strip(out.Styled), "\n")
+	rowText := func(off int) string {
+		r := strings.Count(out.Styled[:off], "\n")
+		if r >= len(lines) {
+			return ""
+		}
+		return lines[r]
+	}
+	if !strings.Contains(rowText(out.Tasks[0]), "first with priority") {
+		t.Errorf("task 0 lands on wrong row: %q", rowText(out.Tasks[0]))
+	}
+	if !strings.Contains(rowText(out.Tasks[1]), "third open") {
+		t.Errorf("task 1 lands on wrong row: %q", rowText(out.Tasks[1]))
+	}
+}
