@@ -83,11 +83,12 @@ func BuildIndex(graphPath string) (*Index, error) {
 			continue
 		}
 		s := string(body)
+		lines := strings.Split(s, "\n")
 		for _, lh := range ExtractWikiLinks(s) {
 			idx.Backlinks[lh.Target] = append(idx.Backlinks[lh.Target], Ref{
 				FromPage:   p.Name,
 				LineNumber: lh.Line,
-				Context:    lineAt(s, lh.Line),
+				Context:    lineContext(lines, lh.Line),
 			})
 		}
 		for k, th := range ExtractTodos(s) {
@@ -104,21 +105,11 @@ func BuildIndex(graphPath string) (*Index, error) {
 	return idx, nil
 }
 
-func lineAt(body string, n int) string {
-	i := 1
-	start := 0
-	for j := 0; j < len(body); j++ {
-		if i == n {
-			end := j
-			for end < len(body) && body[end] != '\n' {
-				end++
-			}
-			return strings.TrimRight(body[start:end], "\r")
-		}
-		if body[j] == '\n' {
-			i++
-			start = j + 1
-		}
+// lineContext returns the n-th 1-based line from a pre-split body with any
+// trailing carriage return removed, or "" when n is out of range.
+func lineContext(lines []string, n int) string {
+	if n < 1 || n > len(lines) {
+		return ""
 	}
-	return ""
+	return strings.TrimRight(lines[n-1], "\r")
 }

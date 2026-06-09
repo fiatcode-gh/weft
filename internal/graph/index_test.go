@@ -257,6 +257,31 @@ func TestBuildIndexAssignsTodoOrdinals(t *testing.T) {
 	}
 }
 
+func TestBacklinkContextIsTheSourceLine(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "- intro\r\n- mentions [[Alpha]] here\n- outro\n"
+	if err := os.WriteFile(filepath.Join(dir, "pages", "Src.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, err := BuildIndex(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refs := idx.Backlinks["Alpha"]
+	if len(refs) != 1 {
+		t.Fatalf("want 1 backlink to Alpha, got %d", len(refs))
+	}
+	if refs[0].Context != "- mentions [[Alpha]] here" {
+		t.Errorf("context: want the source line, got %q", refs[0].Context)
+	}
+	if refs[0].LineNumber != 2 {
+		t.Errorf("line number: want 2, got %d", refs[0].LineNumber)
+	}
+}
+
 func TestBuildIndexTodoOrdinalsSkipDoneAndCountPriority(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
