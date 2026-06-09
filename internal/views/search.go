@@ -220,6 +220,12 @@ func (s *SearchView) View() string {
 		posStr := fmt.Sprintf("%s:%d", label, h.Line)
 		posStr = padTo(clamp(posStr, posCol), posCol)
 		ctx := clamp(h.Context, ctxBudget)
+		// clamp appends a 1-column "…" when it truncates; bound match
+		// highlighting to the kept prefix so a span can't colour the ellipsis.
+		ctxLimit := len(ctx)
+		if lipgloss.Width(h.Context) > ctxBudget {
+			ctxLimit -= len("…")
+		}
 
 		marker := "   " // 3-cell so unselected rows align with " ▶ " width
 		var line string
@@ -231,7 +237,7 @@ func (s *SearchView) View() string {
 			line = styleSel.Render(posStr + " · " + ctx)
 		} else {
 			pos := searchHitPos.Render(posStr)
-			line = pos + sep + highlightMatches(ctx, s.matchesWithin(h, len(ctx)))
+			line = pos + sep + highlightMatches(ctx, s.matchesWithin(h, ctxLimit))
 		}
 		b.WriteString(marker)
 		b.WriteString(line)
