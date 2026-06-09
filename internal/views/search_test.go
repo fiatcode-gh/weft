@@ -434,6 +434,27 @@ func TestSearchViewWithHits(t *testing.T) {
 	teatest.RequireEqualOutput(t, []byte(s.View()))
 }
 
+func TestSearchUpdateAcceptsMultibyteRune(t *testing.T) {
+	s := NewSearchView(loadFixture(t), 80, 24)
+	s.Update("é")
+	s.Update("中")
+	if s.Query() != "é中" {
+		t.Errorf("query after multibyte input: want \"é中\", got %q", s.Query())
+	}
+	if s.hits != nil {
+		t.Errorf("hits should be cleared after multibyte input, got %+v", s.hits)
+	}
+}
+
+func TestSearchUpdateBackspaceRuneAware(t *testing.T) {
+	s := NewSearchView(loadFixture(t), 80, 24)
+	s.SetQuery("café")
+	s.Update("backspace")
+	if s.Query() != "caf" {
+		t.Errorf("rune-aware backspace: want \"caf\", got %q", s.Query())
+	}
+}
+
 func TestShortPath(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"/a/b/c/file.md", "c/file.md"},

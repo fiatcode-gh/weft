@@ -3,6 +3,7 @@ package views
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -98,14 +99,17 @@ func (s *SearchView) Update(key string) OverlayResult {
 		s.moveDown(len(s.hits))
 	case keyBackspace:
 		if len(s.query) > 0 {
-			s.query = s.query[:len(s.query)-1]
+			r := []rune(s.query)
+			s.query = string(r[:len(r)-1])
 			s.hits = nil
 		}
 	case " ", keySpace:
 		s.query += " "
 		s.hits = nil
 	default:
-		if len(key) == 1 {
+		// A single-rune key string is a printable character (named keys like
+		// "enter"/"ctrl+x" are multi-rune and ignored here).
+		if utf8.RuneCountInString(key) == 1 {
 			s.query += key
 			s.hits = nil
 		}

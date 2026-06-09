@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
@@ -113,7 +114,8 @@ func consumeKey(ti textinput.Model, key string) (textinput.Model, bool) {
 	case keyBackspace:
 		v := ti.Value()
 		if len(v) > 0 {
-			ti.SetValue(v[:len(v)-1])
+			r := []rune(v)
+			ti.SetValue(string(r[:len(r)-1]))
 		}
 		return ti, true
 	case keySpace:
@@ -122,7 +124,10 @@ func consumeKey(ti textinput.Model, key string) (textinput.Model, bool) {
 		ti.SetValue(ti.Value() + " ")
 		return ti, true
 	}
-	if len(key) == 1 {
+	// A single-rune key string is a printable character to insert. Named keys
+	// (enter, esc, up, ctrl+x, …) are always multi-rune, so this also rejects
+	// them without an explicit list.
+	if utf8.RuneCountInString(key) == 1 {
 		ti.SetValue(ti.Value() + key)
 		return ti, true
 	}

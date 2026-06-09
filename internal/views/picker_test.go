@@ -296,6 +296,33 @@ func TestPickerNoSilentCap(t *testing.T) {
 	}
 }
 
+func TestConsumeKeyAppendsMultibyteRune(t *testing.T) {
+	ti := textinput.New()
+	ti, ok := consumeKey(ti, "é")
+	if !ok || ti.Value() != "é" {
+		t.Errorf("multibyte rune key: want \"é\"/true, got %q/%v", ti.Value(), ok)
+	}
+	ti, ok = consumeKey(ti, "中")
+	if !ok || ti.Value() != "é中" {
+		t.Errorf("CJK rune key: want \"é中\"/true, got %q/%v", ti.Value(), ok)
+	}
+}
+
+func TestConsumeKeyBackspaceRuneAware(t *testing.T) {
+	ti := textinput.New()
+	ti.SetValue("café")
+	ti, ok := consumeKey(ti, "backspace")
+	if !ok || ti.Value() != "caf" {
+		t.Errorf("rune-aware backspace: want \"caf\"/true, got %q/%v", ti.Value(), ok)
+	}
+
+	ti.SetValue("é")
+	ti, ok = consumeKey(ti, "backspace")
+	if !ok || ti.Value() != "" {
+		t.Errorf("backspace emptying a single multibyte rune: want \"\"/true, got %q/%v", ti.Value(), ok)
+	}
+}
+
 func TestPadTo(t *testing.T) {
 	cases := []struct {
 		in   string
