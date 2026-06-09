@@ -24,4 +24,5 @@ type TodoBullet struct {
 	Marker     string // TODO | LATER | DOING | WAITING
 	Priority   string // "" | "A" | "B" | "C"
 	Text       string // remainder after marker (and priority), trimmed
+	Ordinal    int    // 0-based index among open todos on the same page (document order)
 }

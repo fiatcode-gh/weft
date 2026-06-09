@@ -211,8 +211,8 @@ func TestHistoryRestoresScrollAndCursor(t *testing.T) {
 
 // TestAppTodosDeepLinkScrollsToBullet exercises the end-to-end deep-link:
 // open the Todos dashboard, filter to TODO, hit Enter, and verify the
-// app navigates to the bullet's page and records the bullet's source line
-// in the new history entry (which is what PageView.ScrollToLine reads).
+// app navigates to the bullet's page and records the bullet's open-todo
+// ordinal in the new history entry (which is what PageView.ScrollToTask reads).
 func TestAppTodosDeepLinkScrollsToBullet(t *testing.T) {
 	a := bootAppAt(t, time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC))
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
@@ -232,11 +232,12 @@ func TestAppTodosDeepLinkScrollsToBullet(t *testing.T) {
 	}
 
 	// Strong pin: the deep-link target is recorded in the new history
-	// entry. This is what navigateAt populates and what ScrollToLine
-	// reads — if the field stays 0, the deep-link was lost.
+	// entry. This is what navigateToTask populates and what ScrollToTask
+	// reads. The first open TODO on 2026-05-24 ("Ship the TUI MVP") is
+	// ordinal 0 on that page.
 	last := a.hist[len(a.hist)-1]
-	if last.line != 2 {
-		t.Errorf("history entry line: want 2, got %d (entry: %+v)", last.line, last)
+	if last.taskOrdinal != 0 {
+		t.Errorf("history entry taskOrdinal: want 0, got %d (entry: %+v)", last.taskOrdinal, last)
 	}
 
 	// Smoke check: the bullet text is rendered on screen. With the

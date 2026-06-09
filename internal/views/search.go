@@ -3,6 +3,7 @@ package views
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -98,14 +99,17 @@ func (s *SearchView) Update(key string) OverlayResult {
 		s.moveDown(len(s.hits))
 	case keyBackspace:
 		if len(s.query) > 0 {
-			s.query = s.query[:len(s.query)-1]
+			r := []rune(s.query)
+			s.query = string(r[:len(r)-1])
 			s.hits = nil
 		}
 	case " ", keySpace:
 		s.query += " "
 		s.hits = nil
 	default:
-		if len(key) == 1 {
+		// A single-rune key string is a printable character (named keys like
+		// "enter"/"ctrl+x" are multi-rune and ignored here).
+		if utf8.RuneCountInString(key) == 1 {
 			s.query += key
 			s.hits = nil
 		}
@@ -216,6 +220,12 @@ func (s *SearchView) View() string {
 		posStr := fmt.Sprintf("%s:%d", label, h.Line)
 		posStr = padTo(clamp(posStr, posCol), posCol)
 		ctx := clamp(h.Context, ctxBudget)
+		// clamp appends a 1-column "…" when it truncates; bound match
+		// highlighting to the kept prefix so a span can't colour the ellipsis.
+		ctxLimit := len(ctx)
+		if lipgloss.Width(h.Context) > ctxBudget {
+			ctxLimit -= len("…")
+		}
 
 		marker := "   " // 3-cell so unselected rows align with " ▶ " width
 		var line string
@@ -227,7 +237,7 @@ func (s *SearchView) View() string {
 			line = styleSel.Render(posStr + " · " + ctx)
 		} else {
 			pos := searchHitPos.Render(posStr)
-			line = pos + sep + highlightMatches(ctx, s.matchesWithin(h, len(ctx)))
+			line = pos + sep + highlightMatches(ctx, s.matchesWithin(h, ctxLimit))
 		}
 		b.WriteString(marker)
 		b.WriteString(line)

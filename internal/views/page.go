@@ -167,22 +167,23 @@ func (p *PageView) Restore(offset, cursor int) {
 	p.cursor = cursor
 }
 
-// ScrollToLine centres the viewport on the given 1-based line number.
-// Lines outside the rendered body are clamped to the start/end of the
-// document. No-op if the viewport hasn't been laid out yet. Used for
-// one-shot deep-link jumps from the Todos dashboard — apply once at
-// SetPage time, not on every Restore.
-func (p *PageView) ScrollToLine(line int) {
-	if line <= 0 {
+// ScrollToTask centres the viewport on the open todo at the given 0-based
+// ordinal (its position among the page's open todos in document order, as
+// recorded in render.Result.Tasks). No-op when the ordinal is out of range.
+// One-shot deep-link jump applied at SetPage time — not a property Restore
+// rewinds into.
+func (p *PageView) ScrollToTask(ordinal int) {
+	if ordinal < 0 || ordinal >= len(p.result.Tasks) {
 		return
 	}
-	total := p.vp.TotalLineCount()
-	if total == 0 {
+	off := p.result.Tasks[ordinal]
+	if off < 0 || off > len(p.result.Styled) {
 		return
 	}
-	target := line - 1
-	if target >= total {
-		target = total - 1
+	row := strings.Count(p.result.Styled[:off], "\n")
+	target := row - p.vp.Height/2
+	if target < 0 {
+		target = 0
 	}
 	p.vp.SetYOffset(target)
 }

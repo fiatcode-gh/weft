@@ -31,6 +31,11 @@ type Link struct {
 type Result struct {
 	Styled string
 	Links  []Link
+	// Tasks holds the byte offset in Styled of each open task marker
+	// (TODO/LATER/DOING/WAITING with non-empty text), in document order.
+	// The index matches graph.TodoBullet.Ordinal so the view layer can
+	// deep-link a dashboard todo to its rendered row.
+	Tasks []int
 }
 
 var (
@@ -43,6 +48,15 @@ var (
 )
 
 var linkStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Underline(true)
+
+// openTaskMarkers mirrors graph.ExtractTodos: only these markers (with
+// non-empty text) are "open" and get a recorded position for deep-linking.
+var openTaskMarkers = map[string]bool{"TODO": true, "LATER": true, "DOING": true, "WAITING": true}
+
+type taskInfo struct {
+	marker string
+	open   bool
+}
 
 // taskMarkerStyles colour-codes the workflow markers that appear at the
 // start of Logseq bullets. Same palette as the todos dashboard so the page
@@ -71,9 +85,13 @@ const (
 	taskSentinelEnd   = ""
 )
 
-var (
-	wikiSentinelRe = regexp.MustCompile(wikiSentinelStart + `(\d+)` + wikiSentinelEnd + `(?:` + wikiSentinelPad + `)*`)
-	taskSentinelRe = regexp.MustCompile(taskSentinelStart + `(\d+)` + taskSentinelEnd)
+// sentinelRe matches either a wiki-link or a task-marker sentinel. Group 1
+// (m[2:3]) captures the wiki id; group 2 (m[4:5]) captures the task id.
+// Handling both in one ordered pass keeps recorded byte offsets aligned with
+// the bytes actually emitted.
+var sentinelRe = regexp.MustCompile(
+	wikiSentinelStart + `(\d+)` + wikiSentinelEnd + `(?:` + wikiSentinelPad + `)*` +
+		`|` + taskSentinelStart + `(\d+)` + taskSentinelEnd,
 )
 
 var (
@@ -286,8 +304,8 @@ func preprocessWikiLinks(body string) (string, []linkSubst) {
 // preprocessTaskMarkers replaces leading TODO/DOING/etc. markers on non-fenced
 // bullet lines with sentinels, returning the rewritten body and the captured
 // marker text indexed by sentinel id.
-func preprocessTaskMarkers(body string) (string, []string) {
-	var markers []string
+func preprocessTaskMarkers(body string) (string, []taskInfo) {
+	var markers []taskInfo
 	var out strings.Builder
 	out.Grow(len(body))
 	inFence := false
@@ -304,9 +322,16 @@ func preprocessTaskMarkers(body string) (string, []string) {
 				prefix := m[1]
 				marker := m[2]
 				id := len(markers)
-				markers = append(markers, marker)
-				sentinel := fmt.Sprintf("%s%d%s", taskSentinelStart, id, taskSentinelEnd)
 				rest := line[len(prefix)+len(marker):]
+				// "open" mirrors graph.ExtractTodos: an open marker followed by
+				// whitespace and then non-empty text. The leading-whitespace
+				// check matters because taskMarkerRe ends the marker at a \b
+				// boundary (so it also matches "- TODO: x"), whereas graph
+				// requires "\s+" after the marker — without this guard the two
+				// disagree and the deep-link ordinal misaligns.
+				open := openTaskMarkers[marker] && len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t') && strings.TrimSpace(rest) != ""
+				markers = append(markers, taskInfo{marker: marker, open: open})
+				sentinel := fmt.Sprintf("%s%d%s", taskSentinelStart, id, taskSentinelEnd)
 				out.WriteString(prefix)
 				out.WriteString(sentinel)
 				out.WriteString(rest)
@@ -366,22 +391,11 @@ func indentWrappedBullets(styled string) string {
 	return strings.Join(lines, "\n")
 }
 
-// substituteTaskSentinels replaces each task-marker sentinel in styled with
-// its rendered (colour-coded) marker text. Position-stable: it doesn't track
-// offsets the way the wiki-link pass does, so it runs first.
-func substituteTaskSentinels(styled string, markers []string) string {
-	return taskSentinelRe.ReplaceAllStringFunc(styled, func(match string) string {
-		m := taskSentinelRe.FindStringSubmatch(match)
-		id, err := strconv.Atoi(m[1])
-		if err != nil || id < 0 || id >= len(markers) {
-			return match
-		}
-		marker := markers[id]
-		if st, ok := taskMarkerStyles[marker]; ok {
-			return st.Render(marker)
-		}
-		return marker
-	})
+func renderTaskMarker(marker string) string {
+	if st, ok := taskMarkerStyles[marker]; ok {
+		return st.Render(marker)
+	}
+	return marker
 }
 
 // Render returns Glamour-rendered markdown with wiki-link positions annotated.
@@ -402,37 +416,47 @@ func Render(body string, width int) (Result, error) {
 		styled = pre
 	}
 
-	// Substitute task markers first so the byte positions we record for wiki
-	// links in the next pass reflect the final output bytes.
-	styled = substituteTaskSentinels(styled, taskMarkers)
-	// Re-indent wrapped bullet text before wiki-link sentinel substitution so
-	// the recorded link positions land in the final output.
+	// indentWrappedBullets must run before sentinel substitution so the byte
+	// positions recorded for links and tasks reflect the final output.
 	styled = indentWrappedBullets(styled)
 
-	// Walk the styled output once, replacing each wiki-link sentinel with its
-	// rendered display string and recording the byte position in the result.
 	var out strings.Builder
 	out.Grow(len(styled))
 	links := make([]Link, 0, len(wikiSubs))
+	var tasks []int
 	last := 0
-	for _, m := range wikiSentinelRe.FindAllStringSubmatchIndex(styled, -1) {
-		id, err := strconv.Atoi(styled[m[2]:m[3]])
-		if err != nil || id < 0 || id >= len(wikiSubs) {
-			continue
-		}
+	for _, m := range sentinelRe.FindAllStringSubmatchIndex(styled, -1) {
 		out.WriteString(styled[last:m[0]])
-		rendered := linkStyle.Render(wikiSubs[id].display)
-		start := out.Len()
-		out.WriteString(rendered)
-		links = append(links, Link{
-			Target:  wikiSubs[id].target,
-			Display: wikiSubs[id].display,
-			Start:   start,
-			End:     start + len(rendered),
-		})
 		last = m[1]
+		switch {
+		case m[2] >= 0: // wiki-link sentinel
+			id, err := strconv.Atoi(styled[m[2]:m[3]])
+			if err != nil || id < 0 || id >= len(wikiSubs) {
+				out.WriteString(styled[m[0]:m[1]])
+				continue
+			}
+			rendered := linkStyle.Render(wikiSubs[id].display)
+			start := out.Len()
+			out.WriteString(rendered)
+			links = append(links, Link{
+				Target:  wikiSubs[id].target,
+				Display: wikiSubs[id].display,
+				Start:   start,
+				End:     start + len(rendered),
+			})
+		case m[4] >= 0: // task-marker sentinel
+			id, err := strconv.Atoi(styled[m[4]:m[5]])
+			if err != nil || id < 0 || id >= len(taskMarkers) {
+				out.WriteString(styled[m[0]:m[1]])
+				continue
+			}
+			if taskMarkers[id].open {
+				tasks = append(tasks, out.Len())
+			}
+			out.WriteString(renderTaskMarker(taskMarkers[id].marker))
+		}
 	}
 	out.WriteString(styled[last:])
 
-	return Result{Styled: out.String(), Links: links}, nil
+	return Result{Styled: out.String(), Links: links, Tasks: tasks}, nil
 }

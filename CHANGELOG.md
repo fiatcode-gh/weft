@@ -4,6 +4,31 @@ All notable changes to peekseq are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- TODO dashboard deep-link now lands on the bullet's actual rendered row.
+  It targets the open-todo by its document-order ordinal (matched between
+  the index and the render pipeline) instead of the raw source line number,
+  which mis-scrolled on pages reflowed by word-wrap, bullet re-indenting, or
+  `:LOGBOOK:` / `{{query}}` stripping.
+- Picker and search now accept multi-byte rune input (accented Latin, CJK,
+  emoji) and delete by rune on backspace, instead of dropping non-ASCII keys
+  and corrupting the trailing rune.
+- Pressing `e` on a cold-start today's-journal page now rebinds the page view
+  to the freshly-built index (previously only `a.idx` was updated, leaving the
+  view on the stale index until the next navigation).
+- Search match highlighting no longer colours the truncation `…` on long
+  context rows.
+- Relative-time hints in the picker now read "next year" / "in N years" for
+  far-future journals instead of "in NN months".
+
+### Changed
+
+- Backlink-context extraction splits each page body once instead of rescanning
+  from the top per wiki-link (O(1) per link rather than O(body·links)).
+
 ## [1.1.0] - 2026-06-08
 
 ### Added

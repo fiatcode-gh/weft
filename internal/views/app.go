@@ -79,11 +79,11 @@ type historyEntry struct {
 	page   string
 	offset int
 	cursor int
-	// line is a 1-based source-line deep-link target recorded when the
-	// entry was created via navigateAt (e.g. picking a TODO from the
-	// dashboard). 0 means "no deep-link target" — Restore ignores it
-	// and the page stays at its stored offset.
-	line int
+	// taskOrdinal is the 0-based open-todo deep-link target recorded when the
+	// entry was created via navigateToTask (e.g. picking a TODO from the
+	// dashboard). -1 means "no deep-link" — Restore ignores it and the page
+	// stays at its stored offset.
+	taskOrdinal int
 }
 
 // New returns an App that has not yet built its index. The index is built
@@ -128,7 +128,7 @@ func (a *App) tryInitPage() {
 	if a.page == nil && a.idx != nil && a.loadErr == nil && a.width > 0 {
 		name := a.todayJournalName()
 		a.page = NewPageView(a.idx, name, a.width, a.height)
-		a.hist = []historyEntry{{page: name, offset: 0, cursor: -1}}
+		a.hist = []historyEntry{{page: name, offset: 0, cursor: -1, taskOrdinal: -1}}
 		a.histIdx = 0
 	}
 }
@@ -138,30 +138,27 @@ func (a *App) tryInitPage() {
 // history entry, any forward history is truncated, then a fresh entry for
 // the destination is pushed and becomes current.
 func (a *App) navigate(name string) {
-	a.navigateAt(name, 0)
+	a.navigateToTask(name, -1)
 }
 
-// navigateAt is navigate plus a deep-link target. When targetLine > 0, the
-// new history entry stores it as the restore target and the page is
-// scrolled to that line on first display. Used by the Todos dashboard so
-// pressing Enter on a bullet lands the user on its line, not the page top.
-// Restore ignores the line — it stays a one-shot jump applied at SetPage
-// time, not a property the user can rewind into.
-func (a *App) navigateAt(name string, targetLine int) {
+// navigateToTask is navigate plus an open-todo deep-link target. When
+// ordinal >= 0 the new history entry stores it and the page is scrolled to
+// that todo on first display. Restore ignores it — it stays a one-shot jump.
+func (a *App) navigateToTask(name string, ordinal int) {
 	if a.histIdx >= 0 && a.histIdx < len(a.hist) {
 		a.hist[a.histIdx].offset = a.page.Offset()
 		a.hist[a.histIdx].cursor = a.page.Cursor()
 	}
 	a.hist = append(a.hist[:a.histIdx+1], historyEntry{
-		page:   name,
-		offset: 0,
-		cursor: -1,
-		line:   targetLine,
+		page:        name,
+		offset:      0,
+		cursor:      -1,
+		taskOrdinal: ordinal,
 	})
 	a.histIdx = len(a.hist) - 1
 	a.page.SetPage(name)
-	if targetLine > 0 {
-		a.page.ScrollToLine(targetLine)
+	if ordinal >= 0 {
+		a.page.ScrollToTask(ordinal)
 	}
 }
 
@@ -195,6 +192,27 @@ func (a *App) historyForward() {
 	a.page.Restore(target.offset, target.cursor)
 }
 
+// createJournalAndReindex creates the on-disk file for journal page `name`
+// via the internal/edit hook, rebuilds the index synchronously, and rebinds
+// the current PageView to it. Shared by the `.` and `e` handlers when they
+// land on a today's-journal page whose file doesn't exist yet. Returns an
+// error whose message is ready for setHint.
+func (a *App) createJournalAndReindex(name string) error {
+	journalPath := filepath.Join(a.graphPath, "journals", graph.FilenameFromPageName(name))
+	if _, err := edit.EnsureFile(journalPath); err != nil {
+		return fmt.Errorf("cannot create journal: %w", err)
+	}
+	idx, err := graph.BuildIndex(a.graphPath)
+	if err != nil {
+		return fmt.Errorf("reindex failed: %w", err)
+	}
+	a.idx = idx
+	if a.page != nil {
+		a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
+	}
+	return nil
+}
+
 // editCurrent snapshots the current page's file mtime, ensures the
 // file exists (creating an empty one for today's journal if needed),
 // resolves the user's editor, and returns a tea.ExecProcess cmd that
@@ -219,15 +237,9 @@ func (a *App) editCurrent() tea.Cmd {
 		if !graph.IsJournalPageName(page) {
 			return a.setHint("page not in index: " + page)
 		}
-		journalPath := filepath.Join(a.graphPath, "journals", graph.FilenameFromPageName(page))
-		if _, err := edit.EnsureFile(journalPath); err != nil {
-			return a.setHint("cannot create journal: " + err.Error())
+		if err := a.createJournalAndReindex(page); err != nil {
+			return a.setHint(err.Error())
 		}
-		idx, err := graph.BuildIndex(a.graphPath)
-		if err != nil {
-			return a.setHint("reindex failed: " + err.Error())
-		}
-		a.idx = idx
 		newMeta, ok := a.idx.ByName[page]
 		if !ok {
 			return a.setHint("reindex dropped page: " + page)
@@ -383,7 +395,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if res.Accept {
 				if res.Selected != "" {
-					a.navigateAt(res.Selected, res.Line)
+					if res.DeepLink {
+						a.navigateToTask(res.Selected, res.TaskOrdinal)
+					} else {
+						a.navigate(res.Selected)
+					}
 				}
 				a.active = nil
 			}
@@ -409,23 +425,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case ".":
 			today := a.todayJournalName()
 			if _, ok := a.idx.ByName[today]; !ok {
-				// Today's journal file is missing on disk. Create
-				// it (via the same internal/edit hook that `e` uses)
-				// and rebuild the index synchronously so the
-				// navigate below lands on a now-existing journal.
-				// BuildIndex is fast on small graphs and matches the
-				// reindex shape used by the `R` key.
-				journalPath := filepath.Join(a.graphPath, "journals", graph.FilenameFromPageName(today))
-				if _, err := edit.EnsureFile(journalPath); err != nil {
-					return a, a.setHint("cannot create journal: " + err.Error())
-				}
-				idx, err := graph.BuildIndex(a.graphPath)
-				if err != nil {
-					return a, a.setHint("reindex failed: " + err.Error())
-				}
-				a.idx = idx
-				if a.page != nil {
-					a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
+				if err := a.createJournalAndReindex(today); err != nil {
+					return a, a.setHint(err.Error())
 				}
 			}
 			if a.page.Page() != today {

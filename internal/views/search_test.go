@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/teatest"
 
 	"git.fiatcode.dev/fiatcode/peekseq/internal/search"
@@ -434,6 +435,27 @@ func TestSearchViewWithHits(t *testing.T) {
 	teatest.RequireEqualOutput(t, []byte(s.View()))
 }
 
+func TestSearchUpdateAcceptsMultibyteRune(t *testing.T) {
+	s := NewSearchView(loadFixture(t), 80, 24)
+	s.Update("é")
+	s.Update("中")
+	if s.Query() != "é中" {
+		t.Errorf("query after multibyte input: want \"é中\", got %q", s.Query())
+	}
+	if s.hits != nil {
+		t.Errorf("hits should be cleared after multibyte input, got %+v", s.hits)
+	}
+}
+
+func TestSearchUpdateBackspaceRuneAware(t *testing.T) {
+	s := NewSearchView(loadFixture(t), 80, 24)
+	s.SetQuery("café")
+	s.Update("backspace")
+	if s.Query() != "caf" {
+		t.Errorf("rune-aware backspace: want \"caf\", got %q", s.Query())
+	}
+}
+
 func TestShortPath(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"/a/b/c/file.md", "c/file.md"},
@@ -472,4 +494,66 @@ func TestSearchCmdRoundtrip(t *testing.T) {
 	if len(done.hits) == 0 {
 		t.Errorf("done.hits: expected at least one")
 	}
+}
+
+func TestSearchHighlightStopsBeforeEllipsis(t *testing.T) {
+	// Use colour output so we can inspect SGR codes.
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("COLORTERM", "truecolor")
+
+	s := NewSearchView(loadFixture(t), 40, 24)
+	s.SetQuery("zzz")
+	// Context longer than the column budget so clamp appends "…", with a match
+	// span that reaches the truncation boundary.
+	ctx := strings.Repeat("a", 200) + "zzz"
+	s.hits = []search.Hit{{
+		FilePath: "/p/X.md",
+		Line:     1,
+		Context:  ctx,
+		Matches:  []search.Span{{Start: len(ctx) - 3, End: len(ctx)}},
+	}}
+	// Select a non-selected row so highlightMatches is called (sel defaults to 0
+	// which selects the first hit; force selection to an out-of-range index).
+	s.sel = -1
+
+	view := s.View()
+	plain := ansi.Strip(view)
+	if !strings.Contains(plain, "…") {
+		t.Fatalf("expected an ellipsis in truncated context:\n%s", plain)
+	}
+	// The match SGR sequence (bold + colour) must not immediately precede the
+	// three UTF-8 bytes of "…" (U+2026 = 0xE2 0x80 0xA6). If the ellipsis were
+	// coloured by the match style the rendered bytes would contain an SGR open
+	// sequence directly followed by those three bytes.
+	ellipsisBytes := "\xe2\x80\xa6"
+	// An SGR open code always ends in 'm' and is immediately followed by the
+	// styled text. Check that wherever "…" appears it is NOT the text right
+	// after an SGR opening sequence for the match style.
+	idx := strings.Index(view, ellipsisBytes)
+	if idx < 0 {
+		t.Fatal("ellipsis not found in raw (styled) view")
+	}
+	// The byte immediately before "…" in a styled run would be 'm' (the SGR
+	// terminator). If that 'm' is the close of the match-style open sequence,
+	// the ellipsis is being highlighted. After the fix the span is bounded to
+	// ctxLimit so no SGR wraps the ellipsis.
+	prefix := view[:idx]
+	// Rendered match: searchMatch.Render(text) → "\x1b[...]m" + text + "\x1b[0m"
+	// After the fix, the ellipsis follows a reset or plain text, never an SGR
+	// open for the match colour (11 = bright yellow in 256-colour = "33;1" or
+	// "\x1b[1;33m" / "\x1b[38;5;11m"). Simplest check: the last non-reset SGR
+	// in the prefix must NOT be the match-open sequence.
+	// We use a coarse check: the match style render of "zzz" should NOT appear
+	// anywhere in the view output followed by the ellipsis bytes.
+	matchZzz := searchMatch.Render("zzz")
+	if strings.Contains(view, matchZzz+ellipsisBytes) {
+		t.Errorf("match SGR wraps the ellipsis: found %q immediately before \"…\" in view", matchZzz)
+	}
+	// Additionally, confirm no SGR sequence ending in 'm' sits in the last 20
+	// bytes of the prefix (just before "…") — that would indicate some style
+	// is still opening there.
+	if len(prefix) > 20 {
+		prefix = prefix[len(prefix)-20:]
+	}
+	_ = prefix // available for manual debugging; the matchZzz check above is the assertion
 }

@@ -231,3 +231,83 @@ func TestBuildIndexWarnsOnSubdirectory(t *testing.T) {
 		t.Errorf("expected subdirectory warning on stderr, got:\n%s", out)
 	}
 }
+
+func TestBuildIndexAssignsTodoOrdinals(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "- DONE done one\n- TODO open one\n- LATER open two\n"
+	if err := os.WriteFile(filepath.Join(dir, "pages", "P.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, err := BuildIndex(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []int
+	for _, b := range idx.Todos {
+		if b.Page == "P" {
+			got = append(got, b.Ordinal)
+		}
+	}
+	// Two open todos on P, ordinals 0 and 1 in document order (DONE skipped).
+	if len(got) != 2 || got[0] != 0 || got[1] != 1 {
+		t.Errorf("ordinals: want [0 1], got %v", got)
+	}
+}
+
+func TestBacklinkContextIsTheSourceLine(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "- intro\r\n- mentions [[Alpha]] here\n- outro\n"
+	if err := os.WriteFile(filepath.Join(dir, "pages", "Src.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, err := BuildIndex(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refs := idx.Backlinks["Alpha"]
+	if len(refs) != 1 {
+		t.Fatalf("want 1 backlink to Alpha, got %d", len(refs))
+	}
+	if refs[0].Context != "- mentions [[Alpha]] here" {
+		t.Errorf("context: want the source line, got %q", refs[0].Context)
+	}
+	if refs[0].LineNumber != 2 {
+		t.Errorf("line number: want 2, got %d", refs[0].LineNumber)
+	}
+}
+
+func TestBuildIndexTodoOrdinalsSkipDoneAndCountPriority(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "- TODO [#A] first with priority\n- DONE done in the middle\n- LATER third open\n"
+	if err := os.WriteFile(filepath.Join(dir, "pages", "Q.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, err := BuildIndex(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []struct {
+		text    string
+		ordinal int
+	}
+	for _, b := range idx.Todos {
+		if b.Page == "Q" {
+			got = append(got, struct {
+				text    string
+				ordinal int
+			}{b.Text, b.Ordinal})
+		}
+	}
+	if len(got) != 2 || got[0].ordinal != 0 || got[1].ordinal != 1 {
+		t.Fatalf("ordinals: want two todos with ordinals 0,1, got %+v", got)
+	}
+}

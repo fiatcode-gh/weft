@@ -487,3 +487,64 @@ func TestPrevNextInertOutsideJournalContext(t *testing.T) {
 		t.Errorf("<,> outside journal context: hint should be empty, got %q", a.hint)
 	}
 }
+
+// TestEditBootstrapRebuildsPageView verifies that pressing `e` on a cold-start
+// today's-journal page (no file yet) reindexes AND rebinds the PageView to the
+// fresh index — not just a.idx. Regression guard for the stale-a.page bug.
+//
+// Uses a t.TempDir-based graph (mirroring TestEditKey_ColdStartCreatesTodayJournal)
+// rather than bootAppAt/fixture-graph so creating a file is safe and idempotent.
+func TestEditBootstrapRebuildsPageView(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "journals"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pages", "Anchor.md"), []byte("anchor\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// No journal file written — today's journal is missing on disk.
+
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	t.Setenv("EDITOR", "true") // no-op editor that exits 0 immediately
+
+	a := New(dir, "test")
+	today := "2026-05-26"
+	a.nowFunc = func() time.Time { return time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC) }
+	cmd := a.Init()
+	if cmd != nil {
+		a.Update(cmd())
+	}
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	if a.page == nil {
+		t.Fatal("PageView not constructed after boot")
+	}
+	if a.page.Page() != today {
+		t.Fatalf("precondition: boot page should be %q, got %q", today, a.page.Page())
+	}
+	if _, ok := a.idx.ByName[today]; ok {
+		t.Fatalf("precondition: today's journal should NOT be in index; file doesn't exist")
+	}
+
+	// Press `e` directly — cold-start bootstrap.
+	_, cmd = a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	if cmd == nil {
+		t.Fatal("e on cold-start should return a non-nil editor cmd; got nil (hint: " + a.hint + ")")
+	}
+
+	if _, ok := a.idx.ByName[today]; !ok {
+		t.Fatalf("index should contain freshly-created journal %q", today)
+	}
+	// The PageView must resolve against the rebuilt index: its page is today's
+	// journal and that page is now present in the index it holds.
+	if a.page.idx != a.idx {
+		t.Errorf("PageView still bound to stale index after e-bootstrap")
+	}
+	if a.page.Page() != today {
+		t.Errorf("PageView page: want %q, got %q", today, a.page.Page())
+	}
+}

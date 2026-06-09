@@ -56,6 +56,9 @@ func TestRelativeTimeHints(t *testing.T) {
 		{"next week", d(2026, 6, 1), "next week"},
 		{"in 3 weeks", d(2026, 6, 15), "in 3 weeks"},
 		{"in 2 months", d(2026, 7, 25), "in 2 months"},
+		{"in N months (far)", d(2026, 9, 25), "in 4 months"},
+		{"next year", d(2027, 5, 25), "next year"},
+		{"in N years", d(2029, 5, 25), "in 3 years"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -293,6 +296,33 @@ func TestPickerNoSilentCap(t *testing.T) {
 	}
 	if got := len(p.matches); got < 100 {
 		t.Errorf("typed query should not silently cap; want >=100, got %d", got)
+	}
+}
+
+func TestConsumeKeyAppendsMultibyteRune(t *testing.T) {
+	ti := textinput.New()
+	ti, ok := consumeKey(ti, "é")
+	if !ok || ti.Value() != "é" {
+		t.Errorf("multibyte rune key: want \"é\"/true, got %q/%v", ti.Value(), ok)
+	}
+	ti, ok = consumeKey(ti, "中")
+	if !ok || ti.Value() != "é中" {
+		t.Errorf("CJK rune key: want \"é中\"/true, got %q/%v", ti.Value(), ok)
+	}
+}
+
+func TestConsumeKeyBackspaceRuneAware(t *testing.T) {
+	ti := textinput.New()
+	ti.SetValue("café")
+	ti, ok := consumeKey(ti, "backspace")
+	if !ok || ti.Value() != "caf" {
+		t.Errorf("rune-aware backspace: want \"caf\"/true, got %q/%v", ti.Value(), ok)
+	}
+
+	ti.SetValue("é")
+	ti, ok = consumeKey(ti, "backspace")
+	if !ok || ti.Value() != "" {
+		t.Errorf("backspace emptying a single multibyte rune: want \"\"/true, got %q/%v", ti.Value(), ok)
 	}
 }
 
