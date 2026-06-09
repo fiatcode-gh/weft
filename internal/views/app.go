@@ -195,6 +195,27 @@ func (a *App) historyForward() {
 	a.page.Restore(target.offset, target.cursor)
 }
 
+// createJournalAndReindex creates the on-disk file for journal page `name`
+// via the internal/edit hook, rebuilds the index synchronously, and rebinds
+// the current PageView to it. Shared by the `.` and `e` handlers when they
+// land on a today's-journal page whose file doesn't exist yet. Returns an
+// error whose message is ready for setHint.
+func (a *App) createJournalAndReindex(name string) error {
+	journalPath := filepath.Join(a.graphPath, "journals", graph.FilenameFromPageName(name))
+	if _, err := edit.EnsureFile(journalPath); err != nil {
+		return fmt.Errorf("cannot create journal: %w", err)
+	}
+	idx, err := graph.BuildIndex(a.graphPath)
+	if err != nil {
+		return fmt.Errorf("reindex failed: %w", err)
+	}
+	a.idx = idx
+	if a.page != nil {
+		a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
+	}
+	return nil
+}
+
 // editCurrent snapshots the current page's file mtime, ensures the
 // file exists (creating an empty one for today's journal if needed),
 // resolves the user's editor, and returns a tea.ExecProcess cmd that
@@ -219,15 +240,9 @@ func (a *App) editCurrent() tea.Cmd {
 		if !graph.IsJournalPageName(page) {
 			return a.setHint("page not in index: " + page)
 		}
-		journalPath := filepath.Join(a.graphPath, "journals", graph.FilenameFromPageName(page))
-		if _, err := edit.EnsureFile(journalPath); err != nil {
-			return a.setHint("cannot create journal: " + err.Error())
+		if err := a.createJournalAndReindex(page); err != nil {
+			return a.setHint(err.Error())
 		}
-		idx, err := graph.BuildIndex(a.graphPath)
-		if err != nil {
-			return a.setHint("reindex failed: " + err.Error())
-		}
-		a.idx = idx
 		newMeta, ok := a.idx.ByName[page]
 		if !ok {
 			return a.setHint("reindex dropped page: " + page)
@@ -409,23 +424,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case ".":
 			today := a.todayJournalName()
 			if _, ok := a.idx.ByName[today]; !ok {
-				// Today's journal file is missing on disk. Create
-				// it (via the same internal/edit hook that `e` uses)
-				// and rebuild the index synchronously so the
-				// navigate below lands on a now-existing journal.
-				// BuildIndex is fast on small graphs and matches the
-				// reindex shape used by the `R` key.
-				journalPath := filepath.Join(a.graphPath, "journals", graph.FilenameFromPageName(today))
-				if _, err := edit.EnsureFile(journalPath); err != nil {
-					return a, a.setHint("cannot create journal: " + err.Error())
-				}
-				idx, err := graph.BuildIndex(a.graphPath)
-				if err != nil {
-					return a, a.setHint("reindex failed: " + err.Error())
-				}
-				a.idx = idx
-				if a.page != nil {
-					a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
+				if err := a.createJournalAndReindex(today); err != nil {
+					return a, a.setHint(err.Error())
 				}
 			}
 			if a.page.Page() != today {
