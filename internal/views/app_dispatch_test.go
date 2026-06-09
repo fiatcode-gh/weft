@@ -548,4 +548,3 @@ func TestEditBootstrapRebuildsPageView(t *testing.T) {
 		t.Errorf("PageView page: want %q, got %q", today, a.page.Page())
 	}
 }
-
