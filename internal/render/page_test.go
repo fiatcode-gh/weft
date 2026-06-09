@@ -271,3 +271,32 @@ func TestRenderPageMultipleInlineCodeSpansOnOneLine(t *testing.T) {
 		t.Errorf("link target = %q, want B", res.Links[0].Target)
 	}
 }
+
+func TestRenderRecordsOpenTaskPositions(t *testing.T) {
+	body := strings.Join([]string{
+		"- DONE finished thing",
+		"- TODO first open",
+		"- some note",
+		"- LATER second open",
+	}, "\n")
+	out, err := Render(body, 80)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	// DONE is excluded; the two open markers are recorded in document order.
+	if len(out.Tasks) != 2 {
+		t.Fatalf("open task count: want 2, got %d (%v)", len(out.Tasks), out.Tasks)
+	}
+	row := func(off int) int { return strings.Count(out.Styled[:off], "\n") }
+	r0, r1 := row(out.Tasks[0]), row(out.Tasks[1])
+	if r0 >= r1 {
+		t.Errorf("task rows not ascending: %d, %d", r0, r1)
+	}
+	lines := strings.Split(ansi.Strip(out.Styled), "\n")
+	if r0 >= len(lines) || !strings.Contains(lines[r0], "first open") {
+		t.Errorf("task 0 offset lands on wrong row %d: %q", r0, lines)
+	}
+	if r1 >= len(lines) || !strings.Contains(lines[r1], "second open") {
+		t.Errorf("task 1 offset lands on wrong row %d: %q", r1, lines)
+	}
+}
