@@ -90,13 +90,14 @@ func BuildIndex(graphPath string) (*Index, error) {
 				Context:    lineAt(s, lh.Line),
 			})
 		}
-		for _, th := range ExtractTodos(s) {
+		for k, th := range ExtractTodos(s) {
 			idx.Todos = append(idx.Todos, TodoBullet{
 				Page:       p.Name,
 				LineNumber: th.Line,
 				Marker:     th.Marker,
 				Priority:   th.Priority,
 				Text:       th.Text,
+				Ordinal:    k,
 			})
 		}
 	}

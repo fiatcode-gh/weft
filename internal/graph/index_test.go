@@ -231,3 +231,28 @@ func TestBuildIndexWarnsOnSubdirectory(t *testing.T) {
 		t.Errorf("expected subdirectory warning on stderr, got:\n%s", out)
 	}
 }
+
+func TestBuildIndexAssignsTodoOrdinals(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "- DONE done one\n- TODO open one\n- LATER open two\n"
+	if err := os.WriteFile(filepath.Join(dir, "pages", "P.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, err := BuildIndex(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []int
+	for _, b := range idx.Todos {
+		if b.Page == "P" {
+			got = append(got, b.Ordinal)
+		}
+	}
+	// Two open todos on P, ordinals 0 and 1 in document order (DONE skipped).
+	if len(got) != 2 || got[0] != 0 || got[1] != 1 {
+		t.Errorf("ordinals: want [0 1], got %v", got)
+	}
+}
