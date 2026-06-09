@@ -1,0 +1,38 @@
+name: Release
+
+# Build a linux-amd64 binary when a version tag is pushed, e.g. `git tag -m "Release v1.2.0" v1.2.0 && git push origin v1.2.0`.
+# peekseq is normally `go install`-distributed; this is a convenience binary published as a
+# downloadable workflow artifact (not auto-published anywhere).
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  build-linux-amd64:
+    runs-on: docker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.3"
+          cache: true
+
+      - name: Build linux-amd64 binary
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: 0
+        run: |
+          mkdir -p dist
+          go build -trimpath -ldflags="-s -w" \
+            -o "dist/peekseq-${FORGEJO_REF_NAME}-linux-amd64" ./cmd/peekseq
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: peekseq-${{ forgejo.ref_name }}-linux-amd64
+          path: dist/peekseq-${{ forgejo.ref_name }}-linux-amd64
+          if-no-files-found: error
