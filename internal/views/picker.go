@@ -260,7 +260,13 @@ func relativeTime(now, t time.Time) string {
 		return "next week"
 	case days <= -14 && days > -60:
 		return fmt.Sprintf("in %d weeks", -days/7)
-	default:
+	case days <= -60 && days > -365:
 		return fmt.Sprintf("in %d months", -days/30)
+	default: // days <= -365
+		years := -days / 365
+		if years == 1 {
+			return "next year"
+		}
+		return fmt.Sprintf("in %d years", years)
 	}
 }

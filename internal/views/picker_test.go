@@ -56,6 +56,9 @@ func TestRelativeTimeHints(t *testing.T) {
 		{"next week", d(2026, 6, 1), "next week"},
 		{"in 3 weeks", d(2026, 6, 15), "in 3 weeks"},
 		{"in 2 months", d(2026, 7, 25), "in 2 months"},
+		{"in N months (far)", d(2026, 9, 25), "in 4 months"},
+		{"next year", d(2027, 5, 25), "next year"},
+		{"in N years", d(2029, 5, 25), "in 3 years"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
