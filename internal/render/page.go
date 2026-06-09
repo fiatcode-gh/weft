@@ -323,10 +323,14 @@ func preprocessTaskMarkers(body string) (string, []taskInfo) {
 				marker := m[2]
 				id := len(markers)
 				rest := line[len(prefix)+len(marker):]
-				// "open" matches graph.ExtractTodos: an open marker with
-				// non-empty trailing text. (A priority-only "- TODO [#A]"
-				// with no text is a degenerate case we don't special-case.)
-				markers = append(markers, taskInfo{marker: marker, open: openTaskMarkers[marker] && strings.TrimSpace(rest) != ""})
+				// "open" mirrors graph.ExtractTodos: an open marker followed by
+				// whitespace and then non-empty text. The leading-whitespace
+				// check matters because taskMarkerRe ends the marker at a \b
+				// boundary (so it also matches "- TODO: x"), whereas graph
+				// requires "\s+" after the marker — without this guard the two
+				// disagree and the deep-link ordinal misaligns.
+				open := openTaskMarkers[marker] && len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t') && strings.TrimSpace(rest) != ""
+				markers = append(markers, taskInfo{marker: marker, open: open})
 				sentinel := fmt.Sprintf("%s%d%s", taskSentinelStart, id, taskSentinelEnd)
 				out.WriteString(prefix)
 				out.WriteString(sentinel)

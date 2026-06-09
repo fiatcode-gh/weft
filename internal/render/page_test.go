@@ -300,3 +300,25 @@ func TestRenderRecordsOpenTaskPositions(t *testing.T) {
 		t.Errorf("task 1 offset lands on wrong row %d: %q", r1, lines)
 	}
 }
+
+func TestRenderOpenTaskExcludesPunctuationAdjacentMarker(t *testing.T) {
+	// "- TODO: x" is NOT a todo per graph.ExtractTodos (it requires whitespace
+	// after the marker), so it must not be recorded in Tasks — otherwise the
+	// deep-link ordinal misaligns. Only the real "- TODO buy milk" counts.
+	body := strings.Join([]string{
+		"- TODO: not a real todo",
+		"- TODO buy milk",
+	}, "\n")
+	out, err := Render(body, 80)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if len(out.Tasks) != 1 {
+		t.Fatalf("open task count: want 1 (only the whitespace-separated todo), got %d", len(out.Tasks))
+	}
+	row := strings.Count(out.Styled[:out.Tasks[0]], "\n")
+	lines := strings.Split(ansi.Strip(out.Styled), "\n")
+	if row >= len(lines) || !strings.Contains(lines[row], "buy milk") {
+		t.Errorf("recorded task offset lands on wrong row %d: %q", row, lines)
+	}
+}
