@@ -305,7 +305,7 @@ func (a *App) enterEditor() tea.Cmd {
 	} else if !os.IsNotExist(err) {
 		return a.setHint("cannot read: " + err.Error())
 	}
-	a.editor = NewEditorView(name, path, content, isNew, a.width, a.height)
+	a.editor = NewEditorView(a.idx, name, path, content, isNew, a.width, a.height)
 	return a.editor.Focus()
 }
 

@@ -11,6 +11,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - In-app markdown editor: `e` edits the current page in a full-screen buffer
   (`Ctrl+S` saves, `esc` exits with an unsaved-changes prompt); `E` opens the
   page in `$EDITOR`. The picker can create a new page by name.
+- In-app editor: live `[[` wiki-link completion — fuzzy page-name list, Enter/Tab to insert `[[Page Name]]`, Esc to dismiss, and a create row for new (red) links.
 
 ## [1.1.1] - 2026-06-09
 

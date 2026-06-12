@@ -5,7 +5,10 @@ picker (with page-creation), ripgrep-backed search, backlinks, TODO dashboard.
 Writes only via `internal/edit/`: the in-app editor (`e`) saves the displayed
 buffer on `Ctrl+S` and creates a page's file lazily on first save; `E` hands the
 file to `$EDITOR`. File creation for a new page is deferred until save, so
-opening then discarding never touches disk.
+opening then discarding never touches disk. While editing, typing `[[` opens a
+live fuzzy completion list of page names (`↑`/`↓` to choose, `Enter`/`Tab` to
+insert `[[Page Name]]`, `Esc` to dismiss); an unmatched name offers a create row
+that inserts a red link without writing to disk.
 
 ## Commands
 

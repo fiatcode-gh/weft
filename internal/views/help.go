@@ -73,6 +73,10 @@ var helpSections = []struct {
 		{"ctrl-s", "save (while editing)"},
 		{"pgup/pgdn", "page up / down (while editing)"},
 		{"esc", "leave editor (prompts if unsaved)"},
+		{"[[", "start wiki-link; pick a page to complete"},
+		{"↑ / ↓", "choose completion (list open)"},
+		{"enter/tab", "insert selected link"},
+		{"esc", "dismiss completion list"},
 	}},
 	{"Maintain", []helpRow{
 		{"R", "rebuild index"},

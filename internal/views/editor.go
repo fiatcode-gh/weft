@@ -5,6 +5,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
+
+	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
 )
 
 type editorMode int
@@ -28,6 +30,7 @@ type EditorView struct {
 	mode          editorMode
 	errMsg        string // non-empty while a save error is pending display
 	width, height int
+	completer     *linkCompleter
 }
 
 // EditorResult is what EditorView.Update reports to the App.
@@ -38,8 +41,10 @@ type EditorResult struct {
 
 // NewEditorView builds an editor for page `name` targeting `path`, primed
 // with `content` (empty for a not-yet-created page). isNew records whether
-// the file existed at open time.
-func NewEditorView(name, path, content string, isNew bool, width, height int) *EditorView {
+// the file existed at open time. idx is the graph index used for link
+// completion; pass nil to disable completion (e.g. in tests that don't
+// exercise it).
+func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, width, height int) *EditorView {
 	ta := textarea.New()
 	ta.CharLimit = 0 // no length cap
 	ta.MaxHeight = 0 // no line cap — pages can exceed textarea's default 99
@@ -47,17 +52,19 @@ func NewEditorView(name, path, content string, isNew bool, width, height int) *E
 	ta.Prompt = ""
 	ta.SetValue(content)
 	e := &EditorView{
-		ta:       ta,
-		path:     path,
-		pageName: name,
-		baseline: content,
-		isNew:    isNew,
-		width:    width,
-		height:   height,
+		ta:        ta,
+		path:      path,
+		pageName:  name,
+		baseline:  content,
+		isNew:     isNew,
+		width:     width,
+		height:    height,
+		completer: newLinkCompleter(idx),
 	}
 	e.SetSize(width, height)
 	_ = e.ta.Focus() // blink cmd not needed here; the App calls Focus() again when it mounts the editor
 	e.baseline = e.Content() // normalize so open-time dirty() is accurate
+	e.refreshCompleter()
 	return e
 }
 
@@ -70,11 +77,11 @@ func (e *EditorView) SetError(msg string) { e.errMsg = msg }
 // Focus focuses the textarea and returns its (cursor-blink) command.
 func (e *EditorView) Focus() tea.Cmd { return e.ta.Focus() }
 
-// SetSize resizes the textarea, reserving one row for the status line.
+// SetSize resizes the textarea, reserving rows for the status line and the
+// active completion strip.
 func (e *EditorView) SetSize(w, h int) {
 	e.width, e.height = w, h
-	e.ta.SetWidth(w)
-	e.ta.SetHeight(max(1, h-1))
+	e.layout()
 }
 
 // dirty reports whether the buffer differs from the last loaded/saved
@@ -82,6 +89,78 @@ func (e *EditorView) SetSize(w, h int) {
 // buffer that lacks a trailing newline doesn't read as dirty right after
 // a save, which writes the normalized form.
 func (e *EditorView) dirty() bool { return e.Content() != e.baseline }
+
+// cursorLineSplit returns the current logical row's text split at the cursor.
+// The textarea exposes no rune-offset getter, but Line() gives the row and
+// LineInfo().StartColumn+ColumnOffset reconstructs the absolute rune column.
+func (e *EditorView) cursorLineSplit() (before, after string) {
+	lines := strings.Split(e.ta.Value(), "\n")
+	row := e.ta.Line()
+	if row < 0 || row >= len(lines) {
+		return "", ""
+	}
+	li := e.ta.LineInfo()
+	col := li.StartColumn + li.ColumnOffset
+	runes := []rune(lines[row])
+	if col > len(runes) {
+		col = len(runes)
+	}
+	return string(runes[:col]), string(runes[col:])
+}
+
+// refreshCompleter re-derives completion state from the cursor position and
+// re-lays-out the view so the strip fits.
+func (e *EditorView) refreshCompleter() {
+	before, after := e.cursorLineSplit()
+	e.completer.refresh(before, after)
+	e.layout()
+}
+
+// acceptCompletion splices the selected candidate into the buffer. For an
+// existing page it deletes the typed partial (via backspaces, so the
+// textarea's own cursor tracking stays correct) and inserts "Name]]". For the
+// create row it keeps the typed name and only closes the link with "]]".
+func (e *EditorView) acceptCompletion() {
+	cand, ok := e.completer.selected()
+	if !ok {
+		return
+	}
+	if cand.create {
+		e.ta.InsertString("]]")
+	} else {
+		for range []rune(e.completer.partial) {
+			e.ta, _ = e.ta.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+		}
+		e.ta.InsertString(cand.name + "]]")
+	}
+	e.refreshCompleter()
+}
+
+// repositionMsg is a content-neutral message handed to the textarea purely to
+// trigger its viewport reposition. The textarea repositions the viewport only
+// inside Update (never on SetHeight), and it ignores message types it doesn't
+// recognize — so sending this changes no buffer state, it just re-centers the
+// viewport on the cursor after a resize.
+type repositionMsg struct{}
+
+// layout sizes the textarea, reserving one row for the status line plus the
+// completion strip's rows while it is active.
+func (e *EditorView) layout() {
+	e.ta.SetWidth(e.width)
+	// Cap the strip so it can't push the textarea/status off a short terminal:
+	// reserve the box chrome (4 rows), the status line (1), and ≥1 textarea row.
+	e.completer.maxVisible = clampInt(e.height-6, 1, maxCompleterRows)
+	h := e.height - 1 - e.completer.rows()
+	e.ta.SetHeight(max(1, h))
+	if e.completer.active {
+		// SetHeight just shrank the textarea to make room for the strip, but it
+		// doesn't reposition the viewport — so the line being edited can sit
+		// below the new bottom edge, hidden behind the strip. Poke Update to
+		// reposition the cursor back into view. Gated on active so the normal
+		// editing/open-a-page viewport behaviour is untouched.
+		e.ta, _ = e.ta.Update(repositionMsg{})
+	}
+}
 
 // Content is the buffer normalized to end in exactly one newline.
 func (e *EditorView) Content() string {
@@ -98,7 +177,11 @@ func (e *EditorView) MarkSaved(content string) {
 }
 
 func (e *EditorView) View() string {
-	return e.ta.View() + "\n" + e.statusLine()
+	v := e.ta.View()
+	if strip := e.completer.View(e.width); strip != "" {
+		v += "\n" + strip
+	}
+	return v + "\n" + e.statusLine()
 }
 
 // Update handles one key and reports whether the App should save/exit.
@@ -118,6 +201,24 @@ func (e *EditorView) Update(msg tea.KeyMsg) (EditorResult, tea.Cmd) {
 		return EditorResult{}, nil // ignore everything else
 	}
 
+	if e.completer.active {
+		switch msg.String() {
+		case keyUp:
+			e.completer.moveUp()
+			return EditorResult{}, nil
+		case keyDown:
+			e.completer.moveDown()
+			return EditorResult{}, nil
+		case keyEnter, "tab":
+			e.acceptCompletion()
+			return EditorResult{}, nil
+		case keyEsc, "ctrl+c":
+			e.completer.dismiss()
+			e.layout()
+			return EditorResult{}, nil
+		}
+	}
+
 	switch msg.String() {
 	case "ctrl+s":
 		return EditorResult{Save: true}, nil
@@ -129,14 +230,17 @@ func (e *EditorView) Update(msg tea.KeyMsg) (EditorResult, tea.Cmd) {
 		return EditorResult{Exit: true}, nil
 	case "pgup":
 		e.scrollPage(-1)
+		e.refreshCompleter()
 		return EditorResult{}, nil
 	case "pgdown":
 		e.scrollPage(+1)
+		e.refreshCompleter()
 		return EditorResult{}, nil
 	}
 
 	var cmd tea.Cmd
 	e.ta, cmd = e.ta.Update(msg)
+	e.refreshCompleter()
 	return EditorResult{}, cmd
 }
 
