@@ -4,14 +4,18 @@ All notable changes to peekseq are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.0] - 2026-06-12
 
 ### Added
 
 - In-app markdown editor: `e` edits the current page in a full-screen buffer
   (`Ctrl+S` saves, `esc` exits with an unsaved-changes prompt); `E` opens the
   page in `$EDITOR`. The picker can create a new page by name.
-- In-app editor: live `[[` wiki-link completion — fuzzy page-name list, Enter/Tab to insert `[[Page Name]]`, Esc to dismiss, and a create row for new (red) links.
+- In-app editor: live `[[` wiki-link completion — type `[[` to open a
+  fuzzy page-name list, `↑`/`↓` to choose, `Enter`/`Tab` to insert
+  `[[Page Name]]`, `Esc` to dismiss, and a create row for new (red) links.
+  Completion won't fire inside an already-closed link, and the candidate
+  strip is capped so it never pushes the edited line off-screen.
 
 ## [1.1.1] - 2026-06-09
 
