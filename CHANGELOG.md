@@ -4,6 +4,14 @@ All notable changes to peekseq are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- In-app markdown editor: `e` edits the current page in a full-screen buffer
+  (`Ctrl+S` saves, `esc` exits with an unsaved-changes prompt); `E` opens the
+  page in `$EDITOR`. The picker can create a new page by name.
+
 ## [1.1.1] - 2026-06-09
 
 ### Fixed

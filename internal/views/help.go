@@ -67,8 +67,14 @@ var helpSections = []struct {
 		{"b", "backlinks to the current page"},
 		{"T", "open todos dashboard"},
 	}},
+	{"Edit", []helpRow{
+		{"e", "edit current page in-app"},
+		{"E", "edit current page in $EDITOR"},
+		{"ctrl-s", "save (while editing)"},
+		{"pgup/pgdn", "page up / down (while editing)"},
+		{"esc", "leave editor (prompts if unsaved)"},
+	}},
 	{"Maintain", []helpRow{
-		{"e", "edit current page in $EDITOR"},
 		{"R", "rebuild index"},
 	}},
 	{"Help / quit", []helpRow{

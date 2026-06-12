@@ -157,7 +157,10 @@ func TestPickerEnterReturnsSelected(t *testing.T) {
 	}
 }
 
-func TestPickerEnterEmptyNoop(t *testing.T) {
+// TestPickerCreate_EnterOnIsolatedRow verifies that Enter on a query with no
+// fuzzy matches (so the Create row is the only selectable row) returns a
+// Create result rather than doing nothing.
+func TestPickerCreate_EnterOnIsolatedRow(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
 	p := NewPicker(loadFixture(t), 80, 30)
@@ -167,9 +170,11 @@ func TestPickerEnterEmptyNoop(t *testing.T) {
 	if len(p.matches) != 0 {
 		t.Fatalf("setup: query should yield no matches, got %d", len(p.matches))
 	}
+	// With the create row present, Enter now returns a Create result.
 	res := p.Update("enter")
-	if res.Selected != "" || res.Accept || res.Cancel {
-		t.Errorf("enter with no matches: want zeros, got (%q,%v,%v)", res.Selected, res.Accept, res.Cancel)
+	if !res.Accept || !res.Create || res.Selected != "zzzzzzzzznotapage" {
+		t.Errorf("enter with create row: want Accept+Create+Selected, got (%q,%v,%v,%v)",
+			res.Selected, res.Accept, res.Cancel, res.Create)
 	}
 }
 
@@ -341,5 +346,62 @@ func TestPadTo(t *testing.T) {
 		if got := padTo(c.in, c.w); got != c.want {
 			t.Errorf("padTo(%q,%d): want %q, got %q", c.in, c.w, c.want, got)
 		}
+	}
+}
+
+func typeQuery(p *Picker, s string) {
+	for _, r := range s {
+		p.Update(string(r))
+	}
+}
+
+func TestPickerCreate_OfferedForNewName(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	p := NewPicker(loadFixture(t), 80, 30)
+	typeQuery(p, "Brand New Page")
+	if p.createName != "Brand New Page" {
+		t.Errorf("createName: got %q, want %q", p.createName, "Brand New Page")
+	}
+}
+
+func TestPickerCreate_StripsMdExtension(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	p := NewPicker(loadFixture(t), 80, 30)
+	typeQuery(p, "Notes.md")
+	if p.createName != "Notes" {
+		t.Errorf("createName: got %q, want %q (trailing .md stripped)", p.createName, "Notes")
+	}
+}
+
+func TestPickerCreate_SuppressedForExistingPage(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	p := NewPicker(loadFixture(t), 80, 30)
+	typeQuery(p, "Alpha") // exists in the fixture
+	if p.createName != "" {
+		t.Errorf("createName should be empty for an existing page; got %q", p.createName)
+	}
+}
+
+func TestPickerCreate_SuppressedForDateShaped(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	p := NewPicker(loadFixture(t), 80, 30)
+	typeQuery(p, "2026-06-15")
+	if p.createName != "" {
+		t.Errorf("createName should be empty for a date-shaped query; got %q", p.createName)
+	}
+}
+
+func TestPickerCreate_EnterReturnsCreateResult(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	p := NewPicker(loadFixture(t), 80, 30)
+	typeQuery(p, "Zzz New") // no fuzzy matches in fixture
+	res := p.Update(keyEnter)
+	if !res.Accept || !res.Create || res.Selected != "Zzz New" {
+		t.Errorf("enter on create row: got %+v, want {Accept, Create, Selected:\"Zzz New\"}", res)
 	}
 }

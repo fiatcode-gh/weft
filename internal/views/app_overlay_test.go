@@ -1,6 +1,8 @@
 package views
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -177,6 +179,34 @@ func TestAppCenterOverlayPlacesContent(t *testing.T) {
 
 // TestAppResizePropagatesToOverlays asserts that a WindowSizeMsg arriving while
 // an overlay is open updates the overlay's cached size.
+func TestPickerCreate_OpensEditorOnNewPage(t *testing.T) {
+	a := bootApp(t)
+	a.active = NewPicker(a.idx, a.width, a.height)
+	// Type a brand-new name into the open picker.
+	for _, r := range "Zzz New Page" {
+		a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(string(r))})
+	}
+	// Enter selects the create row.
+	a.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if a.active != nil {
+		t.Errorf("picker should be closed after create")
+	}
+	if a.editor == nil {
+		t.Fatalf("create should open the in-app editor")
+	}
+	if a.editor.pageName != "Zzz New Page" {
+		t.Errorf("editor page: got %q, want %q", a.editor.pageName, "Zzz New Page")
+	}
+	if !a.editor.isNew {
+		t.Errorf("a created page's editor should have isNew=true")
+	}
+	wantSuffix := filepath.Join("pages", "Zzz New Page.md")
+	if !strings.HasSuffix(a.editor.path, wantSuffix) {
+		t.Errorf("editor path: got %q, want suffix %q", a.editor.path, wantSuffix)
+	}
+}
+
 func TestAppResizePropagatesToOverlays(t *testing.T) {
 	a := bootApp(t)
 
@@ -227,4 +257,32 @@ func TestAppResizePropagatesToOverlays(t *testing.T) {
 			a.Update(tea.KeyMsg{Type: tea.KeyEsc})
 		})
 	}
+}
+
+// TestPickerCreate_DiscardLeavesNoFile pins the behavior when a user creates a
+// page via the picker, types nothing, and immediately Esc-discards: the editor
+// closes cleanly, no file is written (creation is deferred to save), and the
+// app doesn't crash rendering the now-fileless page.
+func TestPickerCreate_DiscardLeavesNoFile(t *testing.T) {
+	a := bootApp(t)
+	a.active = NewPicker(a.idx, a.width, a.height)
+	for _, r := range "Zzz Throwaway" {
+		a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(string(r))})
+	}
+	a.Update(tea.KeyMsg{Type: tea.KeyEnter}) // create -> editor opens
+	if a.editor == nil {
+		t.Fatalf("precondition: create should open the editor")
+	}
+	path := a.editor.path
+
+	// Esc on a clean (untyped) buffer exits straight to the read view.
+	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if a.editor != nil {
+		t.Errorf("esc on a clean new-page buffer should close the editor")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("discarding a new page must not write a file; stat err=%v", err)
+	}
+	// Rendering the page (now naming a fileless page) must not panic.
+	_ = a.View()
 }

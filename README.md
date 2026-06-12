@@ -1,6 +1,6 @@
 # peekseq — a Logseq TUI
 
-A terminal browser for a local Logseq graph. Recency-sorted page picker, ripgrep-backed full-text search, backlinks, and a TODO dashboard. Renders pages with hanging-indent bullets, coloured workflow markers (TODO/DOING/LATER/WAITING/DONE/CANCELED/NOW), and highlighted wiki-links you can step through. Press `e` to edit the current page in your `$EDITOR`; `e` on a missing today's-journal file creates it on demand. Press `.` to jump to today's journal.
+A terminal browser and editor for a local Logseq graph. Recency-sorted page picker (with page-creation), ripgrep-backed full-text search, backlinks, and a TODO dashboard. Renders pages with hanging-indent bullets, coloured workflow markers (TODO/DOING/LATER/WAITING/DONE/CANCELED/NOW), and highlighted wiki-links you can step through. Press `e` to edit the current page in a full-screen in-app editor (`Ctrl+S` saves, `Esc` exits with an unsaved-changes prompt); `E` hands the file to your `$EDITOR`. Press `.` to jump to today's journal.
 
 ## Install
 
@@ -49,8 +49,9 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | `Ctrl-d/u` | half-page scroll                    |
 | `g` / `G`  | jump to top / bottom of page        |
 | `R`        | rebuild the index                   |
-| `e`        | edit current page in `$EDITOR`      |
-| `Esc`      | close an overlay                    |
+| `e`        | edit current page in-app            |
+| `E`        | edit current page in `$EDITOR`      |
+| `Esc`      | close an overlay / leave editor     |
 | `q`        | quit (from page view)               |
 
 ## What gets rendered
@@ -72,7 +73,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 
 ## Scope
 
-Read-only except for the `e` key, which hands the current page's file to `$EDITOR`, and the `.` key, which creates today's journal if it doesn't exist. No fold/unfold, no filesystem-watch live reload (use `R`).
+Writes only via the in-app editor (`e`, saves on `Ctrl+S`) and the `$EDITOR` handoff (`E`); the `.` key creates today's journal if it doesn't exist, and the picker can create a new page by name. No fold/unfold, no filesystem-watch live reload (use `R`).
 
 ### What is not supported
 

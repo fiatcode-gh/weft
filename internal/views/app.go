@@ -22,7 +22,9 @@ type indexLoadedMsg struct {
 	err error
 }
 
-// editorExitedMsg is delivered when the child editor process returns.
+// editorExitedMsg is delivered when the child editor process returns. Only
+// the E ($EDITOR) handoff produces this; the in-app editor (e) reindexes
+// inline in the res.Exit branch and never goes through here.
 // path is the file we handed to the editor; t0 is the pre-edit mtime
 // snapshot (zero if the file did not exist before EnsureFile ran).
 // err is non-nil when the editor exited non-zero or failed to launch.
@@ -46,6 +48,10 @@ type App struct {
 	idx     *graph.Index
 	loadErr error
 	page    *PageView
+
+	// editor is the full-screen in-app editor, or nil when not editing.
+	// When non-nil it owns all keys and the whole screen.
+	editor *EditorView
 
 	// active is the overlay layered over the page, or nil when the page has
 	// focus. Set when an open-overlay key is pressed; cleared on Accept/Cancel.
@@ -277,6 +283,32 @@ func (a *App) editCurrent() tea.Cmd {
 	})
 }
 
+// enterEditor opens the in-app editor on the current page. The target file
+// path is computed but NOT created — a brand-new page is written to disk
+// only on save (Ctrl+S). Journals route to journals/, every other name to
+// pages/ (flat, "/" mangled to "___" by FilenameFromPageName).
+func (a *App) enterEditor() tea.Cmd {
+	name := a.page.Page()
+	var path string
+	if meta, ok := a.idx.ByName[name]; ok {
+		path = meta.Path
+	} else {
+		sub := "pages"
+		if graph.IsJournalPageName(name) {
+			sub = "journals"
+		}
+		path = filepath.Join(a.graphPath, sub, graph.FilenameFromPageName(name))
+	}
+	content, isNew := "", true
+	if b, err := os.ReadFile(path); err == nil {
+		content, isNew = string(b), false
+	} else if !os.IsNotExist(err) {
+		return a.setHint("cannot read: " + err.Error())
+	}
+	a.editor = NewEditorView(name, path, content, isNew, a.width, a.height)
+	return a.editor.Focus()
+}
+
 // journalNeighbor returns the closest existing journal in a.idx.Journals in
 // direction dir (-1 prev, +1 next) given that current is a journal-shaped
 // name (YYYY-MM-DD).
@@ -369,6 +401,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if a.active != nil {
 			a.active.SetSize(m.Width, m.Height)
 		}
+		if a.editor != nil {
+			a.editor.SetSize(m.Width, m.Height)
+		}
 		return a, nil
 	case tea.KeyMsg:
 		key := m.String()
@@ -386,6 +421,26 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return a, nil
 		}
+		if a.editor != nil {
+			res, taCmd := a.editor.Update(m)
+			if res.Save {
+				content := a.editor.Content()
+				if err := edit.WriteFile(a.editor.path, []byte(content)); err != nil {
+					a.editor.SetError(err.Error())
+					return a, taCmd
+				}
+				a.editor.MarkSaved(content)
+			}
+			if res.Exit {
+				saved := a.editor.saved
+				a.editor = nil
+				if saved {
+					return a, tea.Batch(taCmd, a.buildIndexCmd())
+				}
+				a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
+			}
+			return a, taCmd
+		}
 		// An open overlay swallows all keys until it accepts or cancels.
 		if a.active != nil {
 			res := a.active.Update(key)
@@ -394,6 +449,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, res.Cmd
 			}
 			if res.Accept {
+				if res.Create {
+					a.navigate(res.Selected)
+					a.active = nil
+					return a, a.enterEditor()
+				}
 				if res.Selected != "" {
 					if res.DeepLink {
 						a.navigateToTask(res.Selected, res.TaskOrdinal)
@@ -456,6 +516,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// loadErr which the splash overlay renders.
 			return a, a.buildIndexCmd()
 		case keyE:
+			return a, a.enterEditor()
+		case keyShiftE:
 			return a, a.editCurrent()
 		case "n":
 			a.page.CycleLink(+1)
@@ -488,6 +550,9 @@ func (a *App) View() string {
 		return styleTitle.Render("peekseq") +
 			"\n\n" + styleFaint.Render(fmt.Sprintf("Loading %s ...", a.graphPath)) +
 			"\n\n" + styleFaint.Render("q to quit")
+	}
+	if a.editor != nil {
+		return a.editor.View()
 	}
 	if a.active != nil {
 		return a.centerOverlay(a.active.View())

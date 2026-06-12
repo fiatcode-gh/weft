@@ -21,12 +21,13 @@ type pickerChoice struct {
 
 type Picker struct {
 	listBox
-	idx     *graph.Index
-	input   textinput.Model
-	choices []pickerChoice
-	names   []string // derived from choices, kept in lockstep for fuzzy.Find
-	matches []fuzzy.Match
-	now     time.Time // captured at construction for stable relative-time hints
+	idx        *graph.Index
+	input      textinput.Model
+	choices    []pickerChoice
+	names      []string // derived from choices, kept in lockstep for fuzzy.Find
+	matches    []fuzzy.Match
+	now        time.Time // captured at construction for stable relative-time hints
+	createName string    // non-empty when a "＋ Create" row should be offered
 }
 
 func NewPicker(idx *graph.Index, width, height int) *Picker {
@@ -46,8 +47,8 @@ func NewPicker(idx *graph.Index, width, height int) *Picker {
 
 // pickerChoices returns the picker candidate list sorted with the most
 // recently modified files first. Only real on-disk pages and journals
-// appear; the picker is read-only just like the rest of peekseq and won't
-// invent rows for files that don't exist yet.
+// appear here; the synthetic "＋ Create" row for a not-yet-existent page is
+// handled separately (see refreshCreate / createName).
 func pickerChoices(idx *graph.Index) []pickerChoice {
 	seen := make(map[string]struct{}, len(idx.Pages))
 	entries := make([]pickerChoice, 0, len(idx.Pages))
@@ -67,6 +68,45 @@ func pickerChoices(idx *graph.Index) []pickerChoice {
 	return entries
 }
 
+// normalizeQuery trims the query and strips a single trailing ".md" so a
+// typed extension never doubles to "somepage.md.md".
+func normalizeQuery(q string) string {
+	q = strings.TrimSpace(q)
+	if len(q) >= 3 && strings.EqualFold(q[len(q)-3:], ".md") {
+		q = strings.TrimSpace(q[:len(q)-3])
+	}
+	return q
+}
+
+// refreshCreate decides whether to offer a "＋ Create" row for the current
+// query: a non-empty, non-date-shaped name that resolves to no existing page
+// and yields no fuzzy matches. It must be called after p.matches is updated.
+func (p *Picker) refreshCreate(q string) {
+	name := normalizeQuery(q)
+	if name == "" || graph.IsJournalPageName(name) {
+		p.createName = ""
+		return
+	}
+	if len(p.matches) > 0 {
+		p.createName = ""
+		return
+	}
+	if _, ok := p.idx.Resolve(name); ok {
+		p.createName = ""
+		return
+	}
+	p.createName = name
+}
+
+// rowCount is the number of selectable rows: fuzzy matches plus the optional
+// create row.
+func (p *Picker) rowCount() int {
+	if p.createName != "" {
+		return len(p.matches) + 1
+	}
+	return len(p.matches)
+}
+
 func (p *Picker) search(q string) {
 	if strings.TrimSpace(q) == "" {
 		// No query: show all choices (sorted by mtime in pickerChoices).
@@ -78,10 +118,12 @@ func (p *Picker) search(q string) {
 			p.matches = append(p.matches, fuzzy.Match{Str: c.name, Index: i})
 		}
 		p.sel = 0
+		p.refreshCreate(q)
 		return
 	}
 	p.matches = fuzzy.Find(q, p.names)
 	p.sel = 0
+	p.refreshCreate(q)
 }
 
 // Update handles a key and reports the result to the App.
@@ -90,6 +132,9 @@ func (p *Picker) Update(key string) OverlayResult {
 	case keyEsc:
 		return OverlayResult{Cancel: true}
 	case keyEnter:
+		if p.createName != "" && p.sel == len(p.matches) {
+			return OverlayResult{Selected: p.createName, Accept: true, Create: true}
+		}
 		if p.sel >= 0 && p.sel < len(p.matches) {
 			return OverlayResult{Selected: p.matches[p.sel].Str, Accept: true}
 		}
@@ -98,7 +143,7 @@ func (p *Picker) Update(key string) OverlayResult {
 		p.moveUp()
 		return OverlayResult{}
 	case keyDown, keyCtrlJ:
-		p.moveDown(len(p.matches))
+		p.moveDown(p.rowCount())
 		return OverlayResult{}
 	}
 	// Otherwise feed the key into the text input.
@@ -158,12 +203,16 @@ func (p *Picker) View() string {
 	b.WriteString("\n")
 	b.WriteString(styleFaint.Render(strings.Repeat("─", inner)))
 	b.WriteString("\n")
-	if len(p.matches) == 0 {
+	if len(p.matches) == 0 && p.createName == "" {
 		b.WriteString(styleFaint.Render("  no matches"))
 		b.WriteString("\n")
 		b.WriteString("\n")
 		b.WriteString(styleFaint.Render(clamp("↑/↓ select · enter open · esc cancel", inner)))
 		return styleBorder.Width(inner + 4).Render(b.String())
+	}
+	if len(p.matches) == 0 {
+		b.WriteString(styleFaint.Render("  no matches"))
+		b.WriteString("\n")
 	}
 
 	start, end := scrollWindow(p.sel, len(p.matches), p.visibleRows())
@@ -194,6 +243,19 @@ func (p *Picker) View() string {
 	}
 	if end < len(p.matches) {
 		b.WriteString(styleFaint.Render(fmt.Sprintf("  ↓ %d more below", len(p.matches)-end)))
+		b.WriteString("\n")
+	}
+	if p.createName != "" {
+		marker := "   "
+		label := fmt.Sprintf("＋ Create %q", p.createName)
+		if p.sel == len(p.matches) {
+			marker = styleSel.Render(" ▶ ")
+			label = styleSel.Render(label)
+		} else {
+			label = styleFaint.Render(label)
+		}
+		b.WriteString(marker)
+		b.WriteString(clamp(label, inner))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")

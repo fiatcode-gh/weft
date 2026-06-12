@@ -530,10 +530,10 @@ func TestEditBootstrapRebuildsPageView(t *testing.T) {
 		t.Fatalf("precondition: today's journal should NOT be in index; file doesn't exist")
 	}
 
-	// Press `e` directly — cold-start bootstrap.
-	_, cmd = a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	// Press `E` directly — cold-start bootstrap ($EDITOR path).
+	_, cmd = a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("E")})
 	if cmd == nil {
-		t.Fatal("e on cold-start should return a non-nil editor cmd; got nil (hint: " + a.hint + ")")
+		t.Fatal("E on cold-start should return a non-nil editor cmd; got nil (hint: " + a.hint + ")")
 	}
 
 	if _, ok := a.idx.ByName[today]; !ok {
@@ -542,7 +542,7 @@ func TestEditBootstrapRebuildsPageView(t *testing.T) {
 	// The PageView must resolve against the rebuilt index: its page is today's
 	// journal and that page is now present in the index it holds.
 	if a.page.idx != a.idx {
-		t.Errorf("PageView still bound to stale index after e-bootstrap")
+		t.Errorf("PageView still bound to stale index after E-bootstrap")
 	}
 	if a.page.Page() != today {
 		t.Errorf("PageView page: want %q, got %q", today, a.page.Page())

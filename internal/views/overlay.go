@@ -15,7 +15,10 @@ type OverlayResult struct {
 	DeepLink    bool
 	Accept      bool    // user chose Selected; App navigates (if non-empty) and closes
 	Cancel      bool    // user dismissed; App closes the overlay
-	Cmd         tea.Cmd // optional async work to run (search launches rg here)
+	// Create, when Accept is true, means "create the page named Selected"
+	// rather than open an existing one. Only the Picker sets it.
+	Create bool
+	Cmd    tea.Cmd // optional async work to run (search launches rg here)
 }
 
 // Overlay is a modal view layered over the page. App routes keys to the active

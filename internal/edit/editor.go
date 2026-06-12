@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -69,6 +70,17 @@ func EnsureFile(path string) (created bool, err error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// WriteFile writes data to path, creating the parent directory if it does
+// not yet exist. It is the second deliberate write path in the project
+// (alongside the EnsureFile bootstrap); all disk writes still funnel
+// through package edit.
+func WriteFile(path string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
 }
 
 // SnapshotMtime returns the file's modification time, or time.Time{}

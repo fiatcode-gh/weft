@@ -140,6 +140,42 @@ func TestEnsureFile(t *testing.T) {
 	})
 }
 
+func TestWriteFile(t *testing.T) {
+	t.Run("writes content and creates parent dir", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "pages", "New Page.md")
+		if err := WriteFile(path, []byte("hello\n")); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read back: %v", err)
+		}
+		if string(body) != "hello\n" {
+			t.Errorf("content: got %q, want %q", body, "hello\n")
+		}
+		info, _ := os.Stat(path)
+		if info.Mode().Perm() != 0o644 {
+			t.Errorf("mode: got %v, want 0o644", info.Mode().Perm())
+		}
+	})
+
+	t.Run("overwrites existing file", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "p.md")
+		if err := os.WriteFile(path, []byte("old\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := WriteFile(path, []byte("new\n")); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		body, _ := os.ReadFile(path)
+		if string(body) != "new\n" {
+			t.Errorf("content: got %q, want %q", body, "new\n")
+		}
+	})
+}
+
 func TestSnapshotMtime(t *testing.T) {
 	t.Run("existing file returns ModTime", func(t *testing.T) {
 		dir := t.TempDir()
