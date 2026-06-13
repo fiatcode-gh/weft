@@ -18,7 +18,17 @@ type OverlayResult struct {
 	// Create, when Accept is true, means "create the page named Selected"
 	// rather than open an existing one. Only the Picker sets it.
 	Create bool
-	Cmd    tea.Cmd // optional async work to run (search launches rg here)
+	// FocusLinkTo, when Accept is true and non-empty, asks the App to position
+	// the destination page's link cursor on the first link back to this page
+	// (so a backlink jump lands on — and highlights — the referencing link).
+	// Only the Backlinks overlay sets it, and only for linked refs.
+	FocusLinkTo string
+	// HighlightText, when Accept is true and non-empty, asks the App to navigate
+	// to Selected and highlight occurrences of this term on the destination
+	// (scrolling to the first). Only the Backlinks overlay sets it, for unlinked
+	// refs.
+	HighlightText string
+	Cmd           tea.Cmd // optional async work to run (search launches rg here)
 }
 
 // Overlay is a modal view layered over the page. App routes keys to the active

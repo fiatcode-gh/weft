@@ -39,7 +39,11 @@ an intentional UI change, run with `-update` and visually diff the golden before
   `Resolve` / `EnsureFile` / `WriteFile` / `SnapshotMtime`. Invoked by the in-app editor (`e`,
   saves on `Ctrl+S`) and by `App.editCurrent` for `$EDITOR` handoff (`E`).
 - `internal/views/` — Bubble Tea models: `app` (root), `page`, `picker`, `search`,
-  `backlinks`, `todos`, `help`, `editor` (in-app markdown editor).
+  `backlinks`, `todos`, `help`, `editor` (in-app markdown editor). The backlinks
+  view (`b`) shows two sections: linked references (`[[…]]` mentions) then unlinked
+  references (bare-text mentions not yet wiki-linked); read-only, `enter` jumps to the
+  mention's page and lands on the reference: linked backlinks focus the back-reference
+  link (cursor + scroll), unlinked references highlight the mention and scroll it into view.
 
 ## External deps
 

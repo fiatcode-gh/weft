@@ -64,7 +64,7 @@ var helpSections = []struct {
 		{">", "next journal"},
 		{"ctrl-p", "picker — find any page"},
 		{"/", "search the graph (ripgrep)"},
-		{"b", "backlinks to the current page"},
+		{"b", "backlinks + unlinked refs for the current page"},
 		{"T", "open todos dashboard"},
 	}},
 	{"Edit", []helpRow{

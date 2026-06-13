@@ -14,6 +14,7 @@ import (
 
 	"git.fiatcode.dev/fiatcode/peekseq/internal/edit"
 	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
+	"git.fiatcode.dev/fiatcode/peekseq/internal/search"
 )
 
 // indexLoadedMsg carries the result of an asynchronous graph.BuildIndex run.
@@ -166,6 +167,46 @@ func (a *App) navigateToTask(name string, ordinal int) {
 	if ordinal >= 0 {
 		a.page.ScrollToTask(ordinal)
 	}
+}
+
+// navigateFocusingLink is navigate plus positioning the destination page's link
+// cursor on the first link back to backTarget — so jumping from a backlink lands
+// on (and highlights) the referencing link. The resulting cursor is stored in
+// the new history entry so it survives [ / ] history navigation.
+func (a *App) navigateFocusingLink(name, backTarget string) {
+	if a.histIdx >= 0 && a.histIdx < len(a.hist) {
+		a.hist[a.histIdx].offset = a.page.Offset()
+		a.hist[a.histIdx].cursor = a.page.Cursor()
+	}
+	a.hist = append(a.hist[:a.histIdx+1], historyEntry{
+		page:        name,
+		offset:      0,
+		cursor:      -1,
+		taskOrdinal: -1,
+	})
+	a.histIdx = len(a.hist) - 1
+	a.page.SetPage(name)
+	a.page.FocusLinkTo(backTarget)
+	a.hist[a.histIdx].cursor = a.page.Cursor()
+}
+
+// navigateHighlighting navigates to name and highlights occurrences of term
+// (the page navigated from) on the destination, scrolling to the first — for
+// unlinked references, which have no link to focus a cursor on. One-shot: the
+// new history entry stores no emphasis, so [ / ] restore lands without it.
+func (a *App) navigateHighlighting(name, term string) {
+	if a.histIdx >= 0 && a.histIdx < len(a.hist) {
+		a.hist[a.histIdx].offset = a.page.Offset()
+		a.hist[a.histIdx].cursor = a.page.Cursor()
+	}
+	a.hist = append(a.hist[:a.histIdx+1], historyEntry{
+		page:        name,
+		offset:      0,
+		cursor:      -1,
+		taskOrdinal: -1,
+	})
+	a.histIdx = len(a.hist) - 1
+	a.page.SetPageEmphasizing(name, term)
 }
 
 // historyBack walks one step backward in the history stack, restoring the
@@ -340,6 +381,25 @@ func (a *App) journalNeighbor(current string, dir int) (string, bool) {
 	return js[j], true
 }
 
+// unlinkedRefs finds bare-text mentions of `name` elsewhere in the graph that
+// aren't already links. Best-effort: a ripgrep failure yields no unlinked refs
+// rather than breaking the backlinks panel — and an error hint would be
+// invisible behind the overlay anyway (cf. the slice-1 hidden-hint lesson).
+func (a *App) unlinkedRefs(name string) []graph.UnlinkedRef {
+	hits, err := search.Mentions(a.graphPath, name)
+	if err != nil {
+		return nil
+	}
+	targetPath := ""
+	if meta, ok := a.idx.ByName[name]; ok {
+		targetPath = meta.Path
+	}
+	return graph.FilterUnlinked(hits, name, targetPath, func(p string) (string, error) {
+		b, err := os.ReadFile(p)
+		return string(b), err
+	})
+}
+
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m := msg.(type) {
 	case indexLoadedMsg:
@@ -455,7 +515,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return a, a.enterEditor()
 				}
 				if res.Selected != "" {
-					if res.DeepLink {
+					if res.FocusLinkTo != "" {
+						a.navigateFocusingLink(res.Selected, res.FocusLinkTo)
+					} else if res.HighlightText != "" {
+						a.navigateHighlighting(res.Selected, res.HighlightText)
+					} else if res.DeepLink {
 						a.navigateToTask(res.Selected, res.TaskOrdinal)
 					} else {
 						a.navigate(res.Selected)
@@ -473,7 +537,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "/":
 			a.active = NewSearchView(a.idx, a.width, a.height)
 		case "b":
-			a.active = NewBacklinks(a.idx, a.page.Page(), a.width, a.height)
+			name := a.page.Page()
+			a.active = NewBacklinks(a.idx, name, a.unlinkedRefs(name), a.width, a.height)
 		case "T":
 			a.active = NewTodos(a.idx, a.width, a.height)
 		case "?":

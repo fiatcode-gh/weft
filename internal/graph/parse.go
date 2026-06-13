@@ -40,16 +40,26 @@ func ExtractWikiLinks(body string) []LinkHit {
 		if inFence {
 			continue
 		}
-		for _, m := range wikiLinkRe.FindAllStringSubmatch(line, -1) {
-			raw := strings.TrimSpace(m[1])
-			// Strip optional #block fragment: [[Alpha#summary]] -> "Alpha".
-			if i := strings.IndexByte(raw, '#'); i >= 0 {
-				raw = raw[:i]
+		// Scan only OUTSIDE inline-backtick code spans, matching the renderer
+		// (render.replaceWikiLinksOutsideInlineCode): split on backticks, where
+		// even-indexed segments are literal text and odd-indexed are inline
+		// code. Keeps the backlink index and the rendered links in agreement,
+		// so a `[[Foo]]` written as a literal example isn't a phantom backlink.
+		for seg, part := range strings.Split(line, "`") {
+			if seg%2 == 1 {
+				continue // inside inline code
 			}
-			if raw == "" {
-				continue
+			for _, m := range wikiLinkRe.FindAllStringSubmatch(part, -1) {
+				raw := strings.TrimSpace(m[1])
+				// Strip optional #block fragment: [[Alpha#summary]] -> "Alpha".
+				if j := strings.IndexByte(raw, '#'); j >= 0 {
+					raw = raw[:j]
+				}
+				if raw == "" {
+					continue
+				}
+				out = append(out, LinkHit{Target: raw, Line: i + 1})
 			}
-			out = append(out, LinkHit{Target: raw, Line: i + 1})
 		}
 	}
 	return out

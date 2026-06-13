@@ -34,18 +34,31 @@ type Span struct {
 // neither subdirectory exists. A ripgrep exit code of 1 (no matches) is
 // treated as success.
 func Run(graphPath, query string) ([]Hit, error) {
-	out, err := runRipgrep(graphPath, query)
+	out, err := runRipgrep(graphPath, []string{"--smart-case"}, query)
 	if err != nil {
 		return nil, err
 	}
 	return parseJSON(out), nil
 }
 
-func runRipgrep(graphPath, query string) ([]byte, error) {
-	// --smart-case keeps the search case-insensitive unless the pattern
-	// contains an uppercase letter, which matches what most interactive
-	// users expect from a quick search.
-	args := []string{"--json", "--smart-case", "--", query}
+// Mentions finds whole-word, case-insensitive, literal occurrences of name
+// across pages/ and journals/. Used to detect unlinked references to a page;
+// word boundaries keep "Go" from matching "Google", and -F treats names with
+// regex metacharacters literally.
+func Mentions(graphPath, name string) ([]Hit, error) {
+	out, err := runRipgrep(graphPath, []string{"-w", "-F", "--ignore-case"}, name)
+	if err != nil {
+		return nil, err
+	}
+	return parseJSON(out), nil
+}
+
+// runRipgrep runs `rg --json <flags...> -- <query> <pages> <journals>` and
+// returns raw stdout. A ripgrep exit code of 1 (no matches) is treated as
+// success. Returns (nil, nil) when neither subdirectory exists.
+func runRipgrep(graphPath string, flags []string, query string) ([]byte, error) {
+	args := append([]string{"--json"}, flags...)
+	args = append(args, "--", query)
 	baseArgs := len(args)
 	for _, sub := range []string{"pages", "journals"} {
 		p := filepath.Join(graphPath, sub)

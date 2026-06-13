@@ -236,7 +236,7 @@ func TestOverlayFootersFitNarrowWidth(t *testing.T) {
 	}{
 		{"picker", func() string { return NewPicker(idx, 30, 30).View() }},
 		{"search", func() string { return NewSearchView(idx, 30, 30).View() }},
-		{"backlinks", func() string { return NewBacklinks(idx, "Hub", 30, 30).View() }},
+		{"backlinks", func() string { return NewBacklinks(idx, "Hub", nil, 30, 30).View() }},
 		{"todos", func() string { return NewTodos(idx, 30, 30).View() }},
 	}
 	for _, c := range cases {

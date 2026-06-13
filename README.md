@@ -38,7 +38,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | `Ctrl-P`   | open picker (recent + fuzzy)        |
 | `/`        | open full-text search (ripgrep)     |
 | `T`        | open TODO dashboard                 |
-| `b`        | open backlinks for the current page |
+| `b`        | open backlinks for the current page (linked + unlinked refs) |
 | `?`        | toggle the help overlay             |
 | `n` / `N`  | cycle the wiki-link cursor          |
 | `Enter`    | follow link / open selection        |
@@ -60,7 +60,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 - Workflow markers at the start of a bullet are colour-coded (`TODO` red, `DOING` yellow, `LATER` blue, `WAITING` dim, `DONE` green, `CANCELED`/`CANCELLED` strikethrough, `NOW` magenta).
 - `:LOGBOOK: ... :END:` blocks are hidden — they're metadata, not content.
 - Long bullets wrap with hanging indent, so continuation lines align with the text after the bullet rather than under the bullet glyph.
-- Backlinks filters self-references — viewing a page never lists that page's own mentions of itself.
+- Backlinks (`b`) shows two sections: **Linked references** (`[[…]]` mentions) followed by **Unlinked references** — bare-text mentions of the page name that aren't yet wiki-linked. `Enter` on either section jumps to the mention's page and lands on the reference itself: a linked backlink focuses the back-reference `[[link]]` (cursor on it, scrolled into view), and an unlinked reference highlights the bare-text mention and scrolls it into view. Self-references are always excluded.
 
 ## Environment
 

@@ -29,8 +29,9 @@ type PageView struct {
 	page   string
 	result render.Result
 	vp     viewport.Model
-	cursor int // index into result.Links, or -1
-	err    error
+	cursor   int    // index into result.Links, or -1
+	emphasis string // transient term to highlight on arrival; "" = none
+	err      error
 	width  int
 	height int
 	cache  map[string]cachedPage
@@ -62,7 +63,19 @@ func (p *PageView) Page() string { return p.page }
 func (p *PageView) SetPage(name string) {
 	p.page = name
 	p.cursor = -1
+	p.emphasis = ""
 	p.load()
+}
+
+// SetPageEmphasizing switches to name and highlights whole-word occurrences of
+// term (the page navigated from), scrolling to the first. The highlight is
+// transient: a later SetPage or history Restore clears it.
+func (p *PageView) SetPageEmphasizing(name, term string) {
+	p.page = name
+	p.cursor = -1
+	p.emphasis = term
+	p.load()
+	p.scrollToFirstFind()
 }
 
 // SetSize updates viewport size. The page body is only re-rendered when the
@@ -127,6 +140,18 @@ func (p *PageView) FollowCursor() string {
 		return ""
 	}
 	return p.result.Links[p.cursor].Target
+}
+
+// FocusLinkTo positions the link cursor on the first link whose target resolves
+// to name and scrolls it into view. No-op when the page has no such link.
+func (p *PageView) FocusLinkTo(name string) {
+	for i, l := range p.result.Links {
+		if resolved, ok := p.idx.Resolve(l.Target); ok && resolved.Name == name {
+			p.cursor = i
+			p.scrollToCursor()
+			return
+		}
+	}
 }
 
 // LineDown/LineUp/HalfPage/Goto delegates to viewport.
@@ -238,10 +263,15 @@ func (p *PageView) load() {
 	if !ok {
 		return
 	}
-	if c, hit := p.cache[meta.Name]; hit && c.modTime.Equal(meta.ModTime) {
-		p.result = c.result
-		p.vp.SetContent(p.result.Styled)
-		return
+	// The per-page cache holds only plain (un-emphasised) renders. When an
+	// emphasis term is set the render is transient — never read or write the
+	// cache, so a later plain navigation can't be served a highlighted version.
+	if p.emphasis == "" {
+		if c, hit := p.cache[meta.Name]; hit && c.modTime.Equal(meta.ModTime) {
+			p.result = c.result
+			p.vp.SetContent(p.result.Styled)
+			return
+		}
 	}
 	b, err := os.ReadFile(meta.Path)
 	if err != nil {
@@ -249,12 +279,38 @@ func (p *PageView) load() {
 		return
 	}
 	atomic.AddInt64(&renderCount, 1)
-	res, err := render.Render(strings.TrimSpace(string(b))+"\n", p.width)
+	body := strings.TrimSpace(string(b)) + "\n"
+	var res render.Result
+	if p.emphasis != "" {
+		res, err = render.RenderWithEmphasis(body, p.width, p.emphasis)
+	} else {
+		res, err = render.Render(body, p.width)
+	}
 	if err != nil {
 		p.err = err
 		return
 	}
 	p.result = res
-	p.cache[meta.Name] = cachedPage{result: res, modTime: meta.ModTime}
+	if p.emphasis == "" {
+		p.cache[meta.Name] = cachedPage{result: res, modTime: meta.ModTime}
+	}
 	p.vp.SetContent(p.result.Styled)
+}
+
+// scrollToFirstFind centres the viewport on the first highlighted emphasis
+// occurrence, if any.
+func (p *PageView) scrollToFirstFind() {
+	if len(p.result.Finds) == 0 {
+		return
+	}
+	off := p.result.Finds[0]
+	if off < 0 || off > len(p.result.Styled) {
+		return
+	}
+	row := strings.Count(p.result.Styled[:off], "\n")
+	target := row - p.vp.Height/2
+	if target < 0 {
+		target = 0
+	}
+	p.vp.SetYOffset(target)
 }

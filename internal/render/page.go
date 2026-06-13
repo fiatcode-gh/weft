@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
@@ -36,6 +38,9 @@ type Result struct {
 	// The index matches graph.TodoBullet.Ordinal so the view layer can
 	// deep-link a dashboard todo to its rendered row.
 	Tasks []int
+	// Finds holds the byte offset in Styled of each highlighted emphasis-term
+	// occurrence, in document order. Empty unless rendered with an emphasis term.
+	Finds []int
 }
 
 var (
@@ -48,6 +53,10 @@ var (
 )
 
 var linkStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Underline(true)
+
+// emphasisStyle highlights a searched/arrived-at term on the page. Reverse
+// video stands out from linkStyle and degrades to plain text under NO_COLOR.
+var emphasisStyle = lipgloss.NewStyle().Reverse(true)
 
 // openTaskMarkers mirrors graph.ExtractTodos: only these markers (with
 // non-empty text) are "open" and get a recorded position for deep-linking.
@@ -83,15 +92,20 @@ const (
 	wikiSentinelPad   = ""
 	taskSentinelStart = ""
 	taskSentinelEnd   = ""
+	emphSentinelStart = "" // emphasis sentinel — distinct PUA range from wiki (–) and task (–)
+	emphSentinelEnd   = ""
+	emphSentinelPad   = "" // width-padding for the emphasis sentinel (see wikiSentinelPad)
 )
 
-// sentinelRe matches either a wiki-link or a task-marker sentinel. Group 1
-// (m[2:3]) captures the wiki id; group 2 (m[4:5]) captures the task id.
-// Handling both in one ordered pass keeps recorded byte offsets aligned with
-// the bytes actually emitted.
+// sentinelRe matches a wiki-link, task-marker, or emphasis sentinel.
+// Group 1 (m[2:3]) captures the wiki id; group 2 (m[4:5]) captures the task id;
+// group 3 (m[6:7]) captures the emphasis id.
+// Handling all three in one ordered pass keeps recorded byte offsets aligned
+// with the bytes actually emitted.
 var sentinelRe = regexp.MustCompile(
 	wikiSentinelStart + `(\d+)` + wikiSentinelEnd + `(?:` + wikiSentinelPad + `)*` +
-		`|` + taskSentinelStart + `(\d+)` + taskSentinelEnd,
+		`|` + taskSentinelStart + `(\d+)` + taskSentinelEnd +
+		`|` + emphSentinelStart + `(\d+)` + emphSentinelEnd + `(?:` + emphSentinelPad + `)*`,
 )
 
 var (
@@ -398,13 +412,117 @@ func renderTaskMarker(marker string) string {
 	return marker
 }
 
+// preprocessEmphasis wraps whole-word, case-insensitive occurrences of term in
+// emphasis sentinels (outside fences and inline code), returning the rewritten
+// body and the original matched substrings indexed by sentinel id (so casing is
+// preserved on restore). Returns (body, nil) when term is empty. Run AFTER
+// preprocessWikiLinks/preprocessTaskMarkers so [[term]] is already a sentinel
+// and only bare mentions match.
+func preprocessEmphasis(body, term string) (string, []string) {
+	if term == "" {
+		return body, nil
+	}
+	re := regexp.MustCompile(`(?i)` + regexp.QuoteMeta(term))
+	var subs []string
+	var out strings.Builder
+	out.Grow(len(body))
+	inFence := false
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		switch {
+		case fenceRe.MatchString(line):
+			inFence = !inFence
+			out.WriteString(line)
+		case inFence:
+			out.WriteString(line)
+		default:
+			out.WriteString(emphasizeOutsideInlineCode(line, re, &subs))
+		}
+		if i < len(lines)-1 {
+			out.WriteByte('\n')
+		}
+	}
+	return out.String(), subs
+}
+
+// emphasizeOutsideInlineCode wraps whole-word matches of re (a literal,
+// case-insensitive term matcher) in emphasis sentinels, but only outside
+// backtick-delimited inline code. Word boundaries are Unicode-aware to mirror
+// ripgrep -w (which detection uses): a match counts when each side is the
+// string edge or a non-word rune. Go's \b is ASCII-only and would miss names
+// like "Über" or "C++".
+func emphasizeOutsideInlineCode(line string, re *regexp.Regexp, subs *[]string) string {
+	parts := strings.Split(line, "`")
+	for i, part := range parts {
+		if i%2 == 1 {
+			continue // inside inline code
+		}
+		parts[i] = emphasizeWholeWords(part, re, subs)
+	}
+	return strings.Join(parts, "`")
+}
+
+func emphasizeWholeWords(s string, re *regexp.Regexp, subs *[]string) string {
+	locs := re.FindAllStringIndex(s, -1)
+	if locs == nil {
+		return s
+	}
+	var b strings.Builder
+	last := 0
+	for _, loc := range locs {
+		start, end := loc[0], loc[1]
+		if !wholeWordAt(s, start, end) {
+			continue
+		}
+		b.WriteString(s[last:start])
+		match := s[start:end]
+		id := len(*subs)
+		*subs = append(*subs, match)
+		core := fmt.Sprintf("%s%d%s", emphSentinelStart, id, emphSentinelEnd)
+		if pad := lipgloss.Width(match) - lipgloss.Width(core); pad > 0 {
+			core += strings.Repeat(emphSentinelPad, pad)
+		}
+		b.WriteString(core)
+		last = end
+	}
+	b.WriteString(s[last:])
+	return b.String()
+}
+
+// wholeWordAt reports whether s[start:end] is bounded by string edges or
+// non-word runes on both sides (Unicode-aware), mirroring ripgrep -w.
+func wholeWordAt(s string, start, end int) bool {
+	if start > 0 {
+		if r, _ := utf8.DecodeLastRuneInString(s[:start]); isWordRune(r) {
+			return false
+		}
+	}
+	if end < len(s) {
+		if r, _ := utf8.DecodeRuneInString(s[end:]); isWordRune(r) {
+			return false
+		}
+	}
+	return true
+}
+
+func isWordRune(r rune) bool {
+	return r == '_' || unicode.IsLetter(r) || unicode.IsNumber(r)
+}
+
 // Render returns Glamour-rendered markdown with wiki-link positions annotated.
 // width is the target terminal column count.
 func Render(body string, width int) (Result, error) {
+	return RenderWithEmphasis(body, width, "")
+}
+
+// RenderWithEmphasis is Render plus highlighting whole-word occurrences of
+// emphasis (recorded in Result.Finds). emphasis == "" is identical to Render.
+func RenderWithEmphasis(body string, width int, emphasis string) (Result, error) {
 	body = stripLogbookBlocks(body)
 	body = stripQueryAndEmbedBlocks(body)
 	pre, wikiSubs := preprocessWikiLinks(body)
 	pre, taskMarkers := preprocessTaskMarkers(pre)
+	pre, emphSubs := preprocessEmphasis(pre, emphasis)
 
 	r, err := rendererFor(width)
 	if err != nil {
@@ -417,13 +535,14 @@ func Render(body string, width int) (Result, error) {
 	}
 
 	// indentWrappedBullets must run before sentinel substitution so the byte
-	// positions recorded for links and tasks reflect the final output.
+	// positions recorded for links, tasks, and finds reflect the final output.
 	styled = indentWrappedBullets(styled)
 
 	var out strings.Builder
 	out.Grow(len(styled))
 	links := make([]Link, 0, len(wikiSubs))
 	var tasks []int
+	var finds []int
 	last := 0
 	for _, m := range sentinelRe.FindAllStringSubmatchIndex(styled, -1) {
 		out.WriteString(styled[last:m[0]])
@@ -454,9 +573,17 @@ func Render(body string, width int) (Result, error) {
 				tasks = append(tasks, out.Len())
 			}
 			out.WriteString(renderTaskMarker(taskMarkers[id].marker))
+		case m[6] >= 0: // emphasis sentinel
+			id, err := strconv.Atoi(styled[m[6]:m[7]])
+			if err != nil || id < 0 || id >= len(emphSubs) {
+				out.WriteString(styled[m[0]:m[1]])
+				continue
+			}
+			finds = append(finds, out.Len())
+			out.WriteString(emphasisStyle.Render(emphSubs[id]))
 		}
 	}
 	out.WriteString(styled[last:])
 
-	return Result{Styled: out.String(), Links: links, Tasks: tasks}, nil
+	return Result{Styled: out.String(), Links: links, Tasks: tasks, Finds: finds}, nil
 }

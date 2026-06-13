@@ -290,3 +290,65 @@ func TestScrollToTaskOutOfRangeNoop(t *testing.T) {
 		t.Errorf("out-of-range ScrollToTask should be a no-op, got offset %d", pv.Offset())
 	}
 }
+
+func TestPageViewFocusLinkTo(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	idx := loadFixture(t)
+	pv := NewPageView(idx, "kb/notes", 80, 24) // kb/notes contains [[Hub]]
+	pv.FocusLinkTo("Hub")
+	if pv.Cursor() < 0 {
+		t.Fatalf("FocusLinkTo should place the cursor on the [[Hub]] link")
+	}
+	if resolved, ok := idx.Resolve(pv.FollowCursor()); !ok || resolved.Name != "Hub" {
+		t.Errorf("cursor should be on the Hub link; FollowCursor()=%q", pv.FollowCursor())
+	}
+	// A page-name the page does not link to → no-op (cursor stays -1).
+	pv2 := NewPageView(idx, "kb/notes", 80, 24)
+	pv2.FocusLinkTo("Orphan")
+	if pv2.Cursor() != -1 {
+		t.Errorf("FocusLinkTo to an unlinked page should be a no-op; cursor=%d", pv2.Cursor())
+	}
+}
+
+func TestPageViewEmphasizeScrollsThenClears(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	tmp := t.TempDir()
+	pages := filepath.Join(tmp, "pages")
+	if err := os.MkdirAll(pages, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var sb strings.Builder
+	for i := 0; i < 80; i++ {
+		sb.WriteString("- filler line\n")
+	}
+	sb.WriteString("- a bare Alpha mention near the bottom\n")
+	if err := os.WriteFile(filepath.Join(pages, "Note.md"), []byte(sb.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, err := graph.BuildIndex(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pv := NewPageView(idx, "Note", 80, 24)
+	if len(pv.result.Finds) != 0 {
+		t.Fatalf("no emphasis yet → no finds; got %d", len(pv.result.Finds))
+	}
+	pv.SetPageEmphasizing("Note", "Alpha")
+	if len(pv.result.Finds) == 0 {
+		t.Fatalf("emphasis should record finds")
+	}
+	if pv.Offset() == 0 {
+		t.Errorf("should scroll toward the bottom mention; offset still 0")
+	}
+	// Plain navigation clears the highlight and must not serve a cached
+	// highlighted render.
+	pv.SetPage("Note")
+	if pv.emphasis != "" {
+		t.Errorf("SetPage should clear emphasis")
+	}
+	if len(pv.result.Finds) != 0 {
+		t.Errorf("plain render must have no finds; got %d", len(pv.result.Finds))
+	}
+}

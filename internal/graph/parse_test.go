@@ -34,6 +34,30 @@ func TestExtractWikiLinksStripsBlockFragment(t *testing.T) {
 	}
 }
 
+func TestExtractWikiLinksSkipsInlineCode(t *testing.T) {
+	// [[Literal]] inside backticks is a code example, not a real link;
+	// only [[Real]] outside code counts. Mirrors the renderer.
+	body := "see [[Real]] and `[[Literal]]` here\n"
+	got := ExtractWikiLinks(body)
+	if len(got) != 1 || got[0].Target != "Real" {
+		t.Fatalf("inline-code link must be skipped; got %+v", got)
+	}
+	if got[0].Line != 1 {
+		t.Errorf("line number should be 1; got %d", got[0].Line)
+	}
+}
+
+func TestExtractWikiLinksInlineCodeMidDocument(t *testing.T) {
+	// A line whose ONLY [[..]] is inside backticks yields nothing.
+	body := "intro line\n" +
+		"- `[[Backticked]]` is a literal example\n" +
+		"- a real [[Link]] here\n"
+	got := ExtractWikiLinks(body)
+	if len(got) != 1 || got[0].Target != "Link" || got[0].Line != 3 {
+		t.Fatalf("only the real link on line 3 should count; got %+v", got)
+	}
+}
+
 func TestExtractTodos(t *testing.T) {
 	body := "- TODO Buy milk\n" +
 		"- LATER [#A] Review the doc\n" +

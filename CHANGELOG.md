@@ -4,6 +4,13 @@ All notable changes to peekseq are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Backlinks panel (`b`) now lists **unlinked references** — bare-text mentions of the page elsewhere in the graph that aren't yet `[[linked]]` — beneath the linked backlinks. Read-only; `enter` jumps to the mention.
+- Jumping from a backlink now lands on the reference: linked backlinks focus the back-reference link, and unlinked references highlight the mention and scroll it into view.
+
 ## [1.2.0] - 2026-06-12
 
 ### Added

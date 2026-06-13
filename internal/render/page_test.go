@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -352,5 +353,111 @@ func TestRenderOpenTaskOrdinalAlignmentWithInterleavedAndPriority(t *testing.T) 
 	}
 	if !strings.Contains(rowText(out.Tasks[1]), "third open") {
 		t.Errorf("task 1 lands on wrong row: %q", rowText(out.Tasks[1]))
+	}
+}
+
+func TestRenderWithEmphasisRecordsFinds(t *testing.T) {
+	res, err := RenderWithEmphasis("see Alpha here\n", 80, "Alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Finds) != 1 {
+		t.Fatalf("want 1 find, got %d", len(res.Finds))
+	}
+	if !strings.Contains(res.Styled, "Alpha") {
+		t.Errorf("emphasised term should still appear in output")
+	}
+}
+
+func TestRenderNoEmphasisNoFinds(t *testing.T) {
+	res, err := Render("see Alpha here\n", 80)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Finds) != 0 {
+		t.Errorf("Render should record no finds; got %d", len(res.Finds))
+	}
+}
+
+func TestRenderWithEmphasisSkipsLinkCodeFence(t *testing.T) {
+	body := "bare Alpha here\n" +
+		"a [[Alpha]] link\n" +
+		"inline `Alpha` code\n" +
+		"```\nAlpha in fence\n```\n"
+	res, err := RenderWithEmphasis(body, 80, "Alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Finds) != 1 {
+		t.Fatalf("only the bare mention should be highlighted; got %d finds", len(res.Finds))
+	}
+}
+
+func TestRenderWithEmphasisWholeWordCasePreserved(t *testing.T) {
+	res, err := RenderWithEmphasis("an alpha and Alphabet\n", 80, "Alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Finds) != 1 {
+		t.Fatalf("want 1 find (alpha, not Alphabet); got %d", len(res.Finds))
+	}
+	if !strings.Contains(res.Styled, "alpha") {
+		t.Errorf("original casing 'alpha' must be preserved in output")
+	}
+	if !strings.Contains(res.Styled, "Alphabet") {
+		t.Errorf("Alphabet must remain in output untouched")
+	}
+}
+
+func TestRenderWithEmphasisUnicodeAndPunctuationBoundaries(t *testing.T) {
+	cases := []struct {
+		name, body, term string
+	}{
+		{"punctuation-bounded", "I use C++ daily\n", "C++"},
+		{"dotted", "built on .NET here\n", ".NET"},
+		{"accented", "visited Über today\n", "Über"},
+		{"cjk", "studied 日本 now\n", "日本"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := RenderWithEmphasis(tc.body, 80, tc.term)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(res.Finds) != 1 {
+				t.Errorf("term %q should highlight once (matching ripgrep -w); got %d finds", tc.term, len(res.Finds))
+			}
+		})
+	}
+}
+
+func TestRenderWithEmphasisStillWholeWord(t *testing.T) {
+	// Whole-word still holds: substring occurrences don't match.
+	res, err := RenderWithEmphasis("Alphabet and alpha\n", 80, "Alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Finds) != 1 { // only the standalone "alpha"
+		t.Fatalf("want 1 find (whole-word), got %d", len(res.Finds))
+	}
+}
+
+func TestRenderWithEmphasisRespectsWrapWidth(t *testing.T) {
+	// The emphasised term sits near the wrap boundary; without sentinel
+	// padding Glamour wraps on the short sentinel and the restored term
+	// overflows the right margin.
+	body := "This is some padding text: Remarkable end\n"
+	res, err := RenderWithEmphasis(body, 40, "Remarkable")
+	if err != nil {
+		t.Fatal(err)
+	}
+	maxw := 0
+	for _, line := range strings.Split(res.Styled, "\n") {
+		if w := lipgloss.Width(line); w > maxw {
+			maxw = w
+		}
+	}
+	if maxw > 40 {
+		t.Errorf("emphasis render overflows wrap width: max line %d > 40", maxw)
 	}
 }

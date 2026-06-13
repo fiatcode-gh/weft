@@ -1,6 +1,7 @@
 package search
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -81,5 +82,29 @@ func TestRunMissingDirsReturnsNil(t *testing.T) {
 	}
 	if hits != nil {
 		t.Errorf("missing dirs: want nil hits, got %+v", hits)
+	}
+}
+
+func TestMentionsWholeWordCaseInsensitive(t *testing.T) {
+	if _, err := exec.LookPath("rg"); err != nil {
+		t.Skip("rg not on PATH; install ripgrep to run search tests")
+	}
+	tmp := t.TempDir()
+	pages := filepath.Join(tmp, "pages")
+	if err := os.MkdirAll(pages, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// "Alpha" whole word (kept), "alpha" case variant (kept),
+	// "Alphabet" substring (must NOT match under -w).
+	body := "see Alpha here\nan alpha mention\nAlphabet soup\n"
+	if err := os.WriteFile(filepath.Join(pages, "Note.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	hits, err := Mentions(tmp, "Alpha")
+	if err != nil {
+		t.Fatalf("Mentions: %v", err)
+	}
+	if len(hits) != 2 {
+		t.Fatalf("want 2 whole-word hits (Alpha, alpha), got %d: %+v", len(hits), hits)
 	}
 }
