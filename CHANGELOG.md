@@ -10,6 +10,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - One-key linkify: in the backlinks panel's **unlinked references**, press `l` on a mention to wrap it as a `[[link]]` in its source file. A before/after preview confirms the change (`y` to write, `n`/`esc` to cancel); after writing, the graph reindexes and the panel refreshes so the reference moves from unlinked to linked. The matched text is preserved verbatim (`[[<matched>]]`), and the file is re-read and re-matched at write time so a file changed since the panel opened fails safely with an in-panel message.
 
+### Fixed
+
+- In-app editor: the `[[` completion strip is now a typing affordance only — moving the cursor onto an unclosed `[[` (with arrows, `Home`/`End`, or `PageUp`/`PageDown`), or opening a file that ends in one, no longer spuriously pops the strip open with a "＋ Create" row. Activation is gated on an actual edit; an already-open strip still updates and closes as you navigate.
+
 ## [1.3.0] - 2026-06-13
 
 ### Added

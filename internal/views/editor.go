@@ -64,7 +64,7 @@ func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, wid
 	e.SetSize(width, height)
 	_ = e.ta.Focus() // blink cmd not needed here; the App calls Focus() again when it mounts the editor
 	e.baseline = e.Content() // normalize so open-time dirty() is accurate
-	e.refreshCompleter()
+	e.refreshCompleter(false) // opening a file must not pop the strip
 	return e
 }
 
@@ -109,10 +109,12 @@ func (e *EditorView) cursorLineSplit() (before, after string) {
 }
 
 // refreshCompleter re-derives completion state from the cursor position and
-// re-lays-out the view so the strip fits.
-func (e *EditorView) refreshCompleter() {
+// re-lays-out the view so the strip fits. allowOpen reports whether the key
+// that triggered this refresh edited the buffer; only an edit may open a closed
+// strip (see linkCompleter.refresh).
+func (e *EditorView) refreshCompleter(allowOpen bool) {
 	before, after := e.cursorLineSplit()
-	e.completer.refresh(before, after)
+	e.completer.refresh(before, after, allowOpen)
 	e.layout()
 }
 
@@ -133,7 +135,7 @@ func (e *EditorView) acceptCompletion() {
 		}
 		e.ta.InsertString(cand.name + "]]")
 	}
-	e.refreshCompleter()
+	e.refreshCompleter(false) // accepting inserts "]]" which closes the link
 }
 
 // repositionMsg is a content-neutral message handed to the textarea purely to
@@ -230,17 +232,20 @@ func (e *EditorView) Update(msg tea.KeyMsg) (EditorResult, tea.Cmd) {
 		return EditorResult{Exit: true}, nil
 	case "pgup":
 		e.scrollPage(-1)
-		e.refreshCompleter()
+		e.refreshCompleter(false) // scrolling is navigation, not an edit
 		return EditorResult{}, nil
 	case "pgdown":
 		e.scrollPage(+1)
-		e.refreshCompleter()
+		e.refreshCompleter(false) // scrolling is navigation, not an edit
 		return EditorResult{}, nil
 	}
 
 	var cmd tea.Cmd
+	prev := e.ta.Value()
 	e.ta, cmd = e.ta.Update(msg)
-	e.refreshCompleter()
+	// allowOpen only when the key actually edited the buffer — a bare caret move
+	// must not pop the completion strip open (it stays a typing affordance).
+	e.refreshCompleter(e.ta.Value() != prev)
 	return EditorResult{}, cmd
 }
 

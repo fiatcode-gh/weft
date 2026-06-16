@@ -82,15 +82,23 @@ func closingAhead(after string) bool {
 }
 
 // refresh re-derives the completer state from the text before and after the
-// cursor on the current logical row. It is called after every textarea-mutating
-// key.
-func (c *linkCompleter) refresh(before, after string) {
+// cursor on the current logical row. It runs after every key forwarded to the
+// textarea. allowOpen reports whether that key edited the buffer: completion is
+// a typing affordance, so only an edit may transition the strip from closed to
+// open. A bare caret move (or file open, or page scroll) passes allowOpen=false
+// and therefore cannot pop the strip just because the cursor landed to the
+// right of an unclosed "[[" — though once open, navigation still updates it or
+// closes it (e.g. when the cursor leaves the link).
+func (c *linkCompleter) refresh(before, after string, allowOpen bool) {
 	partial, ok := extractPartial(before)
 	if !ok || closingAhead(after) {
 		c.active = false
 		c.dismissed = false
 		c.partial = ""
 		c.cands = nil
+		return
+	}
+	if !allowOpen && !c.active {
 		return
 	}
 	if partial != c.partial {

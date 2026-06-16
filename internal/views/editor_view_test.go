@@ -307,7 +307,7 @@ func TestEditorCompletion_NotActiveInsideClosedBrackets(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "[[]] tail\n", false, 80, 24)
 	e.ta.SetCursor(2) // between the [[ and ]]
-	e.refreshCompleter()
+	e.refreshCompleter(true)
 	if e.completer.active {
 		t.Errorf("completer must not activate inside an already-closed [[ ]]")
 	}
@@ -318,7 +318,7 @@ func TestEditorCompletion_NotActiveEditingExistingLink(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "[[Alpha]] rest\n", false, 80, 24)
 	e.ta.SetCursor(4) // [[Al|pha]]
-	e.refreshCompleter()
+	e.refreshCompleter(true)
 	if e.completer.active {
 		t.Errorf("completer must not activate when editing inside an existing link")
 	}
@@ -393,5 +393,60 @@ func TestEditorCompletion_CursorStaysVisibleAtBottom(t *testing.T) {
 	}
 	if !strings.Contains(e.View(), "EDITHERE") {
 		t.Errorf("the line being edited must stay visible when the strip opens")
+	}
+}
+
+// --- Regression: the completion strip is a typing affordance, not a
+// cursor-navigation one. Moving the caret onto an unclosed [[, opening a file
+// that ends in one, or paging should never spontaneously pop the strip.
+
+func TestEditorCompletion_OpeningFileDoesNotAutoOpen(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	// File ends in an unclosed [[Alpha (cursor lands at end on mount).
+	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "notes [[Alpha", false, 80, 24)
+	if e.completer.active {
+		t.Errorf("opening a file ending in an unclosed [[ must not auto-open the completer; partial=%q", e.completer.partial)
+	}
+}
+
+func TestEditorCompletion_NavigationOntoUnclosedDoesNotOpen(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "- draft [[Alpha", false, 80, 24)
+	e.Update(tea.KeyMsg{Type: tea.KeyHome}) // caret to col 0 — no [[ before it, strip closed
+	if e.completer.active {
+		t.Fatalf("precondition: completer should be closed at line start")
+	}
+	e.Update(tea.KeyMsg{Type: tea.KeyEnd}) // caret back past the unclosed [[ — pure navigation
+	if e.completer.active {
+		t.Errorf("navigating (End) onto an unclosed [[ must not open the completer; partial=%q", e.completer.partial)
+	}
+}
+
+func TestEditorCompletion_DismissThenNavStaysClosed(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "", true, 80, 24)
+	typeRunes(e, "[[Alp") // strip opens
+	e.Update(tea.KeyMsg{Type: tea.KeyEsc})   // dismiss
+	e.Update(tea.KeyMsg{Type: tea.KeyRight}) // pure navigation, no buffer change
+	if e.completer.active {
+		t.Errorf("strip must stay closed after dismiss then navigate; partial=%q", e.completer.partial)
+	}
+}
+
+func TestEditorCompletion_TypingIntoUnclosedAfterNavReopens(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "draft [[Alph", false, 80, 24)
+	e.Update(tea.KeyMsg{Type: tea.KeyHome})
+	e.Update(tea.KeyMsg{Type: tea.KeyEnd}) // navigation must not open (the fix)
+	if e.completer.active {
+		t.Fatalf("precondition: navigation should leave the completer closed")
+	}
+	e.Update(key("a")) // an actual edit — mutation — should open the strip
+	if !e.completer.active {
+		t.Errorf("typing into an unclosed [[ should open the completer; partial=%q", e.completer.partial)
 	}
 }
