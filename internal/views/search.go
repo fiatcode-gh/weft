@@ -8,8 +8,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"git.fiatcode.dev/fiatcode/weft/internal/graph"
-	"git.fiatcode.dev/fiatcode/weft/internal/search"
+	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
+	"git.fiatcode.dev/fiatcode/weft/v2/internal/search"
 )
 
 type SearchView struct {

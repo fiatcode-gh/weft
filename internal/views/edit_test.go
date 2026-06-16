@@ -9,7 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"git.fiatcode.dev/fiatcode/weft/internal/graph"
+	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
 )
 
 // pressE sends the e key to a booted app and returns the resulting cmd.

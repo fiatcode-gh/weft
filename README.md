@@ -8,7 +8,7 @@ Requires Go 1.26+ and [ripgrep](https://github.com/BurntSushi/ripgrep) 14+ on PA
 (the `--json` output format that the search view consumes was added in rg 14).
 
 ```bash
-go install git.fiatcode.dev/fiatcode/weft/cmd/weft@latest
+go install git.fiatcode.dev/fiatcode/weft/v2/cmd/weft@latest
 ```
 
 Or from source:

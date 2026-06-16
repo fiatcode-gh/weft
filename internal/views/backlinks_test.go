@@ -7,8 +7,8 @@ import (
 
 	"github.com/charmbracelet/x/exp/teatest"
 
-	"git.fiatcode.dev/fiatcode/weft/internal/graph"
-	"git.fiatcode.dev/fiatcode/weft/internal/search"
+	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
+	"git.fiatcode.dev/fiatcode/weft/v2/internal/search"
 )
 
 func TestNewBacklinksLoadsRefs(t *testing.T) {

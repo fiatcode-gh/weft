@@ -10,8 +10,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"git.fiatcode.dev/fiatcode/weft/internal/render"
-	"git.fiatcode.dev/fiatcode/weft/internal/views"
+	"git.fiatcode.dev/fiatcode/weft/v2/internal/render"
+	"git.fiatcode.dev/fiatcode/weft/v2/internal/views"
 )
 
 // Version is set at build time via -ldflags "-X main.Version=...". For users

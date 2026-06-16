@@ -7,7 +7,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"git.fiatcode.dev/fiatcode/weft/internal/search"
+	"git.fiatcode.dev/fiatcode/weft/v2/internal/search"
 )
 
 // ErrMentionNotFound is returned by LinkifyMention when the target line is out

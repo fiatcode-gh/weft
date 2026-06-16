@@ -1,4 +1,4 @@
-module git.fiatcode.dev/fiatcode/weft
+module git.fiatcode.dev/fiatcode/weft/v2
 
 go 1.26.3
 

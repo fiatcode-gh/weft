@@ -6,7 +6,7 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"git.fiatcode.dev/fiatcode/weft/internal/graph"
+	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
 )
 
 type editorMode int

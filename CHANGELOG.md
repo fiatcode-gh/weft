@@ -9,8 +9,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - **Renamed the project from `peekseq` to `weft`.** This is a breaking change for
-  installed users: the binary, the `go install` path (`…/cmd/weft@latest`), and
-  the environment variables all change.
+  installed users: the binary, the install path, and the environment variables
+  all change.
+  - Install path is now `go install git.fiatcode.dev/fiatcode/weft/v2/cmd/weft@latest`
+    (the module path carries the `/v2` major-version suffix required by Go for v2+).
   - `PEEKSEQ_GRAPH` → `WEFT_GRAPH`, `PEEKSEQ_DEBUG` → `WEFT_DEBUG`,
     `PEEKSEQ_STYLE` → `WEFT_STYLE` (no backward-compatible fallback).
   - Debug log file is now `weft.log`.
