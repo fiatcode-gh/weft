@@ -4,6 +4,12 @@ All notable changes to peekseq are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- One-key linkify: in the backlinks panel's **unlinked references**, press `l` on a mention to wrap it as a `[[link]]` in its source file. A before/after preview confirms the change (`y` to write, `n`/`esc` to cancel); after writing, the graph reindexes and the panel refreshes so the reference moves from unlinked to linked. The matched text is preserved verbatim (`[[<matched>]]`), and the file is re-read and re-matched at write time so a file changed since the panel opened fails safely with an in-panel message.
+
 ## [1.3.0] - 2026-06-13
 
 ### Added

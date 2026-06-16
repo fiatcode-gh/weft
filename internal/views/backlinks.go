@@ -18,6 +18,9 @@ type blRow struct {
 	unl    *graph.UnlinkedRef
 }
 
+// unlinkedRow reports whether the row is a selectable unlinked reference.
+func (r blRow) unlinkedRow() bool { return r.unl != nil }
+
 type Backlinks struct {
 	listBox
 	idx      *graph.Index
@@ -25,6 +28,8 @@ type Backlinks struct {
 	refs     []graph.Ref
 	unlinked []graph.UnlinkedRef
 	rows     []blRow
+	confirming bool   // l pressed on an unlinked row; preview/confirm is showing
+	errMsg     string // failure feedback, rendered inside the panel
 }
 
 // NewBacklinks builds the overlay for `target`, combining the in-memory linked
@@ -90,13 +95,31 @@ func (b *Backlinks) moveSel(dir int) {
 }
 
 func (b *Backlinks) Update(key string) OverlayResult {
+	if b.confirming {
+		switch key {
+		case keyEnter, "y":
+			r := b.rows[b.sel]
+			b.confirming = false
+			return OverlayResult{Linkify: r.unl, LinkifyTarget: b.target}
+		case keyEsc, "n":
+			b.confirming = false
+		}
+		return OverlayResult{}
+	}
 	switch key {
 	case keyEsc, "b":
 		return OverlayResult{Cancel: true}
 	case keyUp, keyK, keyCtrlK:
+		b.errMsg = ""
 		b.moveSel(-1)
 	case keyDown, keyJ, keyCtrlJ:
+		b.errMsg = ""
 		b.moveSel(+1)
+	case "l":
+		if b.sel >= 0 && b.sel < len(b.rows) && b.rows[b.sel].unlinkedRow() {
+			b.errMsg = ""
+			b.confirming = true
+		}
 	case keyEnter:
 		if b.sel >= 0 && b.sel < len(b.rows) {
 			r := b.rows[b.sel]
@@ -109,6 +132,15 @@ func (b *Backlinks) Update(key string) OverlayResult {
 		}
 	}
 	return OverlayResult{}
+}
+
+// SetLinkifyError records a failure to show in the panel and drops the confirm
+// sub-state, so the user returns to the list rather than being stuck confirming
+// a mention that is gone. Errors must render inside the overlay — a status-bar
+// hint would be invisible behind it.
+func (b *Backlinks) SetLinkifyError(msg string) {
+	b.errMsg = msg
+	b.confirming = false
 }
 
 var blPos = lipgloss.NewStyle().Foreground(colorHighlight)
@@ -175,6 +207,46 @@ func (b *Backlinks) View() string {
 		sb.WriteString("\n")
 	}
 	sb.WriteString("\n")
-	sb.WriteString(styleFaint.Render(clamp("↑/↓ select · enter open · b or esc close", inner)))
+	switch {
+	case b.confirming:
+		b.writeConfirm(&sb, inner)
+	case b.errMsg != "":
+		sb.WriteString(styleTitle.Render(clamp("linkify failed: "+b.errMsg, inner)))
+		sb.WriteString("\n")
+		sb.WriteString(styleFaint.Render(clamp(b.hintText(), inner)))
+	default:
+		sb.WriteString(styleFaint.Render(clamp(b.hintText(), inner)))
+	}
 	return styleBorder.Width(inner + 4).Render(sb.String())
+}
+
+// hintText returns the footer key legend, advertising linkify only when the
+// selected row is an unlinked reference (the only row l acts on).
+func (b *Backlinks) hintText() string {
+	if b.sel >= 0 && b.sel < len(b.rows) && b.rows[b.sel].unlinkedRow() {
+		return "↑/↓ select · enter open · l linkify · b or esc close"
+	}
+	return "↑/↓ select · enter open · b or esc close"
+}
+
+// writeConfirm renders the preview-and-confirm block for the selected unlinked
+// row. The before/after lines are computed purely from the row's Context and
+// Match span — no file IO; the authoritative re-match happens at write time.
+func (b *Backlinks) writeConfirm(sb *strings.Builder, inner int) {
+	u := b.rows[b.sel].unl
+	before := u.Context
+	// Defensive: a malformed span would panic in View() and crash the TUI. The
+	// production pipeline (search.parseJSON) clamps Match into Context, so this
+	// falls back to an unchanged preview rather than ever firing in practice.
+	after := before
+	if u.Match.Start >= 0 && u.Match.Start <= u.Match.End && u.Match.End <= len(u.Context) {
+		after = u.Context[:u.Match.Start] + "[[" + u.Context[u.Match.Start:u.Match.End] + "]]" + u.Context[u.Match.End:]
+	}
+	sb.WriteString(styleFaint.Render(clamp(fmt.Sprintf("── Linkify in %s:%d ", u.PageName, u.Line), inner)))
+	sb.WriteString("\n")
+	sb.WriteString(clamp("  before:  "+strings.TrimSpace(before), inner))
+	sb.WriteString("\n")
+	sb.WriteString(clamp("  after:   "+strings.TrimSpace(after), inner))
+	sb.WriteString("\n\n")
+	sb.WriteString(styleFaint.Render(clamp("  y confirm · n/esc cancel", inner)))
 }

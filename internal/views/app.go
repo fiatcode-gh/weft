@@ -249,9 +249,20 @@ func (a *App) createJournalAndReindex(name string) error {
 	if _, err := edit.EnsureFile(journalPath); err != nil {
 		return fmt.Errorf("cannot create journal: %w", err)
 	}
+	if err := a.reindex(); err != nil {
+		return fmt.Errorf("reindex failed: %w", err)
+	}
+	return nil
+}
+
+// reindex rebuilds the in-memory index synchronously and rebinds the current
+// PageView so it reflects new links/todos. Shared by createJournalAndReindex
+// and the linkify path, both of which mutate the graph while a view is open and
+// need the refresh before returning (no indexLoadedMsg round-trip).
+func (a *App) reindex() error {
 	idx, err := graph.BuildIndex(a.graphPath)
 	if err != nil {
-		return fmt.Errorf("reindex failed: %w", err)
+		return err
 	}
 	a.idx = idx
 	if a.page != nil {
@@ -400,6 +411,43 @@ func (a *App) unlinkedRefs(name string) []graph.UnlinkedRef {
 	})
 }
 
+// linkify wraps the unlinked reference's mention as a [[link]] in its source
+// file, then reindexes and rebuilds the backlinks overlay so the reference
+// moves from Unlinked to Linked. The file is re-read and re-matched here (not
+// trusting the offset captured at panel-open) so a file that changed since
+// detection fails safely. Failures render inside the panel via SetLinkifyError;
+// a status-bar hint would be invisible behind the overlay. Returns nil — the
+// reindex is synchronous, so there is no command to run.
+func (a *App) linkify(ref *graph.UnlinkedRef, target string) tea.Cmd {
+	bl, _ := a.active.(*Backlinks)
+	fail := func(msg string) tea.Cmd {
+		if bl != nil {
+			bl.SetLinkifyError(msg)
+		}
+		return nil
+	}
+	body, err := os.ReadFile(ref.FilePath)
+	if err != nil {
+		return fail("cannot read " + ref.PageName + ": " + err.Error())
+	}
+	newBody, _, err := graph.LinkifyMention(string(body), ref.Line, target)
+	if err != nil {
+		return fail("mention no longer found in " + ref.PageName)
+	}
+	if err := edit.WriteFile(ref.FilePath, []byte(newBody)); err != nil {
+		return fail("write failed: " + err.Error())
+	}
+	if err := a.reindex(); err != nil {
+		// The write already landed, so surface the failure in the panel (a
+		// status-bar hint is invisible behind the overlay) rather than rebuild
+		// from the unchanged index — the stale panel keeps showing the now
+		// already-linked mention as unlinked.
+		return fail("reindex failed: " + err.Error())
+	}
+	a.active = NewBacklinks(a.idx, target, a.unlinkedRefs(target), a.width, a.height)
+	return nil
+}
+
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m := msg.(type) {
 	case indexLoadedMsg:
@@ -507,6 +555,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if res.Cancel {
 				a.active = nil
 				return a, res.Cmd
+			}
+			if res.Linkify != nil {
+				return a, a.linkify(res.Linkify, res.LinkifyTarget)
 			}
 			if res.Accept {
 				if res.Create {

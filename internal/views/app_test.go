@@ -210,3 +210,104 @@ func TestAppUnlinkedRefs(t *testing.T) {
 		t.Errorf("unexpected ref: %+v", refs[0])
 	}
 }
+
+func TestAppLinkifyWritesAndRefreshes(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	if _, err := exec.LookPath("rg"); err != nil {
+		t.Skip("rg not on PATH; install ripgrep to run this test")
+	}
+	tmp := t.TempDir()
+	pages := filepath.Join(tmp, "pages")
+	if err := os.MkdirAll(pages, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pages, "Topic.md"), []byte("# Topic\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	notePath := filepath.Join(pages, "Note.md")
+	if err := os.WriteFile(notePath, []byte("- a bare Topic mention\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, err := graph.BuildIndex(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := New(tmp, "test")
+	a.idx = idx
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	a.page = NewPageView(idx, "Topic", 80, 24)
+
+	a.Update(key("b"))                      // open backlinks for Topic
+	a.Update(tea.KeyMsg{Type: tea.KeyDown}) // move onto the unlinked Note row
+	a.Update(key("l"))                      // open the confirm
+	a.Update(key("y"))                      // confirm the write
+
+	got, err := os.ReadFile(notePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "- a bare [[Topic]] mention\n"; string(got) != want {
+		t.Fatalf("Note.md = %q, want %q", string(got), want)
+	}
+	// Panel refreshed: the mention is now a linked ref, so it has dropped out
+	// of the unlinked list.
+	bl, ok := a.active.(*Backlinks)
+	if !ok {
+		t.Fatalf("backlinks overlay should still be open after linkify; got %T", a.active)
+	}
+	for _, r := range bl.rows {
+		if r.unl != nil {
+			t.Errorf("linkified mention should no longer appear as unlinked: %+v", r.unl)
+		}
+	}
+}
+
+func TestAppLinkifyMentionGoneShowsError(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	if _, err := exec.LookPath("rg"); err != nil {
+		t.Skip("rg not on PATH; install ripgrep to run this test")
+	}
+	tmp := t.TempDir()
+	pages := filepath.Join(tmp, "pages")
+	if err := os.MkdirAll(pages, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pages, "Topic.md"), []byte("# Topic\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	notePath := filepath.Join(pages, "Note.md")
+	if err := os.WriteFile(notePath, []byte("- a bare Topic mention\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, err := graph.BuildIndex(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := New(tmp, "test")
+	a.idx = idx
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	a.page = NewPageView(idx, "Topic", 80, 24)
+
+	a.Update(key("b"))
+	a.Update(tea.KeyMsg{Type: tea.KeyDown})
+	a.Update(key("l"))
+	// The mention vanishes from the file between detection and confirm.
+	if err := os.WriteFile(notePath, []byte("- nothing here now\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a.Update(key("y"))
+
+	bl, ok := a.active.(*Backlinks)
+	if !ok {
+		t.Fatalf("panel should stay open on error; got %T", a.active)
+	}
+	if bl.errMsg == "" {
+		t.Error("a vanished mention should set an in-panel error message")
+	}
+	got, _ := os.ReadFile(notePath)
+	if string(got) != "- nothing here now\n" {
+		t.Errorf("file must be untouched when the mention is gone; got %q", string(got))
+	}
+}

@@ -1,6 +1,10 @@
 package views
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	tea "github.com/charmbracelet/bubbletea"
+
+	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
+)
 
 // OverlayResult is what an overlay's Update reports back to the App.
 type OverlayResult struct {
@@ -28,6 +32,12 @@ type OverlayResult struct {
 	// (scrolling to the first). Only the Backlinks overlay sets it, for unlinked
 	// refs.
 	HighlightText string
+	// Linkify, when non-nil, asks the App to wrap LinkifyTarget as a [[link]]
+	// at this unlinked reference's location in its source file, then reindex
+	// and refresh the panel. Only the Backlinks overlay sets it.
+	Linkify *graph.UnlinkedRef
+	// LinkifyTarget is the page name to wrap, honoured only when Linkify is set.
+	LinkifyTarget string
 	Cmd           tea.Cmd // optional async work to run (search launches rg here)
 }
 

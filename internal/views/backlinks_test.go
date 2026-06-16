@@ -310,3 +310,143 @@ func TestBacklinksLinkedRefFocusesBacklink(t *testing.T) {
 		t.Errorf("unlinked-ref enter must NOT set FocusLinkTo; got %+v", res)
 	}
 }
+
+// selectFirstUnlinked moves b's selection to its first unlinked-reference row,
+// failing the test if there is none — avoids an unbounded moveSel loop (moveSel
+// clamps at the ends, so a missing unlinked row would otherwise spin forever).
+func selectFirstUnlinked(t *testing.T, b *Backlinks) {
+	t.Helper()
+	for i := 0; i < len(b.rows); i++ {
+		if b.rows[b.sel].unlinkedRow() {
+			return
+		}
+		b.moveSel(+1)
+	}
+	t.Fatal("fixture has no unlinked row to select")
+}
+
+func TestBacklinksLOnUnlinkedEntersConfirm(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 80, 30)
+	// Move to the first unlinked row (past the linked refs + the section header).
+	selectFirstUnlinked(t, b)
+	if res := b.Update("l"); res.Linkify != nil {
+		t.Fatalf("first l should only open the confirm, not request linkify: %+v", res)
+	}
+	if !b.confirming {
+		t.Fatal("l on an unlinked row should enter the confirm sub-state")
+	}
+}
+
+func TestBacklinksLOnLinkedRowIsNoop(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 80, 30)
+	// sel starts on the first selectable row, which is a linked ref.
+	if b.rows[b.sel].unlinkedRow() {
+		t.Skip("fixture's first selectable row is unexpectedly unlinked")
+	}
+	b.Update("l")
+	if b.confirming {
+		t.Error("l on a linked row must not enter the confirm sub-state")
+	}
+}
+
+func TestBacklinksConfirmYesReturnsLinkify(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 80, 30)
+	selectFirstUnlinked(t, b)
+	b.Update("l")
+	res := b.Update("y")
+	if res.Linkify == nil {
+		t.Fatal("y in confirm should return a Linkify request")
+	}
+	if res.LinkifyTarget != "Hub" {
+		t.Errorf("LinkifyTarget = %q, want \"Hub\"", res.LinkifyTarget)
+	}
+	if b.confirming {
+		t.Error("confirming should be cleared after y")
+	}
+}
+
+func TestBacklinksConfirmEscCancels(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 80, 30)
+	selectFirstUnlinked(t, b)
+	b.Update("l")
+	res := b.Update(keyEsc)
+	if res.Cancel {
+		t.Error("esc in confirm should cancel the confirm, not the whole panel")
+	}
+	if res.Linkify != nil {
+		t.Error("esc in confirm must not request linkify")
+	}
+	if b.confirming {
+		t.Error("esc in confirm should clear confirming")
+	}
+}
+
+func TestBacklinksSetLinkifyErrorClearsConfirm(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 80, 30)
+	selectFirstUnlinked(t, b)
+	b.Update("l")
+	b.SetLinkifyError("mention no longer found in Beta")
+	if b.confirming {
+		t.Error("SetLinkifyError should drop the confirm sub-state")
+	}
+	if b.errMsg == "" {
+		t.Error("SetLinkifyError should record the message")
+	}
+}
+
+func TestBacklinksConfirmViewGolden(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 100, 30)
+	selectFirstUnlinked(t, b)
+	b.Update("l")
+	teatest.RequireEqualOutput(t, []byte(b.View()))
+}
+
+func TestBacklinksConfirmViewShowsBeforeAfter(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 100, 30)
+	selectFirstUnlinked(t, b)
+	b.Update("l")
+	out := b.View()
+	if !strings.Contains(out, "before:") || !strings.Contains(out, "after:") {
+		t.Errorf("confirm view should show before/after lines:\n%s", out)
+	}
+	if !strings.Contains(out, "[[Hub]]") {
+		t.Errorf("confirm 'after' line should show the wrapped mention:\n%s", out)
+	}
+	if !strings.Contains(out, "y confirm") {
+		t.Errorf("confirm view should show the y/n hint:\n%s", out)
+	}
+}
+
+func TestBacklinksErrorLineRendered(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 100, 30)
+	b.SetLinkifyError("mention no longer found in Beta")
+	if !strings.Contains(b.View(), "mention no longer found in Beta") {
+		t.Errorf("error message should render in the panel:\n%s", b.View())
+	}
+}
+
+func TestBacklinksHintShowsLinkifyOnUnlinkedRow(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 100, 30)
+	selectFirstUnlinked(t, b)
+	if !strings.Contains(b.View(), "l linkify") {
+		t.Errorf("hint should advertise linkify when an unlinked row is selected:\n%s", b.View())
+	}
+}
