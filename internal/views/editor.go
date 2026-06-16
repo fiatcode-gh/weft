@@ -6,7 +6,7 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
+	"git.fiatcode.dev/fiatcode/weft/internal/graph"
 )
 
 type editorMode int
@@ -16,7 +16,7 @@ const (
 	confirmingExit
 )
 
-// EditorView is peekseq's in-app raw-markdown editor: a full-screen mode
+// EditorView is weft's in-app raw-markdown editor: a full-screen mode
 // (not a centered overlay) that wraps bubbles/textarea. It owns the
 // edit/save/exit state machine; the App performs the actual disk write so
 // internal/edit stays the only writer.

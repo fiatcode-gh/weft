@@ -10,8 +10,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
 
-	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
-	"git.fiatcode.dev/fiatcode/peekseq/internal/render"
+	"git.fiatcode.dev/fiatcode/weft/internal/graph"
+	"git.fiatcode.dev/fiatcode/weft/internal/render"
 )
 
 // renderCount is incremented on every render.Render call inside

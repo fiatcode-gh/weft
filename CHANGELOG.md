@@ -1,8 +1,20 @@
 # Changelog
 
-All notable changes to peekseq are documented here. The format follows
+All notable changes to weft are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [2.0.0] - 2026-06-16
+
+### Changed
+
+- **Renamed the project from `peekseq` to `weft`.** This is a breaking change for
+  installed users: the binary, the `go install` path (`…/cmd/weft@latest`), and
+  the environment variables all change.
+  - `PEEKSEQ_GRAPH` → `WEFT_GRAPH`, `PEEKSEQ_DEBUG` → `WEFT_DEBUG`,
+    `PEEKSEQ_STYLE` → `WEFT_STYLE` (no backward-compatible fallback).
+  - Debug log file is now `weft.log`.
+  - The on-disk Logseq graph format is unchanged.
 
 ## [1.4.0] - 2026-06-16
 

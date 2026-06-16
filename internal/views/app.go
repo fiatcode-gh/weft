@@ -12,9 +12,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"git.fiatcode.dev/fiatcode/peekseq/internal/edit"
-	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
-	"git.fiatcode.dev/fiatcode/peekseq/internal/search"
+	"git.fiatcode.dev/fiatcode/weft/internal/edit"
+	"git.fiatcode.dev/fiatcode/weft/internal/graph"
+	"git.fiatcode.dev/fiatcode/weft/internal/search"
 )
 
 // indexLoadedMsg carries the result of an asynchronous graph.BuildIndex run.
@@ -366,7 +366,7 @@ func (a *App) enterEditor() tea.Cmd {
 // name (YYYY-MM-DD).
 //
 // When current is in idx.Journals the neighbour is the immediate sibling.
-// When current is journal-shaped but absent (e.g. phantom-today: peekseq
+// When current is journal-shaped but absent (e.g. phantom-today: weft
 // opens on today's date but the file isn't on disk yet), the insertion
 // point in the sorted slice is used — dir=-1 returns the closest earlier
 // existing journal, dir=+1 the closest later one. Returns ok=false when
@@ -658,12 +658,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (a *App) View() string {
 	if a.loadErr != nil {
-		return styleTitle.Render(fmt.Sprintf("peekseq — failed to index %s", a.graphPath)) +
+		return styleTitle.Render(fmt.Sprintf("weft — failed to index %s", a.graphPath)) +
 			"\n\n" + a.loadErr.Error() +
 			"\n\n" + styleFaint.Render("R to retry · q to quit")
 	}
 	if a.page == nil {
-		return styleTitle.Render("peekseq") +
+		return styleTitle.Render("weft") +
 			"\n\n" + styleFaint.Render(fmt.Sprintf("Loading %s ...", a.graphPath)) +
 			"\n\n" + styleFaint.Render("q to quit")
 	}

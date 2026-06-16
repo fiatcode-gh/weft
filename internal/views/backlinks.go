@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
+	"git.fiatcode.dev/fiatcode/weft/internal/graph"
 )
 
 // blRow is one rendered row: a non-selectable section header, or a selectable

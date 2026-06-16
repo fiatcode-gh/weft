@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sahilm/fuzzy"
 
-	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
+	"git.fiatcode.dev/fiatcode/weft/internal/graph"
 )
 
 type pickerChoice struct {

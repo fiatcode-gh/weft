@@ -143,7 +143,7 @@ func (h *Help) View() string {
 	if h.version == "" {
 		footer = left
 	} else {
-		right := "peekseq " + h.version
+		right := "weft " + h.version
 		gap := contentWidth - lipgloss.Width(left) - lipgloss.Width(right)
 		if gap < 2 {
 			// Version too long to fit inline alongside the close hint.

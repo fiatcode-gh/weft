@@ -1,4 +1,4 @@
-module git.fiatcode.dev/fiatcode/peekseq
+module git.fiatcode.dev/fiatcode/weft
 
 go 1.26.3
 

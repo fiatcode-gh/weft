@@ -10,7 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
+	"git.fiatcode.dev/fiatcode/weft/internal/graph"
 )
 
 // withJournalCleanup schedules a removal of graphPath/journals/<file>.md
@@ -95,7 +95,7 @@ func TestAppLoadingSplashBeforePage(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	a := New("/nonexistent/before/build", "test")
 	v := a.View()
-	if !strings.Contains(v, "peekseq") {
+	if !strings.Contains(v, "weft") {
 		t.Errorf("splash should contain title; got:\n%s", v)
 	}
 	if !strings.Contains(v, "Loading") {

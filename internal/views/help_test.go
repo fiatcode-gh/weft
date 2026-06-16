@@ -12,7 +12,7 @@ func TestNewHelpRendersVersion(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
 	view := NewHelp("v0.1.2", 80).View()
-	if !strings.Contains(view, "peekseq v0.1.2") {
+	if !strings.Contains(view, "weft v0.1.2") {
 		t.Errorf("help view missing version segment; got:\n%s", view)
 	}
 	if !strings.Contains(view, "? or esc to close") {
@@ -27,9 +27,9 @@ func TestNewHelpEmptyVersionHidesSegment(t *testing.T) {
 	if !strings.Contains(view, "? or esc to close") {
 		t.Errorf("help view missing close hint; got:\n%s", view)
 	}
-	// The "peekseq " (with trailing space) prefix only appears as part of
+	// The "weft " (with trailing space) prefix only appears as part of
 	// the version segment. Empty version must not render it.
-	if strings.Contains(view, "peekseq ") {
+	if strings.Contains(view, "weft ") {
 		t.Errorf("help view should omit version segment for empty version; got:\n%s", view)
 	}
 }

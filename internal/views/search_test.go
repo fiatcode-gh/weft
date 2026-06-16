@@ -10,7 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/teatest"
 
-	"git.fiatcode.dev/fiatcode/peekseq/internal/search"
+	"git.fiatcode.dev/fiatcode/weft/internal/search"
 )
 
 func skipIfNoRipgrep(t *testing.T) {

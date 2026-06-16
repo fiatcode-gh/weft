@@ -1,4 +1,4 @@
-// Package edit is the single disk-writing surface in peekseq. It hands a
+// Package edit is the single disk-writing surface in weft. It hands a
 // page's .md file off to the user's editor and detects whether the file
 // changed on return. No other package in the project writes to disk.
 package edit

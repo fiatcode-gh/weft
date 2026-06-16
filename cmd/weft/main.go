@@ -10,8 +10,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"git.fiatcode.dev/fiatcode/peekseq/internal/render"
-	"git.fiatcode.dev/fiatcode/peekseq/internal/views"
+	"git.fiatcode.dev/fiatcode/weft/internal/render"
+	"git.fiatcode.dev/fiatcode/weft/internal/views"
 )
 
 // Version is set at build time via -ldflags "-X main.Version=...". For users
@@ -20,10 +20,10 @@ import (
 var Version = "dev"
 
 // debugLogPath returns the path Bubble Tea should write debug output to, or
-// empty to disable. Enabled by setting PEEKSEQ_DEBUG=1 (writes to ./peekseq.log).
+// empty to disable. Enabled by setting WEFT_DEBUG=1 (writes to ./weft.log).
 func debugLogPath() string {
-	if os.Getenv("PEEKSEQ_DEBUG") != "" {
-		return "peekseq.log"
+	if os.Getenv("WEFT_DEBUG") != "" {
+		return "weft.log"
 	}
 	return ""
 }
@@ -67,7 +67,7 @@ func shortenPseudoVersion(v string) string {
 }
 
 func main() {
-	graphFlag := flag.String("graph", "", "path to Logseq graph (overrides $PEEKSEQ_GRAPH)")
+	graphFlag := flag.String("graph", "", "path to Logseq graph (overrides $WEFT_GRAPH)")
 	versionFlag := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
@@ -76,26 +76,26 @@ func main() {
 		return
 	}
 
-	graphPath := resolveGraphPath(*graphFlag, os.Getenv("PEEKSEQ_GRAPH"))
+	graphPath := resolveGraphPath(*graphFlag, os.Getenv("WEFT_GRAPH"))
 	if graphPath == "" {
-		fmt.Fprintln(os.Stderr, "peekseq: no graph path — pass --graph or set $PEEKSEQ_GRAPH")
+		fmt.Fprintln(os.Stderr, "weft: no graph path — pass --graph or set $WEFT_GRAPH")
 		os.Exit(2)
 	}
 
 	if _, err := exec.LookPath("rg"); err != nil {
-		fmt.Fprintln(os.Stderr, "peekseq: ripgrep (rg) not found on PATH — install it (https://github.com/BurntSushi/ripgrep) and try again.")
+		fmt.Fprintln(os.Stderr, "weft: ripgrep (rg) not found on PATH — install it (https://github.com/BurntSushi/ripgrep) and try again.")
 		os.Exit(2)
 	}
 	if info, err := os.Stat(graphPath); err != nil {
-		fmt.Fprintf(os.Stderr, "peekseq: graph path %q is not accessible: %v\n", graphPath, err)
+		fmt.Fprintf(os.Stderr, "weft: graph path %q is not accessible: %v\n", graphPath, err)
 		os.Exit(2)
 	} else if !info.IsDir() {
-		fmt.Fprintf(os.Stderr, "peekseq: graph path %q is not a directory\n", graphPath)
+		fmt.Fprintf(os.Stderr, "weft: graph path %q is not a directory\n", graphPath)
 		os.Exit(2)
 	}
 
 	if path := debugLogPath(); path != "" {
-		if f, err := tea.LogToFile(path, "peekseq"); err == nil {
+		if f, err := tea.LogToFile(path, "weft"); err == nil {
 			defer f.Close()
 		}
 	}
@@ -107,7 +107,7 @@ func main() {
 	app := views.New(graphPath, resolvedVersion())
 
 	if _, err := tea.NewProgram(app, tea.WithAltScreen()).Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "peekseq: %v\n", err)
+		fmt.Fprintf(os.Stderr, "weft: %v\n", err)
 		os.Exit(1)
 	}
 }

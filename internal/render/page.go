@@ -116,14 +116,14 @@ var (
 // styleName picks the Glamour style without doing any terminal IO. This is
 // deliberate: Glamour's WithAutoStyle issues OSC 11 background-colour queries
 // over stdin, which can leave stray reply bytes in the terminal's input
-// buffer. When peekseq is quit and immediately re-opened, the next session's
+// buffer. When weft is quit and immediately re-opened, the next session's
 // termenv reads those stale bytes, fails to parse them, and blocks for
 // seconds before timing out. Reading env vars sidesteps the problem.
 func styleName() string {
 	if os.Getenv("NO_COLOR") != "" {
 		return "notty"
 	}
-	if s := os.Getenv("PEEKSEQ_STYLE"); s != "" {
+	if s := os.Getenv("WEFT_STYLE"); s != "" {
 		return s
 	}
 	return "dark"

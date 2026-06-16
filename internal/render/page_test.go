@@ -220,7 +220,7 @@ func TestRenderPageBacktickWrappedWikiLinkIsLiteral(t *testing.T) {
 	// Markdown inline code (backticks) is literal text — the contents are
 	// NOT processed for other markdown constructs. So `[[Foo]]` should
 	// appear in the output as the literal "[[Foo]]" text, not as a styled
-	// wiki link. peekseq's preprocessor previously matched `[[...]]` inside
+	// wiki link. weft's preprocessor previously matched `[[...]]` inside
 	// backticks; this test pins the fix.
 	body := "see `[[Foo]]` for the literal text\n"
 	res, err := Render(body, 80)

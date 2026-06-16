@@ -6,7 +6,7 @@ import (
 
 	"github.com/sahilm/fuzzy"
 
-	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
+	"git.fiatcode.dev/fiatcode/weft/internal/graph"
 )
 
 // maxCompleterRows caps how many candidate rows the strip shows at once; it

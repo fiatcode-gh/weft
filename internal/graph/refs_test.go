@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"git.fiatcode.dev/fiatcode/peekseq/internal/search"
+	"git.fiatcode.dev/fiatcode/weft/internal/search"
 )
 
 func TestFilterUnlinked(t *testing.T) {

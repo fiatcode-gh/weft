@@ -1,4 +1,4 @@
-# peekseq
+# weft
 
 Bubble Tea TUI for browsing and editing a local Logseq graph. Recency-sorted
 picker (with page-creation), ripgrep-backed search, backlinks, TODO dashboard.
@@ -13,13 +13,13 @@ that inserts a red link without writing to disk.
 ## Commands
 
 ```bash
-go build ./cmd/peekseq                                # build binary at ./peekseq
-go test ./...                                         # full test suite
+go build ./cmd/weft                                     # build binary at ./weft
+go test ./...                                           # full test suite
 go test ./internal/views -run TestPickerFiltersOnQuery  # single test
-go test ./... -update                                 # regenerate teatest goldens
-go vet ./...                                          # vet
-go run ./cmd/peekseq --graph testdata/fixture-graph   # run against fixture
-./peekseq -version                                    # print version and exit
+go test ./... -update                                   # regenerate teatest goldens
+go vet ./...                                            # vet
+go run ./cmd/weft --graph testdata/fixture-graph        # run against fixture
+./weft -version                                         # print version and exit
 ```
 
 Run `go vet ./... && go test ./...` before every commit — both must pass.
@@ -29,7 +29,7 @@ an intentional UI change, run with `-update` and visually diff the golden before
 
 ## Layout
 
-- `cmd/peekseq/` — entry point, flag/env wiring, ripgrep preflight, Bubble Tea boot.
+- `cmd/weft/` — entry point, flag/env wiring, ripgrep preflight, Bubble Tea boot.
 - `internal/graph/` — filesystem walk, page parsing, name resolution, index.
 - `internal/render/` — Glamour-based page rendering (wiki-link styling, hanging-indent,
   workflow-marker colouring, `:LOGBOOK:` stripping). Has a `Warmup()` paid before the
@@ -47,7 +47,7 @@ an intentional UI change, run with `-update` and visually diff the golden before
 
 ## External deps
 
-- **ripgrep (`rg`)** must be on PATH. `cmd/peekseq/main.go` exits 2 if missing.
+- **ripgrep (`rg`)** must be on PATH. `cmd/weft/main.go` exits 2 if missing.
 - Go 1.26+ (see `go.mod`).
 
 ## Testing
@@ -61,7 +61,7 @@ an intentional UI change, run with `-update` and visually diff the golden before
 
 ## Debugging the TUI
 
-`PEEKSEQ_DEBUG=1 ./peekseq --graph …` mirrors Bubble Tea events to `./peekseq.log`.
+`WEFT_DEBUG=1 ./weft --graph …` mirrors Bubble Tea events to `./weft.log`.
 The alt-screen swallows panics; tail the log to see what the model received.
 
 ## Versioning

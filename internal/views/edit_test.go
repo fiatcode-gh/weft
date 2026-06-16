@@ -9,7 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
+	"git.fiatcode.dev/fiatcode/weft/internal/graph"
 )
 
 // pressE sends the e key to a booted app and returns the resulting cmd.
@@ -122,7 +122,7 @@ func TestEditorExitedMsg_HintOnError(t *testing.T) {
 }
 
 // TestShiftE_ColdStartCreatesTodayJournal: cold-start scenario.
-// The user boots peekseq on a day with no journal file, lands on
+// The user boots weft on a day with no journal file, lands on
 // today, and presses `E` directly (without first pressing `.`).
 // editCurrent must lazy-create the journal, reindex, and return a
 // non-nil editor cmd. This is the case the user reported as broken

@@ -3,7 +3,7 @@ package views
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
-	"git.fiatcode.dev/fiatcode/peekseq/internal/graph"
+	"git.fiatcode.dev/fiatcode/weft/internal/graph"
 )
 
 // OverlayResult is what an overlay's Update reports back to the App.

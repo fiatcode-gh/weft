@@ -1,4 +1,4 @@
-# peekseq — a Logseq TUI
+# weft — a Logseq TUI
 
 A terminal browser and editor for a local Logseq graph. Recency-sorted page picker (with page-creation), ripgrep-backed full-text search, backlinks, and a TODO dashboard. Renders pages with hanging-indent bullets, coloured workflow markers (TODO/DOING/LATER/WAITING/DONE/CANCELED/NOW), and highlighted wiki-links you can step through. Press `e` to edit the current page in a full-screen in-app editor (`Ctrl+S` saves, `Esc` exits with an unsaved-changes prompt); `E` hands the file to your `$EDITOR`. While editing, typing `[[` opens a live, fuzzy-filtered page-name completion list — `↑`/`↓` to choose, `Enter` or `Tab` to insert `[[Page Name]]`, `Esc` to dismiss; an unmatched name shows a `＋ Create` row to drop a red link in one keystroke. Press `.` to jump to today's journal.
 
@@ -8,26 +8,26 @@ Requires Go 1.26+ and [ripgrep](https://github.com/BurntSushi/ripgrep) 14+ on PA
 (the `--json` output format that the search view consumes was added in rg 14).
 
 ```bash
-go install git.fiatcode.dev/fiatcode/peekseq/cmd/peekseq@latest
+go install git.fiatcode.dev/fiatcode/weft/cmd/weft@latest
 ```
 
 Or from source:
 
 ```bash
-git clone https://git.fiatcode.dev/fiatcode/peekseq
-cd peekseq
-go build ./cmd/peekseq
+git clone https://git.fiatcode.dev/fiatcode/weft
+cd weft
+go build ./cmd/weft
 ```
 
 ## Usage
 
 ```bash
-peekseq --graph /path/to/graph       # explicit path
-PEEKSEQ_GRAPH=/path/to/graph peekseq # via env var
-peekseq -version                     # print version and exit
+weft --graph /path/to/graph    # explicit path
+WEFT_GRAPH=/path/to/graph weft # via env var
+weft -version                  # print version and exit
 ```
 
-A graph path is required — either pass `--graph` or set `$PEEKSEQ_GRAPH`. The flag wins when both are set. Drop the env var into your shell config for the zero-arg invocation.
+A graph path is required — either pass `--graph` or set `$WEFT_GRAPH`. The flag wins when both are set. Drop the env var into your shell config for the zero-arg invocation.
 
 ## Keys
 
@@ -66,10 +66,10 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 
 | Variable        | Effect                                                                            |
 |-----------------|-----------------------------------------------------------------------------------|
-| `PEEKSEQ_GRAPH`   | Default graph path (overridden by `--graph`).                                     |
-| `PEEKSEQ_STYLE`   | Force a Glamour markdown style (`dark`, `light`, `ascii`, `notty`). Default `dark`. |
+| `WEFT_GRAPH`   | Default graph path (overridden by `--graph`).                                     |
+| `WEFT_STYLE`   | Force a Glamour markdown style (`dark`, `light`, `ascii`, `notty`). Default `dark`. |
 | `NO_COLOR`      | Honoured: forces `notty` rendering, no ANSI styling anywhere.                     |
-| `PEEKSEQ_DEBUG=1` | Mirror Bubble Tea events to `./peekseq.log`. Useful when reporting bugs.            |
+| `WEFT_DEBUG=1` | Mirror Bubble Tea events to `./weft.log`. Useful when reporting bugs.            |
 
 ## Scope
 
@@ -78,7 +78,7 @@ Writes only via the in-app editor (`e`, saves on `Ctrl+S`) and the `$EDITOR` han
 ### What is not supported
 
 A few Logseq features are intentionally out of scope for v1. None of them
-crash peekseq — they degrade to plain text or a silent no-op.
+crash weft — they degrade to plain text or a silent no-op.
 
 - **`{{query …}}` and `{{embed …}}` blocks** are stripped from the rendered
   page (Glamour can't render them usefully).
