@@ -15,6 +15,7 @@ import (
 	"git.fiatcode.dev/fiatcode/weft/v2/internal/edit"
 	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
 	"git.fiatcode.dev/fiatcode/weft/v2/internal/search"
+	syncpkg "git.fiatcode.dev/fiatcode/weft/v2/internal/sync"
 )
 
 // indexLoadedMsg carries the result of an asynchronous graph.BuildIndex run.
@@ -22,6 +23,13 @@ type indexLoadedMsg struct {
 	idx *graph.Index
 	err error
 }
+
+// syncRunner runs a git sync against repoDir. Injected on App so view tests
+// stub it instead of shelling out to git.
+type syncRunner func(repoDir string) syncpkg.Result
+
+// syncDoneMsg carries the outcome of an async sync.
+type syncDoneMsg struct{ res syncpkg.Result }
 
 // editorExitedMsg is delivered when the child editor process returns. Only
 // the E ($EDITOR) handoff produces this; the in-app editor (e) reindexes
@@ -72,6 +80,11 @@ type App struct {
 	hint    string
 	hintGen int
 
+	// syncFunc runs the git sync; defaults to sync.Run with App's clock.
+	// syncing is the single-flight guard: a second `s` mid-sync is a no-op.
+	syncFunc syncRunner
+	syncing  bool
+
 	// Browser-style page history. hist[histIdx] is the entry currently on
 	// screen. histIdx == -1 before the first page is shown.
 	hist    []historyEntry
@@ -97,12 +110,16 @@ type historyEntry struct {
 // asynchronously in Init so the first frame can render a "loading" splash
 // instead of freezing the terminal while a large graph is walked.
 func New(graphPath, version string) *App {
-	return &App{
+	a := &App{
 		graphPath: graphPath,
 		histIdx:   -1,
 		version:   version,
 		nowFunc:   time.Now,
 	}
+	a.syncFunc = func(repoDir string) syncpkg.Result {
+		return syncpkg.Run(repoDir, a.nowFunc())
+	}
+	return a
 }
 
 func (a *App) todayJournalName() string { return a.nowFunc().Format("2006-01-02") }
@@ -472,6 +489,17 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.tryInitPage()
 		}
 		return a, nil
+	case syncDoneMsg:
+		a.syncing = false
+		if m.res.Err != nil {
+			a.logSyncFailure(m.res)
+			return a, a.setHint("✗ " + m.res.Stage + " failed — see weft.log")
+		}
+		cmds := []tea.Cmd{a.setHint("✓ synced")}
+		if m.res.Pulled {
+			cmds = append(cmds, a.buildIndexCmd())
+		}
+		return a, tea.Batch(cmds...)
 	case searchDoneMsg:
 		if s, ok := a.active.(*SearchView); ok {
 			s.Apply(m)
@@ -626,6 +654,17 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.page.GotoTop()
 		case "G":
 			a.page.GotoBottom()
+		case "S":
+			if a.syncing {
+				return a, a.setHint("⟳ already syncing")
+			}
+			a.syncing = true
+			run := a.syncFunc
+			dir := a.graphPath
+			return a, tea.Batch(
+				a.setHint("⟳ syncing…"),
+				func() tea.Msg { return syncDoneMsg{res: run(dir)} },
+			)
 		case "R":
 			// Async reindex — the response lands as indexLoadedMsg and
 			// rebuilds PageView for the current page. Errors surface in
@@ -722,4 +761,17 @@ func (a *App) statusBar() string {
 		gap = 1
 	}
 	return rule + "\n" + left + strings.Repeat(" ", gap) + right
+}
+
+// logSyncFailure appends a failing sync's captured git output to weft.log,
+// the same path WEFT_DEBUG mirrors to — written here regardless of the flag
+// so the hint's "see weft.log" pointer is always valid. Best-effort: a log
+// write error is itself ignored (the hint already told the user it failed).
+func (a *App) logSyncFailure(res syncpkg.Result) {
+	f, err := os.OpenFile("weft.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "sync %s failed at %s:\n%s\n", res.Stage, a.nowFunc().Format(time.RFC3339), res.Output)
 }

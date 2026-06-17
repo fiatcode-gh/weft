@@ -24,6 +24,9 @@
 │    b         backlinks + unlinked refs for the current page  │
 │    T         open todos dashboard                            │
 │                                                              │
+│  Sync                                                        │
+│    S         commit, pull & push the graph (git)             │
+│                                                              │
 │  Edit                                                        │
 │    e         edit current page in-app                        │
 │    E         edit current page in $EDITOR                    │

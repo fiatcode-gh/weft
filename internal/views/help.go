@@ -67,6 +67,9 @@ var helpSections = []struct {
 		{"b", "backlinks + unlinked refs for the current page"},
 		{"T", "open todos dashboard"},
 	}},
+	{"Sync", []helpRow{
+		{"S", "commit, pull & push the graph (git)"},
+	}},
 	{"Edit", []helpRow{
 		{"e", "edit current page in-app"},
 		{"E", "edit current page in $EDITOR"},
