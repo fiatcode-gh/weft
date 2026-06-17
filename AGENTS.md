@@ -1,6 +1,8 @@
 # weft
 
-Bubble Tea TUI for browsing and editing a local Logseq graph. Recency-sorted
+Bubble Tea TUI for a daily-journal-driven markdown knowledge base — browse,
+search, and edit a local graph of flat `.md` pages and journals linked by
+`[[wiki-links]]`. Recency-sorted
 picker (with page-creation), ripgrep-backed search, backlinks, TODO dashboard.
 Writes only via `internal/edit/`: the in-app editor (`e`) saves the displayed
 buffer on `Ctrl+S` and creates a page's file lazily on first save; `E` hands the

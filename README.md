@@ -1,6 +1,12 @@
-# weft — a Logseq TUI
+# weft — a daily-journal-driven knowledge base for the terminal
 
-A terminal browser and editor for a local Logseq graph. Recency-sorted page picker (with page-creation), ripgrep-backed full-text search, backlinks, and a TODO dashboard. Renders pages with hanging-indent bullets, coloured workflow markers (TODO/DOING/LATER/WAITING/DONE/CANCELED/NOW), and highlighted wiki-links you can step through. Press `e` to edit the current page in a full-screen in-app editor (`Ctrl+S` saves, `Esc` exits with an unsaved-changes prompt); `E` hands the file to your `$EDITOR`. While editing, typing `[[` opens a live, fuzzy-filtered page-name completion list — `↑`/`↓` to choose, `Enter` or `Tab` to insert `[[Page Name]]`, `Esc` to dismiss; an unmatched name shows a `＋ Create` row to drop a red link in one keystroke. Press `.` to jump to today's journal.
+Journals are the warp — the continuous daily timeline you lay down. `[[wiki-links]]` are the weft — the cross-threads you weave across into pages. The fabric is your knowledge base, and weft is the terminal tool for keeping it: a recency-sorted page picker (with page-creation), ripgrep-backed full-text search, backlinks (linked and unlinked), and a cross-graph dashboard of your open tasks (`TODO/DOING/LATER/WAITING`) — because a journal tool that can't surface your open loops is incomplete.
+
+One linking primitive — `[[wiki-links]]`, no tags. Pages are flat markdown under `pages/` and `journals/`, with `___` for namespaces and no nested directories to manage. weft is a navigator, not an outliner: it renders your bullets, workflow markers, and links, but it never makes you tend the tree — no fold/unfold, no block refs, no zoom.
+
+Press `e` to edit the current page in a full-screen in-app editor (`Ctrl+S` saves, `Esc` exits with an unsaved-changes prompt); `E` hands the file to your `$EDITOR`. While editing, typing `[[` opens a live, fuzzy-filtered page-name completion list — `↑`/`↓` to choose, `Enter` or `Tab` to insert `[[Page Name]]`, `Esc` to dismiss; an unmatched name shows a `＋ Create` row to drop a red link in one keystroke. Press `.` to jump to today's journal.
+
+*Already keep a Logseq graph? weft reads it as-is — the on-disk format (flat `.md`, `YYYY_MM_DD` journals, `[[wiki-links]]`, `TODO`-style bullets) is adapted from Logseq's. But weft is its own tool, not a Logseq client.*
 
 ## Install
 
