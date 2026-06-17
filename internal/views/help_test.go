@@ -11,7 +11,7 @@ import (
 func TestNewHelpRendersVersion(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
-	view := NewHelp("v0.1.2", 80).View()
+	view := NewHelp("v0.1.2", 80, 0).View()
 	if !strings.Contains(view, "weft v0.1.2") {
 		t.Errorf("help view missing version segment; got:\n%s", view)
 	}
@@ -23,7 +23,7 @@ func TestNewHelpRendersVersion(t *testing.T) {
 func TestNewHelpEmptyVersionHidesSegment(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
-	view := NewHelp("", 80).View()
+	view := NewHelp("", 80, 0).View()
 	if !strings.Contains(view, "? or esc to close") {
 		t.Errorf("help view missing close hint; got:\n%s", view)
 	}
@@ -41,7 +41,7 @@ func TestHelpRespectsNarrowWidth(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
 	const w = 30
-	view := NewHelp("v0.1.2", w).View()
+	view := NewHelp("v0.1.2", w, 0).View()
 	for _, line := range strings.Split(view, "\n") {
 		if lipgloss.Width(line) > w {
 			t.Errorf("line exceeds width %d: w=%d, line=%q", w, lipgloss.Width(line), line)
@@ -55,9 +55,9 @@ func TestHelpRespectsNarrowWidth(t *testing.T) {
 func TestHelpZeroWidthDisablesClamp(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
-	view := NewHelp("v0.1.2", 0).View()
-	// At least one body row is "ctrl-p" + ~10 padding + "picker — find
-	// any page" ≈ 35 cells; with no clamp the panel ends up wider than 30.
+	view := NewHelp("v0.1.2", 0, 0).View()
+	// With no width constraint the panel renders two content-sized columns,
+	// far wider than 30 cells.
 	max := 0
 	for _, line := range strings.Split(view, "\n") {
 		if w := lipgloss.Width(line); w > max {
@@ -72,14 +72,16 @@ func TestHelpZeroWidthDisablesClamp(t *testing.T) {
 func TestHelpGolden(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
-	h := NewHelp("v1.0.0", 80)
+	// Width 130 is wide enough to exercise the two-column layout; height 0
+	// disables the height cap so the golden captures the full panel.
+	h := NewHelp("v1.0.0", 130, 0)
 	teatest.RequireEqualOutput(t, []byte(h.View()))
 }
 
 func TestHelpSetSizeUpdatesWidth(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
-	h := NewHelp("v1.0.0", 80)
+	h := NewHelp("v1.0.0", 80, 0)
 	h.SetSize(30, 10) // shrink below natural content width
 	for _, line := range strings.Split(h.View(), "\n") {
 		if lipgloss.Width(line) > 30 {
@@ -89,15 +91,34 @@ func TestHelpSetSizeUpdatesWidth(t *testing.T) {
 	}
 }
 
+// TestHelpHeightGuardClipsToTerminal asserts the panel never renders taller
+// than the terminal: body lines past the cap are dropped, the close hint
+// stays visible, and a "resize" indicator signals the truncation.
+func TestHelpHeightGuardClipsToTerminal(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	const ht = 12
+	view := NewHelp("v1.0.0", 130, ht).View()
+	if n := len(strings.Split(view, "\n")); n > ht {
+		t.Errorf("panel taller than terminal: %d lines > height %d:\n%s", n, ht, view)
+	}
+	if !strings.Contains(view, "? or esc to close") {
+		t.Errorf("close hint must survive the height clip; got:\n%s", view)
+	}
+	if !strings.Contains(view, "resize") {
+		t.Errorf("clipped panel should show a resize indicator; got:\n%s", view)
+	}
+}
+
 func TestHelpQClosesOverlay(t *testing.T) {
-	h := NewHelp("v1.0.0", 80)
+	h := NewHelp("v1.0.0", 80, 0)
 	if res := h.Update("q"); !res.Cancel {
 		t.Errorf("q should close the help overlay; got %+v", res)
 	}
 }
 
 func TestHelpUnboundKeyIsNoop(t *testing.T) {
-	h := NewHelp("v1.0.0", 80)
+	h := NewHelp("v1.0.0", 80, 0)
 	if res := h.Update("x"); res.Accept || res.Cancel {
 		t.Errorf("unbound key should be a no-op; got %+v", res)
 	}

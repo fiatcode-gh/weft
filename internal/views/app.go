@@ -621,7 +621,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "T":
 			a.active = NewTodos(a.idx, a.width, a.height)
 		case "?":
-			a.active = NewHelp(a.version, a.width)
+			a.active = NewHelp(a.version, a.width, a.height)
 		case "[":
 			a.historyBack()
 		case "]":
