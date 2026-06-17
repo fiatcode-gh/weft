@@ -4,6 +4,19 @@ All notable changes to weft are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-06-17
+
+### Added
+
+- In-app editor syntax tinting: the raw markdown buffer is now live-tinted to match the read view — headings bold, blockquotes and code-fence delimiters faint, task markers (`TODO`/`DONE`/…) and `[[wiki-links]]` colored as on the page. The line the cursor is on is left as raw source.
+- In-app editor framing parity: the editor text now occupies the same horizontal box as the read view (a 2-column left inset) and gains a 1-row top margin, so text no longer jumps left or up when switching from reading to editing.
+- In-app editor bullet editing: `Enter` on a `- ` bullet continues the list at the same indent (an empty bullet ends the list); `Ctrl+T` cycles the current bullet's workflow marker (plain → `TODO` → `DONE`); `Tab` / `Shift+Tab` indent / de-indent the current line by one 2-space level.
+- The in-app editor now opens with the cursor at the top of the page.
+
+### Fixed
+
+- In-app editor: the viewport now follows the cursor after a bullet continuation, marker toggle, or indent — previously a new bullet created at the bottom of a long page stayed off-screen until the next keystroke.
+
 ## [2.0.0] - 2026-06-16
 
 ### Changed
