@@ -4,7 +4,8 @@ Bubble Tea TUI for a daily-journal-driven markdown knowledge base — browse,
 search, and edit a local graph of flat `.md` pages and journals linked by
 `[[wiki-links]]`. Recency-sorted
 picker (with page-creation), ripgrep-backed search, backlinks, TODO dashboard.
-Writes only via `internal/edit/`: the in-app editor (`e`) saves the displayed
+Within weft, graph files are written only through `internal/edit/`: the in-app
+editor (`e`) saves the displayed
 buffer on `Ctrl+S` and creates a page's file lazily on first save; `E` hands the
 file to `$EDITOR`. File creation for a new page is deferred until save, so
 opening then discarding never touches disk. While editing, typing `[[` opens a
@@ -18,6 +19,14 @@ Enter continues a `- ` bullet at the same indent (empty bullet ends the list);
 `Ctrl+T` cycles the current bullet's workflow marker (plain → TODO → DONE);
 `Tab` / `Shift+Tab` indent / de-indent the current line by one 2-space level.
 The editor opens with the cursor at the top of the page.
+
+Press `S` to sync the graph to git — commit local changes, `pull --rebase`,
+then push — run asynchronously off the UI thread with the outcome in the status
+bar (`⟳ syncing…` → `✓ synced`, or `✗ <stage> failed — see weft.log`). A `●` in
+the status bar flags an unsynced graph (uncommitted changes or unpushed
+commits). `internal/sync/` is the project's second deliberate disk-mutating
+surface, alongside `internal/edit/`; it shells out to the system `git` and bails
+to the shell on conflicts rather than resolving them in the alt-screen.
 
 ## Commands
 
@@ -43,10 +52,17 @@ an intentional UI change, run with `-update` and visually diff the golden before
 - `internal/render/` — Glamour-based page rendering (wiki-link styling, hanging-indent,
   workflow-marker colouring, `:LOGBOOK:` stripping). Has a `Warmup()` paid before the
   TUI takes the screen to avoid chroma init flicker.
-- `internal/edit/` — the single disk-writing surface in the project. Resolves
+- `internal/edit/` — one of two deliberate disk-mutating surfaces (with
+  `internal/sync/`). Resolves
   `$VISUAL` / `$EDITOR` / `vi`, snapshots file mtime, and exposes
   `Resolve` / `EnsureFile` / `WriteFile` / `SnapshotMtime`. Invoked by the in-app editor (`e`,
   saves on `Ctrl+S`) and by `App.editCurrent` for `$EDITOR` handoff (`E`).
+- `internal/sync/` — git orchestration over `os/exec` (no `go-git`); the second
+  deliberate disk-mutating surface. `Run` does commit → `pull --rebase` → push
+  for the `S` keybind (async, reported via a status-bar hint, failure output
+  appended to `weft.log`); the read-only `Status` reports whether the work tree
+  is dirty or ahead of upstream, driving the status-bar `●` indicator. Never
+  edits a conflicted tree — conflicts bail to the shell.
 - `internal/views/` — Bubble Tea models: `app` (root), `page`, `picker`, `search`,
   `backlinks`, `todos`, `help`, `editor` (in-app markdown editor). The backlinks
   view (`b`) shows two sections: linked references (`[[…]]` mentions) then unlinked

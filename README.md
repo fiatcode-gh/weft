@@ -6,6 +6,8 @@ One linking primitive — `[[wiki-links]]`, no tags. Pages are flat markdown und
 
 Press `e` to edit the current page in a full-screen in-app editor (`Ctrl+S` saves, `Esc` exits with an unsaved-changes prompt); `E` hands the file to your `$EDITOR`. While editing, typing `[[` opens a live, fuzzy-filtered page-name completion list — `↑`/`↓` to choose, `Enter` or `Tab` to insert `[[Page Name]]`, `Esc` to dismiss; an unmatched name shows a `＋ Create` row to drop a red link in one keystroke. Press `.` to jump to today's journal.
 
+Press `S` to sync the graph with git without leaving weft — it commits any changes, `pull --rebase`s, then pushes, reporting progress in the status bar (`⟳ syncing…` → `✓ synced`). A `●` shows in the status bar whenever the graph has local changes that aren't committed or pushed yet, so you always know when a sync is due. Conflicts are left for you to resolve in a shell — weft never touches a conflicted tree.
+
 *Already keep a Logseq graph? weft reads it as-is — the on-disk format (flat `.md`, `YYYY_MM_DD` journals, `[[wiki-links]]`, `TODO`-style bullets) is adapted from Logseq's. But weft is its own tool, not a Logseq client.*
 
 ## Install
@@ -55,6 +57,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | `Ctrl-d/u` | half-page scroll                    |
 | `g` / `G`  | jump to top / bottom of page        |
 | `R`        | rebuild the index                   |
+| `S`        | sync the graph with git (commit → pull → push) |
 | `e`        | edit current page in-app            |
 | `E`        | edit current page in `$EDITOR`      |
 | `Esc`      | close an overlay / leave editor     |
@@ -79,7 +82,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 
 ## Scope
 
-Writes only via the in-app editor (`e`, saves on `Ctrl+S`) and the `$EDITOR` handoff (`E`); the `.` key creates today's journal if it doesn't exist, and the picker can create a new page by name. No fold/unfold, no filesystem-watch live reload (use `R`).
+Writes graph files only via the in-app editor (`e`, saves on `Ctrl+S`) and the `$EDITOR` handoff (`E`); the `.` key creates today's journal if it doesn't exist, and the picker can create a new page by name. Press `S` to sync the whole graph with git (commit → `pull --rebase` → push); it runs against the graph directory and degrades to a status-bar hint if that directory isn't a git repository. No fold/unfold, no filesystem-watch live reload (use `R`).
 
 ### What is not supported
 
