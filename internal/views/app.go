@@ -31,6 +31,12 @@ type syncRunner func(repoDir string) syncpkg.Result
 // syncDoneMsg carries the outcome of an async sync.
 type syncDoneMsg struct{ res syncpkg.Result }
 
+// statusProbedMsg carries the outcome of a read-only graph sync-state probe.
+type statusProbedMsg struct {
+	st  syncpkg.WorktreeStatus
+	err error
+}
+
 // editorExitedMsg is delivered when the child editor process returns. Only
 // the E ($EDITOR) handoff produces this; the in-app editor (e) reindexes
 // inline in the res.Exit branch and never goes through here.
@@ -85,6 +91,12 @@ type App struct {
 	syncFunc syncRunner
 	syncing  bool
 
+	// statusProbe reads the graph repo's sync state; injected so view tests
+	// stub it instead of shelling out to git. unsynced caches the last probe's
+	// verdict and drives the status-bar indicator.
+	statusProbe func(repoDir string) (syncpkg.WorktreeStatus, error)
+	unsynced    bool
+
 	// Browser-style page history. hist[histIdx] is the entry currently on
 	// screen. histIdx == -1 before the first page is shown.
 	hist    []historyEntry
@@ -119,6 +131,7 @@ func New(graphPath, version string) *App {
 	a.syncFunc = func(repoDir string) syncpkg.Result {
 		return syncpkg.Run(repoDir, a.nowFunc())
 	}
+	a.statusProbe = syncpkg.Status
 	return a
 }
 
@@ -142,6 +155,18 @@ func (a *App) buildIndexCmd() tea.Cmd {
 	return func() tea.Msg {
 		idx, err := graph.BuildIndex(path)
 		return indexLoadedMsg{idx: idx, err: err}
+	}
+}
+
+// statusProbeCmd reads the graph repo's sync state off the UI thread and
+// delivers a statusProbedMsg. Run it after writes, reindexes, and syncs —
+// the moments git state can change.
+func (a *App) statusProbeCmd() tea.Cmd {
+	probe := a.statusProbe
+	dir := a.graphPath
+	return func() tea.Msg {
+		st, err := probe(dir)
+		return statusProbedMsg{st: st, err: err}
 	}
 }
 
@@ -462,7 +487,8 @@ func (a *App) linkify(ref *graph.UnlinkedRef, target string) tea.Cmd {
 		return fail("reindex failed: " + err.Error())
 	}
 	a.active = NewBacklinks(a.idx, target, a.unlinkedRefs(target), a.width, a.height)
-	return nil
+	// The linkify write changed the working tree — refresh the indicator.
+	return a.statusProbeCmd()
 }
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -488,18 +514,29 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			a.tryInitPage()
 		}
-		return a, nil
+		// Every reindex (boot, R, post-edit, post-$EDITOR) is a natural
+		// moment to refresh the sync indicator.
+		return a, a.statusProbeCmd()
 	case syncDoneMsg:
 		a.syncing = false
 		if m.res.Err != nil {
 			a.logSyncFailure(m.res)
-			return a, a.setHint("✗ " + m.res.Stage + " failed — see weft.log")
+			// A failed sync may still have changed state (e.g. committed
+			// then failed to push), so re-probe.
+			return a, tea.Batch(
+				a.setHint("✗ "+m.res.Stage+" failed — see weft.log"),
+				a.statusProbeCmd(),
+			)
 		}
-		cmds := []tea.Cmd{a.setHint("✓ synced")}
+		cmds := []tea.Cmd{a.setHint("✓ synced"), a.statusProbeCmd()}
 		if m.res.Pulled {
 			cmds = append(cmds, a.buildIndexCmd())
 		}
 		return a, tea.Batch(cmds...)
+
+	case statusProbedMsg:
+		a.unsynced = m.err == nil && m.st.Unsynced()
+		return a, nil
 	case searchDoneMsg:
 		if s, ok := a.active.(*SearchView); ok {
 			s.Apply(m)
@@ -512,13 +549,16 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		info, err := os.Stat(m.path)
 		if err != nil {
 			if os.IsNotExist(err) {
-				return a, nil
+				return a, a.statusProbeCmd()
 			}
 			return a, a.setHint("cannot stat: " + err.Error())
 		}
 		if info.ModTime().Equal(m.t0) {
-			return a, nil
+			// Unchanged by the editor — but editCurrent may have just
+			// created a journal stub, so still refresh the indicator.
+			return a, a.statusProbeCmd()
 		}
+		// Changed: the reindex's indexLoadedMsg refreshes the indicator.
 		return a, a.buildIndexCmd()
 	case hintExpireMsg:
 		if m.gen == a.hintGen {
@@ -559,6 +599,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if a.editor != nil {
 			res, taCmd := a.editor.Update(m)
+			cmds := []tea.Cmd{taCmd}
 			if res.Save {
 				content := a.editor.Content()
 				if err := edit.WriteFile(a.editor.path, []byte(content)); err != nil {
@@ -571,11 +612,17 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				saved := a.editor.saved
 				a.editor = nil
 				if saved {
-					return a, tea.Batch(taCmd, a.buildIndexCmd())
+					// Reindex picks up the saved file; its indexLoadedMsg
+					// then refreshes the indicator.
+					cmds = append(cmds, a.buildIndexCmd())
+				} else {
+					a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
 				}
-				a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
+			} else if res.Save {
+				// A save without exit doesn't reindex, so probe directly.
+				cmds = append(cmds, a.statusProbeCmd())
 			}
-			return a, taCmd
+			return a, tea.Batch(cmds...)
 		}
 		// An open overlay swallows all keys until it accepts or cancels.
 		if a.active != nil {
@@ -628,14 +675,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.historyForward()
 		case ".":
 			today := a.todayJournalName()
+			var probe tea.Cmd
 			if _, ok := a.idx.ByName[today]; !ok {
 				if err := a.createJournalAndReindex(today); err != nil {
 					return a, a.setHint(err.Error())
 				}
+				// Creating the journal wrote a new file — refresh the indicator.
+				probe = a.statusProbeCmd()
 			}
 			if a.page.Page() != today {
 				a.navigate(today)
 			}
+			return a, probe
 		case "<":
 			page := a.page.Page()
 			if name, ok := a.journalNeighbor(page, -1); ok {
@@ -734,16 +785,21 @@ func (a *App) centerOverlay(content string) string {
 // overflowed the terminal width and wrapped onto a second line.
 func (a *App) statusBar() string {
 	left := a.page.StatusLine()
-	var rightText string
+	var right string
 	if a.hint != "" {
-		rightText = a.hint
+		right = styleFaint.Render(a.hint)
 	} else {
-		rightText = "? help"
+		rightText := "? help"
 		if ind := a.page.ScrollIndicator(); ind != "" {
 			rightText = ind + "  " + rightText
 		}
+		right = styleFaint.Render(rightText)
+		// An unsynced graph shows a leading attention dot — hidden while a
+		// transient hint occupies the right side.
+		if a.unsynced {
+			right = styleSyncDirty.Render("●") + " " + right
+		}
 	}
-	right := styleFaint.Render(rightText)
 	width := a.width
 	if width <= 0 {
 		width = lipgloss.Width(left) + 2 + lipgloss.Width(right)

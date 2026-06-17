@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
+	syncpkg "git.fiatcode.dev/fiatcode/weft/v2/internal/sync"
 )
 
 // pressE sends the e key to a booted app and returns the resulting cmd.
@@ -56,25 +57,30 @@ func TestShiftE_DispatchesToEditorProcess(t *testing.T) {
 
 // TestEditorExitedMsg_NoReindexOnNoChange constructs the message that
 // tea.ExecProcess would yield when the child exits cleanly without
-// changing the file. The handler should return (nil cmd) — no reindex.
+// changing the file. The handler must not reindex, but it still refreshes
+// the sync indicator (editCurrent may have created a journal stub), so the
+// returned cmd is a status probe — not a buildIndexCmd.
 func TestEditorExitedMsg_NoReindexOnNoChange(t *testing.T) {
+	// Arrange: an existing fixture file, with t0 == its current mtime so the
+	// handler takes the "unchanged" branch. Stub the probe to avoid git.
 	a := bootApp(t)
+	a.statusProbe = func(string) (syncpkg.WorktreeStatus, error) { return syncpkg.WorktreeStatus{}, nil }
 	abs, err := filepath.Abs("../../testdata/fixture-graph")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Any existing fixture page is fine — we never actually call the
-	// editor. Alpha.md is in the fixture.
 	path := filepath.Join(abs, "pages", "Alpha.md")
 	t0, err := os.Stat(path)
 	if err != nil {
 		t.Fatalf("stat Alpha.md: %v", err)
 	}
 
+	// Act
 	_, cmd := a.Update(editorExitedMsg{path: path, t0: t0.ModTime(), err: nil})
-	if cmd != nil {
-		t.Errorf("unchanged file should not reindex; got non-nil cmd")
-	}
+
+	// Assert: a probe, not a reindex. drainFor fatals if the cmd produced
+	// anything other than a statusProbedMsg (e.g. an indexLoadedMsg).
+	drainFor[statusProbedMsg](t, cmd)
 }
 
 // TestEditorExitedMsg_TriggersReindexOnMtimeChange: the file's mtime
@@ -98,16 +104,19 @@ func TestEditorExitedMsg_TriggersReindexOnMtimeChange(t *testing.T) {
 }
 
 // TestEditorExitedMsg_NoReindexOnDelete: post-exit stat returns
-// ENOENT — the user deleted the file in the editor. Silent no-op.
+// ENOENT — the user deleted the file in the editor. No reindex, but the
+// indicator is still refreshed (the delete itself dirties the worktree).
 func TestEditorExitedMsg_NoReindexOnDelete(t *testing.T) {
+	// Arrange: a path that doesn't exist, so the post-exit stat returns ENOENT.
 	a := bootApp(t)
-	dir := t.TempDir()
-	path := filepath.Join(dir, "deleted.md")
-	// Don't create the file — os.Stat will return ENOENT.
+	a.statusProbe = func(string) (syncpkg.WorktreeStatus, error) { return syncpkg.WorktreeStatus{}, nil }
+	path := filepath.Join(t.TempDir(), "deleted.md")
+
+	// Act
 	_, cmd := a.Update(editorExitedMsg{path: path, t0: time.Time{}, err: nil})
-	if cmd != nil {
-		t.Errorf("deleted file should not reindex; got non-nil cmd")
-	}
+
+	// Assert: a probe, not a reindex.
+	drainFor[statusProbedMsg](t, cmd)
 }
 
 // TestEditorExitedMsg_HintOnError: non-nil err from the editor (e.g.

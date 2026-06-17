@@ -20,4 +20,7 @@ var (
 	styleFaint  = lipgloss.NewStyle().Faint(true)
 	styleSel    = lipgloss.NewStyle().Foreground(colorSelFg).Background(colorHighlight).Bold(true)
 	styleBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(1, 2)
+	// styleSyncDirty colours the status-bar "unsynced" dot — yellow for
+	// attention, matching the cursor/emphasis accent.
+	styleSyncDirty = lipgloss.NewStyle().Foreground(colorCursor)
 )
