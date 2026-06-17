@@ -4,8 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/exp/teatest"
+	"github.com/muesli/termenv"
 )
 
 func TestEditorView_LoadsContentAndTracksDirty(t *testing.T) {
@@ -448,5 +450,65 @@ func TestEditorCompletion_TypingIntoUnclosedAfterNavReopens(t *testing.T) {
 	e.Update(key("a")) // an actual edit — mutation — should open the strip
 	if !e.completer.active {
 		t.Errorf("typing into an unclosed [[ should open the completer; partial=%q", e.completer.partial)
+	}
+}
+
+func TestEditorViewIsLeftInset(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	e := NewEditorView(nil, "Page", "/tmp/page.md", "hello world\n", false, 40, 10)
+	out := e.View()
+	for i, line := range strings.Split(out, "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue // padding/blank rows need not be inset
+		}
+		if !strings.HasPrefix(line, "  ") {
+			t.Fatalf("line %d not inset by 2 spaces: %q", i, line)
+		}
+	}
+}
+
+func TestEditorViewHasTopMargin(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	const h = 10
+	e := NewEditorView(nil, "Page", "/tmp/page.md", "# Title\n", false, 40, h)
+	lines := strings.Split(e.View(), "\n")
+	// Match the read view's leading blank line: the editor's first row is a
+	// top margin, so content starts on row 1, not row 0.
+	if strings.TrimSpace(lines[0]) != "" {
+		t.Fatalf("expected blank top-margin row, got %q", lines[0])
+	}
+	if !strings.Contains(lines[1], "# Title") {
+		t.Fatalf("expected content on row 1, got %q", lines[1])
+	}
+	// The whole view must still fit the terminal height.
+	if len(lines) > h {
+		t.Fatalf("view is %d rows, exceeds height %d", len(lines), h)
+	}
+}
+
+func TestEditorViewTintsHeadings(t *testing.T) {
+	// Integration test: tinting must actually reach EditorView.View() output.
+	// Force a color profile so lipgloss emits ANSI (a non-TTY `go test` strips
+	// it otherwise). Must NOT call t.Parallel — SetColorProfile is process-global.
+	orig := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(orig) })
+
+	// Heading on row 0 and a wiki-link on a later row; the cursor lands on the
+	// trailing line, so neither is the cursor row and both must be tinted.
+	e := NewEditorView(nil, "Page", "/tmp/page.md", "# Title\n\nsee [[Foo]]\n", false, 40, 10)
+	out := e.View()
+
+	// The whole padded heading row is bolded, so the closing reset sits after
+	// the trailing spaces — assert the opening bold sequence precedes the text,
+	// not an exact bold-wrapped "# Title".
+	if !strings.Contains(out, "\x1b[1m# Title") {
+		t.Fatalf("heading not tinted bold in editor view:\n%q", out)
+	}
+	link := lipgloss.NewStyle().Foreground(colorHighlight).Render("[[Foo]]")
+	if !strings.Contains(out, link) {
+		t.Fatalf("wiki link not tinted in editor view:\n%q", out)
 	}
 }

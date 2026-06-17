@@ -10,7 +10,10 @@ file to `$EDITOR`. File creation for a new page is deferred until save, so
 opening then discarding never touches disk. While editing, typing `[[` opens a
 live fuzzy completion list of page names (`↑`/`↓` to choose, `Enter`/`Tab` to
 insert `[[Page Name]]`, `Esc` to dismiss); an unmatched name offers a create row
-that inserts a red link without writing to disk.
+that inserts a red link without writing to disk. The in-app editor live-tints
+markdown (headings, blockquotes, code-fence delimiters, task markers, and
+`[[wiki-links]]`) and insets text to match the read view's left margin; the
+cursor's current row is shown as raw source.
 
 ## Commands
 

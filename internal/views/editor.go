@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
 )
@@ -15,6 +16,17 @@ const (
 	editing editorMode = iota
 	confirmingExit
 )
+
+// editorInset is the left margin (in columns) applied to the whole editor
+// view so its text occupies the same horizontal box as the Glamour-rendered
+// read view, whose standard-style document margin is 2 columns. Without this,
+// switching from read to edit jumps the text flush-left.
+const editorInset = 2
+
+// editorTopMargin is the number of blank rows above the editor's text, matching
+// the leading blank line Glamour emits at the top of the read view. Without it,
+// the first line sits flush at row 0 and jumps up by a row on entering the editor.
+const editorTopMargin = 1
 
 // EditorView is weft's in-app raw-markdown editor: a full-screen mode
 // (not a centered overlay) that wraps bubbles/textarea. It owns the
@@ -50,6 +62,13 @@ func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, wid
 	ta.MaxHeight = 0 // no line cap — pages can exceed textarea's default 99
 	ta.ShowLineNumbers = false
 	ta.Prompt = ""
+	// The empty prompt is still rendered through the prompt STYLE, which by
+	// default carries a foreground color — emitting an ANSI escape at the start
+	// of every row. tintView treats any row containing an escape as the cursor
+	// row and leaves it untinted, so a styled empty prompt would suppress all
+	// tinting. Neutralize the prompt style so non-cursor rows stay escape-free.
+	ta.FocusedStyle.Prompt = lipgloss.NewStyle()
+	ta.BlurredStyle.Prompt = lipgloss.NewStyle()
 	ta.SetValue(content)
 	e := &EditorView{
 		ta:        ta,
@@ -148,11 +167,11 @@ type repositionMsg struct{}
 // layout sizes the textarea, reserving one row for the status line plus the
 // completion strip's rows while it is active.
 func (e *EditorView) layout() {
-	e.ta.SetWidth(e.width)
+	e.ta.SetWidth(max(1, e.width-editorInset))
 	// Cap the strip so it can't push the textarea/status off a short terminal:
 	// reserve the box chrome (4 rows), the status line (1), and ≥1 textarea row.
-	e.completer.maxVisible = clampInt(e.height-6, 1, maxCompleterRows)
-	h := e.height - 1 - e.completer.rows()
+	e.completer.maxVisible = clampInt(e.height-6-editorTopMargin, 1, maxCompleterRows)
+	h := e.height - 1 - editorTopMargin - e.completer.rows()
 	e.ta.SetHeight(max(1, h))
 	if e.completer.active {
 		// SetHeight just shrank the textarea to make room for the strip, but it
@@ -179,11 +198,13 @@ func (e *EditorView) MarkSaved(content string) {
 }
 
 func (e *EditorView) View() string {
-	v := e.ta.View()
-	if strip := e.completer.View(e.width); strip != "" {
+	v := tintView(e.ta.View())
+	if strip := e.completer.View(max(1, e.width-editorInset)); strip != "" {
 		v += "\n" + strip
 	}
-	return v + "\n" + e.statusLine()
+	v += "\n" + e.statusLine()
+	// A leading blank row matches the read view's top margin (see editorTopMargin).
+	return strings.Repeat("\n", editorTopMargin) + indentBlock(v, editorInset)
 }
 
 // Update handles one key and reports whether the App should save/exit.
@@ -280,4 +301,17 @@ func (e *EditorView) statusLine() string {
 		right = styleTitle.Render("save failed: " + e.errMsg)
 	}
 	return left + "  " + right
+}
+
+// indentBlock prefixes every line of s with n spaces. Blank lines are left
+// empty so the inset never adds trailing whitespace to padding rows.
+func indentBlock(s string, n int) string {
+	pad := strings.Repeat(" ", n)
+	lines := strings.Split(s, "\n")
+	for i, ln := range lines {
+		if ln != "" {
+			lines[i] = pad + ln
+		}
+	}
+	return strings.Join(lines, "\n")
 }
