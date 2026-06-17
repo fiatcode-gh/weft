@@ -4,6 +4,17 @@ All notable changes to weft are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-06-17
+
+### Added
+
+- In-app git sync: press `S` to commit local changes, `pull --rebase`, then push the graph without leaving weft. It runs asynchronously with progress in the status bar (`⟳ syncing…` → `✓ synced`, or `✗ <stage> failed — see weft.log`). Conflicts are left for you to resolve in a shell — weft never edits a conflicted tree. Operates on the `--graph` directory and degrades to a status-bar hint if that directory isn't a git repository.
+- Status-bar sync indicator: a `●` appears whenever the graph has uncommitted changes or unpushed commits, so you can tell at a glance when a sync is due. It refreshes after edits, reindexes, and syncs — no background polling.
+
+### Fixed
+
+- Help overlay (`?`) no longer overflows the terminal: it lays its key groups out in two balanced columns when the width allows, and caps its height to the screen — dropping overflow with a "resize" hint — instead of silently clipping the top and bottom (including the close hint) on shorter terminals.
+
 ## [2.1.0] - 2026-06-17
 
 ### Added
