@@ -82,6 +82,14 @@ func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, wid
 	}
 	e.SetSize(width, height)
 	_ = e.ta.Focus() // blink cmd not needed here; the App calls Focus() again when it mounts the editor
+	// SetValue leaves the cursor at the end of the buffer; Reset() (inside
+	// SetValue) already put the viewport at the top. Move the cursor to the top
+	// so cursor and viewport agree on open instead of the cursor sitting
+	// off-screen at the bottom of a long page.
+	for e.ta.Line() > 0 {
+		e.ta.CursorUp()
+	}
+	e.ta.CursorStart()
 	e.baseline = e.Content() // normalize so open-time dirty() is accurate
 	e.refreshCompleter(false) // opening a file must not pop the strip
 	return e
@@ -156,6 +164,28 @@ func (e *EditorView) acceptCompletion() {
 	}
 	e.refreshCompleter(false) // accepting inserts "]]" which closes the link
 }
+
+// replaceCurrentLine rewrites the logical line the cursor is on: it deletes the
+// line's existing runes (backward from line end, exactly its rune length so the
+// trailing newline is untouched), inserts newText, then places the cursor at
+// column newCol. Used for empty-bullet termination and marker cycling.
+func (e *EditorView) replaceCurrentLine(newText string, newCol int) {
+	before, after := e.cursorLineSplit()
+	oldLen := len([]rune(before + after))
+	e.ta.CursorEnd()
+	for i := 0; i < oldLen; i++ {
+		e.ta, _ = e.ta.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	}
+	e.ta.InsertString(newText)
+	e.ta.SetCursor(newCol)
+	e.syncViewport()
+}
+
+// syncViewport repositions the textarea viewport onto the cursor after an
+// intercept mutates the buffer without routing a message through ta.Update
+// (the only place the textarea calls repositionView). repositionMsg is the
+// content-neutral message layout() already uses for the same purpose.
+func (e *EditorView) syncViewport() { e.ta, _ = e.ta.Update(repositionMsg{}) }
 
 // repositionMsg is a content-neutral message handed to the textarea purely to
 // trigger its viewport reposition. The textarea repositions the viewport only
@@ -258,6 +288,47 @@ func (e *EditorView) Update(msg tea.KeyMsg) (EditorResult, tea.Cmd) {
 	case "pgdown":
 		e.scrollPage(+1)
 		e.refreshCompleter(false) // scrolling is navigation, not an edit
+		return EditorResult{}, nil
+	case "enter":
+		before, after := e.cursorLineSplit()
+		line := before + after
+		if isEmptyBullet(line) {
+			e.replaceCurrentLine("", 0)
+			e.refreshCompleter(false)
+			return EditorResult{}, nil
+		}
+		if prefix, ok := bulletPrefix(line); ok {
+			e.ta.InsertString("\n" + prefix)
+			e.syncViewport()
+			e.refreshCompleter(false)
+			return EditorResult{}, nil
+		}
+		// Non-bullet: do not return — fall past the switch so the textarea
+		// inserts a normal newline below.
+	case "ctrl+t":
+		before, after := e.cursorLineSplit()
+		oldCol := len([]rune(before))
+		if newLine, newCol, ok := cycleMarkerLine(before+after, oldCol); ok {
+			e.replaceCurrentLine(newLine, newCol)
+			e.refreshCompleter(false)
+		}
+		return EditorResult{}, nil
+	case "tab":
+		before, after := e.cursorLineSplit()
+		oldCol := len([]rune(before))
+		e.replaceCurrentLine(indentLine(before+after), oldCol+2)
+		e.refreshCompleter(false)
+		return EditorResult{}, nil
+	case "shift+tab":
+		before, after := e.cursorLineSplit()
+		oldCol := len([]rune(before))
+		newLine, removed := dedentLine(before + after)
+		newCol := oldCol - removed
+		if newCol < 0 {
+			newCol = 0
+		}
+		e.replaceCurrentLine(newLine, newCol)
+		e.refreshCompleter(false)
 		return EditorResult{}, nil
 	}
 

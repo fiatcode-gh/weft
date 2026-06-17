@@ -14,6 +14,10 @@ that inserts a red link without writing to disk. The in-app editor live-tints
 markdown (headings, blockquotes, code-fence delimiters, task markers, and
 `[[wiki-links]]`) and insets text to match the read view's left margin; the
 cursor's current row is shown as raw source.
+Enter continues a `- ` bullet at the same indent (empty bullet ends the list);
+`Ctrl+T` cycles the current bullet's workflow marker (plain → TODO → DONE);
+`Tab` / `Shift+Tab` indent / de-indent the current line by one 2-space level.
+The editor opens with the cursor at the top of the page.
 
 ## Commands
 

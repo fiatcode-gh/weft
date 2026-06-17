@@ -67,6 +67,16 @@ func TestEditorView_CleanOnOpenWhenFileLacksTrailingNewline(t *testing.T) {
 	}
 }
 
+func TestEditorViewOpensAtTop(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	content := "line 1\nline 2\nline 3\nline 4\nline 5\n"
+	e := NewEditorView(nil, "Page", "/tmp/page.md", content, false, 40, 6)
+	if got := e.ta.Line(); got != 0 {
+		t.Fatalf("editor should open at row 0, got row %d", got)
+	}
+}
+
 func key(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
 
 func TestEditorUpdate_CtrlSRequestsSaveStaysEditing(t *testing.T) {
@@ -342,6 +352,7 @@ func TestEditorCompletion_AcceptOnSecondLine(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "first", false, 80, 24)
+	e.ta.CursorEnd()
 	e.Update(tea.KeyMsg{Type: tea.KeyEnter}) // completer inactive -> newline, cursor to row 1
 	typeRunes(e, "see [[Alp")
 	e.Update(tea.KeyMsg{Type: tea.KeyEnter}) // accept
@@ -374,6 +385,15 @@ func TestEditorCompletion_CursorStaysVisibleAtBottom(t *testing.T) {
 	}
 	sb.WriteString("EDITHERE")
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", sb.String(), false, 80, 24)
+	// The editor now opens at the top; this test edits at the bottom, so move
+	// the cursor to the last line first.
+	for {
+		before := e.ta.Line()
+		e.ta.CursorDown()
+		if e.ta.Line() == before {
+			break
+		}
+	}
 	// Mimic the Bubble Tea loop: a render primes the textarea viewport's
 	// content. The textarea only repositions its viewport inside Update, using
 	// content captured during the previous View — so without interleaved
@@ -488,6 +508,56 @@ func TestEditorViewHasTopMargin(t *testing.T) {
 	}
 }
 
+// All four use a trailing "second" line so the Enter's effect is interior to
+// the buffer and survives Content()'s trailing-newline normalization (Content
+// collapses trailing blank lines to a single "\n", which would otherwise hide
+// a newline inserted at end-of-buffer). The editor opens at row 0; CursorEnd()
+// moves to the end of that first row before each Enter.
+
+func TestEditorEnterContinuesBullet(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	e := NewEditorView(nil, "Page", "/tmp/page.md", "- first\nsecond\n", false, 40, 10)
+	e.ta.CursorEnd()
+	e.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := e.Content(); got != "- first\n- \nsecond\n" {
+		t.Fatalf("continuation: got %q, want %q", got, "- first\n- \nsecond\n")
+	}
+}
+
+func TestEditorEnterContinuesNestedBullet(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	e := NewEditorView(nil, "Page", "/tmp/page.md", "  - nested\nsecond\n", false, 40, 10)
+	e.ta.CursorEnd()
+	e.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := e.Content(); got != "  - nested\n  - \nsecond\n" {
+		t.Fatalf("nested continuation: got %q, want %q", got, "  - nested\n  - \nsecond\n")
+	}
+}
+
+func TestEditorEnterEmptyBulletTerminates(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	e := NewEditorView(nil, "Page", "/tmp/page.md", "- \nsecond\n", false, 40, 10)
+	e.ta.CursorEnd()
+	e.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := e.Content(); got != "\nsecond\n" {
+		t.Fatalf("empty-bullet terminate: got %q, want %q", got, "\nsecond\n")
+	}
+}
+
+func TestEditorEnterNonBulletInsertsNewline(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	e := NewEditorView(nil, "Page", "/tmp/page.md", "plain\nsecond\n", false, 40, 10)
+	e.ta.CursorEnd()
+	e.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := e.Content(); got != "plain\n\nsecond\n" {
+		t.Fatalf("non-bullet newline: got %q, want %q", got, "plain\n\nsecond\n")
+	}
+}
+
 func TestEditorViewTintsHeadings(t *testing.T) {
 	// Integration test: tinting must actually reach EditorView.View() output.
 	// Force a color profile so lipgloss emits ANSI (a non-TTY `go test` strips
@@ -496,9 +566,10 @@ func TestEditorViewTintsHeadings(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	t.Cleanup(func() { lipgloss.SetColorProfile(orig) })
 
-	// Heading on row 0 and a wiki-link on a later row; the cursor lands on the
-	// trailing line, so neither is the cursor row and both must be tinted.
-	e := NewEditorView(nil, "Page", "/tmp/page.md", "# Title\n\nsee [[Foo]]\n", false, 40, 10)
+	// The editor opens with the cursor on row 0, which is rendered raw, so put a
+	// plain line there; the heading and wiki-link on later rows are non-cursor
+	// rows and must be tinted.
+	e := NewEditorView(nil, "Page", "/tmp/page.md", "intro\n\n# Title\n\nsee [[Foo]]\n", false, 40, 10)
 	out := e.View()
 
 	// The whole padded heading row is bolded, so the closing reset sits after
@@ -510,5 +581,109 @@ func TestEditorViewTintsHeadings(t *testing.T) {
 	link := lipgloss.NewStyle().Foreground(colorHighlight).Render("[[Foo]]")
 	if !strings.Contains(out, link) {
 		t.Fatalf("wiki link not tinted in editor view:\n%q", out)
+	}
+}
+
+func TestEditorCtrlTCyclesMarker(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	e := NewEditorView(nil, "Page", "/tmp/page.md", "- task\n", false, 40, 10)
+	e.ta.CursorEnd()
+
+	e.Update(tea.KeyMsg{Type: tea.KeyCtrlT})
+	if got := e.Content(); got != "- TODO task\n" {
+		t.Fatalf("plain->TODO: got %q", got)
+	}
+	e.Update(tea.KeyMsg{Type: tea.KeyCtrlT})
+	if got := e.Content(); got != "- DONE task\n" {
+		t.Fatalf("TODO->DONE: got %q", got)
+	}
+	e.Update(tea.KeyMsg{Type: tea.KeyCtrlT})
+	if got := e.Content(); got != "- task\n" {
+		t.Fatalf("DONE->plain: got %q", got)
+	}
+}
+
+func TestEditorCtrlTNoOpOnNonBullet(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	e := NewEditorView(nil, "Page", "/tmp/page.md", "# heading\n", false, 40, 10)
+	e.ta.CursorEnd()
+	e.Update(tea.KeyMsg{Type: tea.KeyCtrlT})
+	if got := e.Content(); got != "# heading\n" {
+		t.Fatalf("ctrl+t on non-bullet should be a no-op, got %q", got)
+	}
+}
+
+func TestEditorRepositionsAfterContinuation(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	// A buffer taller than the viewport, ending in a bullet with a unique tag.
+	var sb strings.Builder
+	for i := 0; i < 60; i++ {
+		sb.WriteString("filler\n")
+	}
+	sb.WriteString("- ANCHOR")
+	e := NewEditorView(nil, "Note", "/tmp/n.md", sb.String(), false, 80, 24)
+	// CursorDown does not reposition the viewport, so this lands the cursor on
+	// the bottom bullet while the viewport stays at the top.
+	for {
+		before := e.ta.Line()
+		e.ta.CursorDown()
+		if e.ta.Line() == before {
+			break
+		}
+	}
+	e.ta.CursorEnd()
+	_ = e.View() // prime the textarea viewport content; it is still scrolled to the top
+	if strings.Contains(e.View(), "ANCHOR") {
+		t.Fatalf("precondition: the bottom bullet should be off-screen before Enter")
+	}
+	// Continuation inserts a new bullet below ANCHOR via InsertString (which does
+	// not reposition); syncViewport must scroll the cursor region into view.
+	e.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if !strings.Contains(e.View(), "ANCHOR") {
+		t.Errorf("continuation must scroll the new bullet into view (viewport did not follow the cursor)")
+	}
+}
+
+func TestEditorTabIndents(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	e := NewEditorView(nil, "Page", "/tmp/page.md", "- foo\nx\n", false, 40, 10)
+	e.ta.CursorEnd() // end of "- foo" on row 0
+	e.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if got := e.Content(); got != "  - foo\nx\n" {
+		t.Fatalf("tab indent: got %q, want %q", got, "  - foo\nx\n")
+	}
+	// cursor rides with the text: was at col 5 (end of "- foo"), +2 after indent.
+	if before, _ := e.cursorLineSplit(); len([]rune(before)) != 7 {
+		t.Fatalf("tab indent cursor col: got %d, want 7", len([]rune(before)))
+	}
+}
+
+func TestEditorShiftTabDedents(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	e := NewEditorView(nil, "Page", "/tmp/page.md", "  - foo\nx\n", false, 40, 10)
+	e.ta.CursorEnd()
+	e.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	if got := e.Content(); got != "- foo\nx\n" {
+		t.Fatalf("shift+tab dedent: got %q, want %q", got, "- foo\nx\n")
+	}
+	// cursor rides with the text: was at col 7 (end of "  - foo"), -2 after dedent.
+	if before, _ := e.cursorLineSplit(); len([]rune(before)) != 5 {
+		t.Fatalf("shift+tab dedent cursor col: got %d, want 5", len([]rune(before)))
+	}
+}
+
+func TestEditorShiftTabNoOpAtZeroIndent(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	e := NewEditorView(nil, "Page", "/tmp/page.md", "- foo\nx\n", false, 40, 10)
+	e.ta.CursorEnd()
+	e.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	if got := e.Content(); got != "- foo\nx\n" {
+		t.Fatalf("shift+tab at zero indent should be a no-op: got %q", got)
 	}
 }
