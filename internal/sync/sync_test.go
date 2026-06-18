@@ -160,3 +160,38 @@ func TestRunNonRepoIsPreflightFailure(t *testing.T) {
 		t.Fatalf("want preflight failure, got %+v", res)
 	}
 }
+
+func TestRunRefusesWhenRebaseInProgress(t *testing.T) {
+	// arrange: drive work into a conflicted (mid-rebase) state exactly like the
+	// conflict test, then attempt a second sync.
+	work := newRepoWithRemote(t)
+	other := cloneSibling(t, work)
+	writeFile(t, other, "seed.md", "remote\n")
+	git(t, other, "commit", "-am", "remote edit")
+	git(t, other, "push", "origin", "main")
+	writeFile(t, work, "seed.md", "local\n")
+
+	first := Run(work, testClock)
+	if first.Stage != "pull" {
+		t.Fatalf("precondition: first sync should halt at pull; got stage %q", first.Stage)
+	}
+
+	headBefore := strings.TrimSpace(git(t, work, "rev-parse", "HEAD"))
+
+	// act: second sync while the rebase is still in progress.
+	res := Run(work, testClock)
+
+	// assert
+	if res.Err == nil {
+		t.Fatal("a second sync mid-rebase must fail, not commit conflict markers")
+	}
+	if res.Stage != "rebase-in-progress" {
+		t.Errorf("stage = %q, want rebase-in-progress", res.Stage)
+	}
+	if res.Committed {
+		t.Errorf("must not create a commit while a rebase is in progress")
+	}
+	if headAfter := strings.TrimSpace(git(t, work, "rev-parse", "HEAD")); headAfter != headBefore {
+		t.Errorf("HEAD moved (%s -> %s); a refused sync must not advance the branch", headBefore, headAfter)
+	}
+}

@@ -59,11 +59,22 @@ func BuildIndex(graphPath string) (*Index, error) {
 		}
 	}
 
-	// ByName must be built after Pages is final (so pointers are stable).
+	// ByName / ByNameFold must be built after Pages is final (so pointers are
+	// stable). Keep the first page walked for each (folded) key so resolution is
+	// deterministic — os.ReadDir returns entries sorted by filename — and warn on
+	// a genuine case-fold collision rather than silently letting the last win.
 	for i := range idx.Pages {
 		name := idx.Pages[i].Name
+		fold := strings.ToLower(name)
+		if existing, ok := idx.ByNameFold[fold]; ok {
+			if existing.Name != name {
+				fmt.Fprintf(os.Stderr, "weft: ambiguous page name %q vs %q (case-insensitive); [[%s]] resolves to %q\n",
+					name, existing.Name, fold, existing.Name)
+			}
+			continue
+		}
+		idx.ByNameFold[fold] = &idx.Pages[i]
 		idx.ByName[name] = &idx.Pages[i]
-		idx.ByNameFold[strings.ToLower(name)] = &idx.Pages[i]
 	}
 
 	// Collect journal page names sorted ascending. Names are YYYY-MM-DD so

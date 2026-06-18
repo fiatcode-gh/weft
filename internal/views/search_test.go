@@ -476,6 +476,46 @@ func TestSearchCmdRoundtrip(t *testing.T) {
 	}
 }
 
+func TestSearchZeroResultIsNotNeverSearched(t *testing.T) {
+	quietTerm(t)
+	_, idx := writeGraph(t, map[string]string{"pages/Alpha.md": "# Alpha\n"})
+	s := NewSearchView(idx, 80, 24)
+	s.SetQuery("zzzznomatch")
+
+	s.Apply(searchDoneMsg{hits: nil}) // a completed search with no results
+	if !s.searched {
+		t.Fatalf("a completed search should set searched=true")
+	}
+	if got := s.View(); !strings.Contains(got, "no matches") {
+		t.Errorf("zero-result view should say 'no matches'; got:\n%s", got)
+	}
+
+	// Enter must NOT re-run the same query once we know it returned nothing.
+	res := s.Update(keyEnter)
+	if res.Cmd != nil {
+		t.Errorf("enter after a zero-result search must not re-run the query")
+	}
+}
+
+func TestSearchEditingQueryResetsSearched(t *testing.T) {
+	quietTerm(t)
+	_, idx := writeGraph(t, map[string]string{"pages/Alpha.md": "# Alpha\n"})
+	s := NewSearchView(idx, 80, 24)
+	s.SetQuery("zzz")
+	s.Apply(searchDoneMsg{hits: nil})
+	if !s.searched {
+		t.Fatalf("precondition: searched should be true after Apply")
+	}
+
+	s.Update("q") // edit the query
+	if s.searched {
+		t.Errorf("editing the query must reset searched to false")
+	}
+	if got := s.View(); !strings.Contains(got, "press enter to search") {
+		t.Errorf("after editing, view should prompt to search again; got:\n%s", got)
+	}
+}
+
 func TestSearchHighlightStopsBeforeEllipsis(t *testing.T) {
 	// Use colour output so we can inspect SGR codes.
 	t.Setenv("TERM", "xterm-256color")

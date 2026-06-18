@@ -18,6 +18,7 @@ type SearchView struct {
 	query      string
 	hits       []search.Hit
 	running    bool
+	searched   bool // a search has completed for the current query (vs. never run)
 	err        error
 	pathToName map[string]string // file path → logical page name, for tidy row prefixes
 }
@@ -63,6 +64,7 @@ type searchDoneMsg struct {
 
 func (s *SearchView) Apply(msg searchDoneMsg) {
 	s.running = false
+	s.searched = true
 	s.err = msg.err
 	s.hits = msg.hits
 	if s.sel >= len(s.hits) {
@@ -86,6 +88,9 @@ func (s *SearchView) Update(key string) OverlayResult {
 			return OverlayResult{}
 		}
 		if len(s.hits) == 0 {
+			if s.searched {
+				return OverlayResult{} // already searched, no matches — don't re-run
+			}
 			s.running = true
 			return OverlayResult{Cmd: s.SearchCmd(s.idx.GraphPath)}
 		}
@@ -102,16 +107,19 @@ func (s *SearchView) Update(key string) OverlayResult {
 			r := []rune(s.query)
 			s.query = string(r[:len(r)-1])
 			s.hits = nil
+			s.searched = false
 		}
 	case " ", keySpace:
 		s.query += " "
 		s.hits = nil
+		s.searched = false
 	default:
 		// A single-rune key string is a printable character (named keys like
 		// "enter"/"ctrl+x" are multi-rune and ignored here).
 		if utf8.RuneCountInString(key) == 1 {
 			s.query += key
 			s.hits = nil
+			s.searched = false
 		}
 	}
 	return OverlayResult{}
@@ -188,6 +196,8 @@ func (s *SearchView) View() string {
 		b.WriteString(styleFaint.Render(clamp(fmt.Sprintf("   error: %v", s.err), inner)))
 	case s.running:
 		b.WriteString(styleFaint.Render("   searching…"))
+	case s.searched && len(s.hits) == 0 && s.query != "":
+		b.WriteString(styleFaint.Render("   no matches"))
 	case len(s.hits) == 0 && s.query != "":
 		b.WriteString(styleFaint.Render("   press enter to search"))
 	}

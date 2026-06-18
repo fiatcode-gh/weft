@@ -297,6 +297,52 @@ func TestLineContextDoesNotPinFileBody(t *testing.T) {
 	runtime.KeepAlive(body)
 }
 
+func TestBuildIndexFoldCollisionIsDeterministicAndWarns(t *testing.T) {
+	// arrange — two pages that fold to the same key; readdir-sorted order puts
+	// "Alpha.md" (ASCII 'A'=65) before "alpha.md" ('a'=97), so "Alpha" wins.
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pages", "Alpha.md"), []byte("# Alpha\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pages", "alpha.md"), []byte("# alpha\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStderr := os.Stderr
+	os.Stderr = w
+	defer func() { os.Stderr = oldStderr }()
+
+	// act
+	idx, err := BuildIndex(dir)
+	w.Close()
+	out, _ := io.ReadAll(r)
+	os.Stderr = oldStderr
+
+	// assert
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{"alpha", "ALPHA", "Alpha"} {
+		got, ok := idx.Resolve(q)
+		if !ok {
+			t.Fatalf("Resolve(%q) = (_, false), want (_, true)", q)
+		}
+		if got.Name != "Alpha" {
+			t.Errorf("Resolve(%q).Name = %q, want deterministic %q (first in readdir order)", q, got.Name, "Alpha")
+		}
+	}
+	if !strings.Contains(string(out), "ambiguous page name") {
+		t.Errorf("expected an ambiguous-page-name warning on stderr, got:\n%s", out)
+	}
+}
+
 // stringAliases reports whether sub's backing bytes lie inside parent's — i.e.
 // sub is a substring sharing parent's allocation rather than an independent copy.
 func stringAliases(parent, sub string) bool {
