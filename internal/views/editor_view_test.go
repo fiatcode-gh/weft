@@ -643,3 +643,48 @@ func TestEditorShiftTabNoOpAtZeroIndent(t *testing.T) {
 		t.Fatalf("shift+tab at zero indent should be a no-op: got %q", got)
 	}
 }
+
+func TestEditorUpdate_FailedSaveExitShowsErrorNotConfirmPrompt(t *testing.T) {
+	quietTerm(t)
+	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 6)
+	e.ta.SetValue("x\nmore\n")               // make it dirty
+
+	e.Update(tea.KeyMsg{Type: tea.KeyEsc})   // -> confirmingExit
+	res, _ := e.Update(key("s"))             // request save+exit
+	if !res.Save || !res.Exit {
+		t.Fatalf("s should request save and exit; got %+v", res)
+	}
+	// The App write failed and kept the editor open. The editor must be back
+	// in editing mode so the error renders instead of the confirm prompt.
+	if e.mode != editing {
+		t.Fatalf("after save+exit request, mode should reset to editing; got %v", e.mode)
+	}
+	e.SetError("permission denied")
+	view := e.View()
+	if !strings.Contains(view, "permission denied") {
+		t.Errorf("failed save+exit should show the error; got:\n%s", view)
+	}
+	if strings.Contains(view, "Save changes?") {
+		t.Errorf("failed save+exit must not still show the confirm prompt; got:\n%s", view)
+	}
+}
+
+// Characterization: accepting a completion after moving the cursor left within
+// the typed partial relocates the trailing partial runes to AFTER the closed
+// link, identical to the deliberate mid-line-accept behavior. This is pinned so
+// any future change to acceptCompletion is a conscious decision, not a silent
+// regression. See plan 2026-06-18-weft-review-bugs.md, Task 2.
+func TestEditorCompletion_AcceptAfterLeftMoveRelocatesTail(t *testing.T) {
+	quietTerm(t)
+	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "", true, 80, 24)
+	typeRunes(e, "[[Alph")                      // buffer "[[Alph", cursor at end
+	e.Update(tea.KeyMsg{Type: tea.KeyLeft})     // cursor after "Alp"
+	e.Update(tea.KeyMsg{Type: tea.KeyLeft})     // cursor after "Al"
+	if !e.completer.active {
+		t.Fatalf("completer should still be active after left moves; partial=%q", e.completer.partial)
+	}
+	e.Update(tea.KeyMsg{Type: tea.KeyEnter})    // accept "Alpha"
+	if got := e.ta.Value(); got != "[[Alpha]]ph" {
+		t.Errorf("documented current behavior: got %q, want %q", got, "[[Alpha]]ph")
+	}
+}

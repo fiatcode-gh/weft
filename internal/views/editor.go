@@ -245,6 +245,12 @@ func (e *EditorView) Update(msg tea.KeyMsg) (EditorResult, tea.Cmd) {
 	if e.mode == confirmingExit {
 		switch msg.String() {
 		case "s":
+			// Reset to editing before returning: if the App's write fails it
+			// keeps the editor open and calls SetError, and statusLine only
+			// renders errMsg in editing mode (it shows the confirm prompt in
+			// confirmingExit). On success the App tears the editor down, so
+			// this reset is harmless.
+			e.mode = editing
 			return EditorResult{Save: true, Exit: true}, nil
 		case "d":
 			return EditorResult{Exit: true}, nil
