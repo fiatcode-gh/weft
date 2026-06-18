@@ -4,6 +4,12 @@ All notable changes to weft are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.2] - 2026-06-18
+
+### Changed
+
+- Leaner index build (startup and `R` rebuild): each page is now parsed in a single pass instead of re-splitting and re-scanning its text once per extractor, and backlink context lines no longer hold a reference to the entire page body — so a rebuild does less work and the in-memory index retains less.
+
 ## [2.2.1] - 2026-06-18
 
 ### Fixed

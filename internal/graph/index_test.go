@@ -4,9 +4,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
+	"unsafe"
 )
 
 func TestBuildIndex(t *testing.T) {
@@ -271,4 +273,37 @@ func TestBuildIndexTodoOrdinalsSkipDoneAndCountPriority(t *testing.T) {
 	if len(got) != 2 || got[0].ordinal != 0 || got[1].ordinal != 1 {
 		t.Fatalf("ordinals: want two todos with ordinals 0,1, got %+v", got)
 	}
+}
+
+func TestLineContextDoesNotPinFileBody(t *testing.T) {
+	// arrange: a large body whose lines are substrings of one big backing array
+	// (that's how strings.Split works). If lineContext hands back such a
+	// substring directly, the single retained context line keeps the ENTIRE
+	// body alive for the life of the index — pinning page text we don't need.
+	body := strings.Repeat("filler noise line\n", 2000) + "the real context line"
+	lines := strings.Split(body, "\n")
+
+	// act
+	ctx := lineContext(lines, len(lines)) // the last line
+
+	// assert: correct value...
+	if ctx != "the real context line" {
+		t.Fatalf("context value: want %q, got %q", "the real context line", ctx)
+	}
+	// ...and it must NOT alias the big body's backing array.
+	if stringAliases(body, ctx) {
+		t.Fatal("lineContext result aliases the file body backing array — it pins the whole body in memory")
+	}
+	runtime.KeepAlive(body)
+}
+
+// stringAliases reports whether sub's backing bytes lie inside parent's — i.e.
+// sub is a substring sharing parent's allocation rather than an independent copy.
+func stringAliases(parent, sub string) bool {
+	if len(parent) == 0 || len(sub) == 0 {
+		return false
+	}
+	p := uintptr(unsafe.Pointer(unsafe.StringData(parent)))
+	s := uintptr(unsafe.Pointer(unsafe.StringData(sub)))
+	return s >= p && s < p+uintptr(len(parent))
 }

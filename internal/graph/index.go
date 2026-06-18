@@ -82,16 +82,15 @@ func BuildIndex(graphPath string) (*Index, error) {
 			fmt.Fprintf(os.Stderr, "weft: skipping %s: %v\n", p.Path, err)
 			continue
 		}
-		s := string(body)
-		lines := strings.Split(s, "\n")
-		for _, lh := range ExtractWikiLinks(s) {
+		lines, links, todos := parseBody(string(body))
+		for _, lh := range links {
 			idx.Backlinks[lh.Target] = append(idx.Backlinks[lh.Target], Ref{
 				FromPage:   p.Name,
 				LineNumber: lh.Line,
 				Context:    lineContext(lines, lh.Line),
 			})
 		}
-		for k, th := range ExtractTodos(s) {
+		for k, th := range todos {
 			idx.Todos = append(idx.Todos, TodoBullet{
 				Page:       p.Name,
 				LineNumber: th.Line,
@@ -107,9 +106,13 @@ func BuildIndex(graphPath string) (*Index, error) {
 
 // lineContext returns the n-th 1-based line from a pre-split body with any
 // trailing carriage return removed, or "" when n is out of range.
+//
+// The result is cloned so it owns its bytes: strings.Split lines are substrings
+// sharing the whole body's backing array, and a retained Ref.Context would
+// otherwise pin the entire file body in memory for the life of the index.
 func lineContext(lines []string, n int) string {
 	if n < 1 || n > len(lines) {
 		return ""
 	}
-	return strings.TrimRight(lines[n-1], "\r")
+	return strings.Clone(strings.TrimRight(lines[n-1], "\r"))
 }
