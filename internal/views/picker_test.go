@@ -393,3 +393,13 @@ func TestPickerCreate_EnterReturnsCreateResult(t *testing.T) {
 		t.Errorf("enter on create row: got %+v, want {Accept, Create, Selected:\"Zzz New\"}", res)
 	}
 }
+
+func TestPickerCreate_OfferedWhenNameFuzzyMatchesButDoesNotResolve(t *testing.T) {
+	quietTerm(t)
+	_, idx := writeGraph(t, map[string]string{"pages/Nested Notes Archive.md": "# x\n"})
+	p := NewPicker(idx, 80, 30)
+	typeQuery(p, "Notes") // fuzzy-matches "Nested Notes Archive" but Resolve("Notes") fails
+	if p.createName != "Notes" {
+		t.Errorf("createName: got %q, want %q (no page resolves to the exact name)", p.createName, "Notes")
+	}
+}

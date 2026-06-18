@@ -4,6 +4,7 @@
 package sync
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,11 @@ import (
 	"strings"
 	"time"
 )
+
+// syncTimeout bounds every individual git invocation so a hung command (dead
+// network, credential prompt on a non-interactive process) can't block the
+// async sync goroutine forever. Overridable so tests can force a deadline.
+var syncTimeout = 2 * time.Minute
 
 // Result reports what a sync did and, on failure, where it stopped.
 type Result struct {
@@ -26,7 +32,9 @@ type Result struct {
 // commit-timestamp source, injected so callers (and tests) stay deterministic.
 func Run(repoDir string, now time.Time) Result {
 	run := func(args ...string) (string, error) {
-		cmd := exec.Command("git", args...)
+		ctx, cancel := context.WithTimeout(context.Background(), syncTimeout)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "git", args...)
 		cmd.Dir = repoDir
 		out, err := cmd.CombinedOutput()
 		return string(out), err
@@ -78,7 +86,11 @@ func Run(repoDir string, now time.Time) Result {
 		res.Committed = true
 	}
 
-	// Pull --rebase; detect whether HEAD advanced.
+	// Pull --rebase; detect whether HEAD advanced. HEAD-diff is sufficient: it
+	// is true exactly when the working tree changed (a fast-forward, or a rebase
+	// that replayed local commits onto new upstream commits), which is precisely
+	// when a reindex is warranted. A local commit with no upstream change
+	// replays nothing, so HEAD is unchanged and Pulled stays false.
 	before, _ := run("rev-parse", "HEAD")
 	if out, err := run("pull", "--rebase"); err != nil {
 		return failWith("pull", out, err)

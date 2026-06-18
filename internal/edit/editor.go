@@ -84,8 +84,12 @@ const defaultFileMode os.FileMode = 0o644
 // The write goes to a temp file in the destination directory and is moved into
 // place with os.Rename, so a crash mid-write leaves the original intact rather
 // than truncated — load-bearing now that linkify writes to files other than
-// the page being edited. The destination's existing mode is preserved (a new
-// file gets defaultFileMode), since the temp file is born 0o600.
+// the page being edited. The destination's existing permission bits are
+// preserved (a new file gets defaultFileMode), since the temp file is born
+// 0o600. "Preserved" means the rwx permission bits only: setuid/setgid/sticky
+// are dropped, and owner/group become the weft process's user (the temp file is
+// created by this process and renamed over the original) — acceptable for a
+// single-user local graph, which is weft's only caller.
 //
 // path is assumed to be a regular file (the only kind weft's callers pass) —
 // renaming over a symlink replaces the link, not its target. No fsync is done:

@@ -79,18 +79,16 @@ func normalizeQuery(q string) string {
 }
 
 // refreshCreate decides whether to offer a "＋ Create" row for the current
-// query: a non-empty, non-date-shaped name that resolves to no existing page
-// and yields no fuzzy matches. It must be called after p.matches is updated.
+// query: a non-empty, non-date-shaped name that does not resolve to an
+// existing page. Fuzzy matches are irrelevant — the user may want a new page
+// whose name is a subsequence of an existing one.
 func (p *Picker) refreshCreate(q string) {
 	name := normalizeQuery(q)
 	if name == "" || graph.IsJournalPageName(name) {
 		p.createName = ""
 		return
 	}
-	if len(p.matches) > 0 {
-		p.createName = ""
-		return
-	}
+	// Gate only on Resolve, not on the fuzzy-match count (see doc comment).
 	if _, ok := p.idx.Resolve(name); ok {
 		p.createName = ""
 		return

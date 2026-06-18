@@ -161,6 +161,23 @@ func TestRunNonRepoIsPreflightFailure(t *testing.T) {
 	}
 }
 
+func TestRunTimesOutOnSlowGit(t *testing.T) {
+	// arrange: a valid repo, but an effectively-zero deadline so the very first
+	// git call (the preflight) exceeds it deterministically.
+	work := newRepoWithRemote(t)
+	orig := syncTimeout
+	syncTimeout = time.Nanosecond
+	defer func() { syncTimeout = orig }()
+
+	// act
+	res := Run(work, testClock)
+
+	// assert
+	if res.Err == nil {
+		t.Fatal("expected a deadline error when git exceeds syncTimeout")
+	}
+}
+
 func TestRunRefusesWhenRebaseInProgress(t *testing.T) {
 	// arrange: drive work into a conflicted (mid-rebase) state exactly like the
 	// conflict test, then attempt a second sync.

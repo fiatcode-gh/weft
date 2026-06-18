@@ -688,3 +688,16 @@ func TestEditorCompletion_AcceptAfterLeftMoveRelocatesTail(t *testing.T) {
 		t.Errorf("documented current behavior: got %q, want %q", got, "[[Alpha]]ph")
 	}
 }
+
+func BenchmarkEditorViewLargePage(b *testing.B) {
+	var sb strings.Builder
+	for i := 0; i < 2000; i++ {
+		sb.WriteString("- a [[Link]] line with `code` and # not-a-heading\n")
+	}
+	e := NewEditorView(nil, "Big", "/tmp/big.md", sb.String(), false, 80, 40)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = e.View()
+	}
+}
+
