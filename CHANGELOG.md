@@ -4,6 +4,21 @@ All notable changes to weft are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.3] - 2026-06-18
+
+### Fixed
+
+- A failed save no longer hides its error. When you choose "save" at the exit prompt and the write fails, the editor stays open and shows the error instead of silently re-displaying the save prompt.
+- Search now tells "no matches" apart from "not searched yet": a query that returns nothing reads as "no matches", and pressing Enter on it no longer re-runs the identical search.
+- Sync refuses to run while a rebase or merge is in progress instead of staging and committing conflict-marked files — resolve it in a shell, then sync again.
+- Sync can no longer hang indefinitely: each git command now has a timeout, so a stalled `git push` (a dead network or a credential prompt) can't wedge syncing forever.
+- Case-insensitive page-name collisions (for example `Alpha.md` alongside `alpha.md`) now resolve deterministically to the first page found, with a warning on stderr, rather than depending on the order files are read.
+- A `git status` failure during sync is now reported as the "status" stage rather than mislabeled as "add".
+
+### Changed
+
+- The picker now offers a `＋ Create` row for any name that doesn't match an existing page, even when that name is a fuzzy substring of one — so you can create "Notes" while "Nested Notes Archive" already exists.
+
 ## [2.2.2] - 2026-06-18
 
 ### Changed
