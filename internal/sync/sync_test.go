@@ -1,7 +1,6 @@
 package sync
 
 import (
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -41,18 +40,32 @@ func newRepoWithRemote(t *testing.T) string {
 	// identity so the production commit path never depends on a global config.
 	git(t, work, "config", "user.email", "t@t")
 	git(t, work, "config", "user.name", "t")
-	if err := os.WriteFile(filepath.Join(work, "seed.md"), []byte("seed\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeFile(t, work, "seed.md", "seed\n")
 	git(t, work, "add", "-A")
 	git(t, work, "commit", "-m", "seed")
 	git(t, work, "push", "origin", "main")
 	return work
 }
 
+// cloneSibling makes a second clone of work's origin and returns its path.
+// It is the shared arrange step for tests that need a separate party to
+// advance the remote behind work's back.
+func cloneSibling(t *testing.T, work string) string {
+	t.Helper()
+	sibling := filepath.Join(t.TempDir(), "other")
+	origin := strings.TrimSpace(git(t, work, "remote", "get-url", "origin"))
+	git(t, filepath.Dir(sibling), "clone", origin, sibling)
+	return sibling
+}
+
 func TestRunCleanTreeIsNoOpButPushes(t *testing.T) {
+	// arrange
 	work := newRepoWithRemote(t)
+
+	// act
 	res := Run(work, testClock)
+
+	// assert
 	if res.Err != nil {
 		t.Fatalf("unexpected err: %v (stage %q)\n%s", res.Err, res.Stage, res.Output)
 	}
@@ -68,37 +81,38 @@ func TestRunCleanTreeIsNoOpButPushes(t *testing.T) {
 }
 
 func TestRunDirtyTreeCommitsAndPushes(t *testing.T) {
+	// arrange: an uncommitted new file.
 	work := newRepoWithRemote(t)
-	if err := os.WriteFile(filepath.Join(work, "new.md"), []byte("hi\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeFile(t, work, "new.md", "hi\n")
+
+	// act
 	res := Run(work, testClock)
+
+	// assert
 	if res.Err != nil {
 		t.Fatalf("unexpected err: %v\n%s", res.Err, res.Output)
 	}
 	if !res.Committed || !res.Pushed {
 		t.Fatalf("want committed+pushed, got %+v", res)
 	}
-	msg := git(t, work, "log", "-1", "--pretty=%s")
-	if msg != "sync: 2026-06-17 09:30\n" {
+	if msg := git(t, work, "log", "-1", "--pretty=%s"); msg != "sync: 2026-06-17 09:30\n" {
 		t.Errorf("commit message = %q", msg)
 	}
 }
 
 func TestRunPullBringsRemoteCommits(t *testing.T) {
+	// arrange: a sibling clone pushes a commit that work doesn't have yet.
 	work := newRepoWithRemote(t)
-	// A second clone pushes a commit that `work` doesn't have yet.
-	other := filepath.Join(t.TempDir(), "other")
-	origin := git(t, work, "remote", "get-url", "origin")
-	git(t, filepath.Dir(other), "clone", trim(origin), other)
-	if err := os.WriteFile(filepath.Join(other, "remote.md"), []byte("r\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	other := cloneSibling(t, work)
+	writeFile(t, other, "remote.md", "r\n")
 	git(t, other, "add", "-A")
 	git(t, other, "commit", "-m", "remote change")
 	git(t, other, "push", "origin", "main")
 
+	// act
 	res := Run(work, testClock)
+
+	// assert
 	if res.Err != nil {
 		t.Fatalf("unexpected err: %v\n%s", res.Err, res.Output)
 	}
@@ -108,18 +122,18 @@ func TestRunPullBringsRemoteCommits(t *testing.T) {
 }
 
 func TestRunConflictHaltsAtPull(t *testing.T) {
+	// arrange: remote and work edit the same line of seed.md, so rebase conflicts.
 	work := newRepoWithRemote(t)
-	// Remote edits seed.md...
-	other := filepath.Join(t.TempDir(), "other")
-	origin := git(t, work, "remote", "get-url", "origin")
-	git(t, filepath.Dir(other), "clone", trim(origin), other)
-	os.WriteFile(filepath.Join(other, "seed.md"), []byte("remote\n"), 0o644)
+	other := cloneSibling(t, work)
+	writeFile(t, other, "seed.md", "remote\n")
 	git(t, other, "commit", "-am", "remote edit")
 	git(t, other, "push", "origin", "main")
-	// ...and work edits the same line, so rebase conflicts.
-	os.WriteFile(filepath.Join(work, "seed.md"), []byte("local\n"), 0o644)
+	writeFile(t, work, "seed.md", "local\n")
 
+	// act
 	res := Run(work, testClock)
+
+	// assert
 	if res.Err == nil {
 		t.Fatal("expected conflict error")
 	}
@@ -135,10 +149,14 @@ func TestRunConflictHaltsAtPull(t *testing.T) {
 }
 
 func TestRunNonRepoIsPreflightFailure(t *testing.T) {
-	res := Run(t.TempDir(), testClock)
+	// arrange: a plain directory that is not a git work tree.
+	dir := t.TempDir()
+
+	// act
+	res := Run(dir, testClock)
+
+	// assert
 	if res.Err == nil || res.Stage != "preflight" {
 		t.Fatalf("want preflight failure, got %+v", res)
 	}
 }
-
-func trim(s string) string { return strings.TrimSpace(s) }

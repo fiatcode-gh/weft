@@ -12,8 +12,7 @@ import (
 )
 
 func TestNewBacklinksLoadsRefs(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 
 	// Hub is referenced from kb/notes and journal 2026-05-25. Hub's own
@@ -37,8 +36,7 @@ func TestNewBacklinksLoadsRefs(t *testing.T) {
 }
 
 func TestNewBacklinksFiltersSelfRefs(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 
 	// The underlying index records the self-reference; the view filters it.
@@ -63,8 +61,7 @@ func TestNewBacklinksFiltersSelfRefs(t *testing.T) {
 }
 
 func TestBacklinksSetSize(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", nil, 80, 30)
 	b.SetSize(120, 99)
 	if b.width != 120 {
@@ -73,8 +70,7 @@ func TestBacklinksSetSize(t *testing.T) {
 }
 
 func TestBacklinksNavigation(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", nil, 80, 30)
 	if len(b.refs) < 2 {
 		t.Fatalf("need >=2 refs for this test, got %d", len(b.refs))
@@ -102,8 +98,7 @@ func TestBacklinksNavigation(t *testing.T) {
 }
 
 func TestBacklinksEnterReturnsFromPage(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", nil, 80, 30)
 	if len(b.refs) == 0 {
 		t.Skip("no Hub backlinks in fixture — skipping enter test")
@@ -119,8 +114,7 @@ func TestBacklinksEnterReturnsFromPage(t *testing.T) {
 }
 
 func TestBacklinksEscAndBCancel(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", nil, 80, 30)
 	for _, k := range []string{"esc", "b"} {
 		res := b.Update(k)
@@ -131,8 +125,7 @@ func TestBacklinksEscAndBCancel(t *testing.T) {
 }
 
 func TestBacklinksNoRefsEnterNoop(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Orphan", nil, 80, 30)
 	if len(b.refs) != 0 {
 		t.Fatalf("Orphan should have 0 backlinks, got %d", len(b.refs))
@@ -156,15 +149,13 @@ func TestBacklinksInnerWidthClamps(t *testing.T) {
 }
 
 func TestBacklinksViewWithRefsGolden(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", nil, 100, 30)
 	teatest.RequireEqualOutput(t, []byte(b.View()))
 }
 
 func TestBacklinksViewNoRefsGolden(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Orphan", nil, 100, 30)
 	out := b.View()
 	if !strings.Contains(out, "no backlinks") {
@@ -179,8 +170,7 @@ func TestBacklinksViewNoRefsGolden(t *testing.T) {
 // overflow the terminal vertically — e.g. the user's [[OpenClaw]] page
 // has 54 inbound references.
 func TestBacklinksScrollWindowBoundsSelection(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 	for i := 0; i < 50; i++ {
 		idx.Backlinks["Alpha"] = append(idx.Backlinks["Alpha"], graph.Ref{
@@ -208,8 +198,7 @@ func TestBacklinksScrollWindowBoundsSelection(t *testing.T) {
 // below" chrome appears in the rendered output when refs fall outside
 // the scroll window.
 func TestBacklinksScrollHintsAppear(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 	for i := 0; i < 30; i++ {
 		idx.Backlinks["Alpha"] = append(idx.Backlinks["Alpha"], graph.Ref{
@@ -247,8 +236,7 @@ func unlinkedFixture() []graph.UnlinkedRef {
 }
 
 func TestBacklinksUnlinkedNavigation(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 80, 30)
 	for i := 0; i < 50; i++ {
 		b.Update(keyDown)
@@ -260,8 +248,7 @@ func TestBacklinksUnlinkedNavigation(t *testing.T) {
 }
 
 func TestBacklinksUnlinkedSkipsHeaderOnNav(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 80, 30)
 	for i := 0; i < 50; i++ {
 		b.Update(keyDown)
@@ -272,15 +259,13 @@ func TestBacklinksUnlinkedSkipsHeaderOnNav(t *testing.T) {
 }
 
 func TestBacklinksViewWithUnlinkedGolden(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 100, 30)
 	teatest.RequireEqualOutput(t, []byte(b.View()))
 }
 
 func TestBacklinksUnlinkedRefHighlights(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 80, 30)
 	for i := 0; i < 50; i++ {
 		b.Update(keyDown) // reach the last (unlinked) row
@@ -295,8 +280,7 @@ func TestBacklinksUnlinkedRefHighlights(t *testing.T) {
 }
 
 func TestBacklinksLinkedRefFocusesBacklink(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 80, 30)
 	res := b.Update(keyEnter) // first selectable row is a linked backlink
 	if !res.Accept || res.FocusLinkTo != "Hub" {
@@ -326,8 +310,7 @@ func selectFirstUnlinked(t *testing.T, b *Backlinks) {
 }
 
 func TestBacklinksLOnUnlinkedEntersConfirm(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 80, 30)
 	// Move to the first unlinked row (past the linked refs + the section header).
 	selectFirstUnlinked(t, b)
@@ -340,8 +323,7 @@ func TestBacklinksLOnUnlinkedEntersConfirm(t *testing.T) {
 }
 
 func TestBacklinksLOnLinkedRowIsNoop(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 80, 30)
 	// sel starts on the first selectable row, which is a linked ref.
 	if b.rows[b.sel].unlinkedRow() {
@@ -354,8 +336,7 @@ func TestBacklinksLOnLinkedRowIsNoop(t *testing.T) {
 }
 
 func TestBacklinksConfirmYesReturnsLinkify(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 80, 30)
 	selectFirstUnlinked(t, b)
 	b.Update("l")
@@ -372,8 +353,7 @@ func TestBacklinksConfirmYesReturnsLinkify(t *testing.T) {
 }
 
 func TestBacklinksConfirmEscCancels(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 80, 30)
 	selectFirstUnlinked(t, b)
 	b.Update("l")
@@ -390,8 +370,7 @@ func TestBacklinksConfirmEscCancels(t *testing.T) {
 }
 
 func TestBacklinksSetLinkifyErrorClearsConfirm(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 80, 30)
 	selectFirstUnlinked(t, b)
 	b.Update("l")
@@ -405,8 +384,7 @@ func TestBacklinksSetLinkifyErrorClearsConfirm(t *testing.T) {
 }
 
 func TestBacklinksConfirmViewGolden(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 100, 30)
 	selectFirstUnlinked(t, b)
 	b.Update("l")
@@ -414,8 +392,7 @@ func TestBacklinksConfirmViewGolden(t *testing.T) {
 }
 
 func TestBacklinksConfirmViewShowsBeforeAfter(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 100, 30)
 	selectFirstUnlinked(t, b)
 	b.Update("l")
@@ -432,8 +409,7 @@ func TestBacklinksConfirmViewShowsBeforeAfter(t *testing.T) {
 }
 
 func TestBacklinksErrorLineRendered(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 100, 30)
 	b.SetLinkifyError("mention no longer found in Beta")
 	if !strings.Contains(b.View(), "mention no longer found in Beta") {
@@ -442,8 +418,7 @@ func TestBacklinksErrorLineRendered(t *testing.T) {
 }
 
 func TestBacklinksHintShowsLinkifyOnUnlinkedRow(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 100, 30)
 	selectFirstUnlinked(t, b)
 	if !strings.Contains(b.View(), "l linkify") {

@@ -23,11 +23,11 @@ func (r blRow) unlinkedRow() bool { return r.unl != nil }
 
 type Backlinks struct {
 	listBox
-	idx      *graph.Index
-	target   string
-	refs     []graph.Ref
-	unlinked []graph.UnlinkedRef
-	rows     []blRow
+	idx        *graph.Index
+	target     string
+	refs       []graph.Ref
+	unlinked   []graph.UnlinkedRef
+	rows       []blRow
 	confirming bool   // l pressed on an unlinked row; preview/confirm is showing
 	errMsg     string // failure feedback, rendered inside the panel
 }

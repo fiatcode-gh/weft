@@ -9,20 +9,8 @@ import (
 	"testing"
 )
 
-func fixturePath(t *testing.T) string {
-	t.Helper()
-	p, err := filepath.Abs("../../testdata/fixture-graph")
-	if err != nil {
-		t.Fatalf("abs fixture path: %v", err)
-	}
-	return p
-}
-
 func TestBuildIndex(t *testing.T) {
-	idx, err := BuildIndex(fixturePath(t))
-	if err != nil {
-		t.Fatalf("BuildIndex: %v", err)
-	}
+	idx := buildFixtureIndex(t)
 
 	// Pages
 	names := make([]string, 0, len(idx.Pages))
@@ -108,10 +96,7 @@ func equalSlices(a, b []string) bool {
 }
 
 func TestBuildIndexJournalsSorted(t *testing.T) {
-	idx, err := BuildIndex(fixturePath(t))
-	if err != nil {
-		t.Fatalf("BuildIndex: %v", err)
-	}
+	idx := buildFixtureIndex(t)
 
 	want := []string{
 		"2026-01-10", "2026-03-15", "2026-04-20", "2026-05-01",
@@ -135,10 +120,7 @@ func TestBuildIndexJournalsSorted(t *testing.T) {
 }
 
 func TestBuildIndexResolvesCaseInsensitively(t *testing.T) {
-	idx, err := BuildIndex(fixturePath(t))
-	if err != nil {
-		t.Fatal(err)
-	}
+	idx := buildFixtureIndex(t)
 
 	// Fold-keyed shadow map is populated.
 	if _, ok := idx.ByNameFold["alpha"]; !ok {
@@ -179,24 +161,17 @@ func TestBuildIndexResolvesCaseInsensitively(t *testing.T) {
 }
 
 func TestBuildIndexJournalsEmptyWhenNoJournals(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "pages", "Lonely.md"), []byte("- hi\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	// arrange
+	idx := buildTempIndex(t, map[string]string{"Lonely.md": "- hi\n"})
 
-	idx, err := BuildIndex(dir)
-	if err != nil {
-		t.Fatalf("BuildIndex: %v", err)
-	}
+	// assert
 	if len(idx.Journals) != 0 {
 		t.Errorf("Journals: want empty slice, got %v", idx.Journals)
 	}
 }
 
 func TestBuildIndexWarnsOnSubdirectory(t *testing.T) {
+	// arrange — a page plus a nested file under pages/sub/ that must be skipped.
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "pages", "sub"), 0o755); err != nil {
 		t.Fatal(err)
@@ -216,11 +191,13 @@ func TestBuildIndexWarnsOnSubdirectory(t *testing.T) {
 	os.Stderr = w
 	defer func() { os.Stderr = oldStderr }()
 
+	// act
 	idx, err := BuildIndex(dir)
 	w.Close()
 	out, _ := io.ReadAll(r)
 	os.Stderr = oldStderr
 
+	// assert
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,44 +210,33 @@ func TestBuildIndexWarnsOnSubdirectory(t *testing.T) {
 }
 
 func TestBuildIndexAssignsTodoOrdinals(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	// arrange
 	body := "- DONE done one\n- TODO open one\n- LATER open two\n"
-	if err := os.WriteFile(filepath.Join(dir, "pages", "P.md"), []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	idx, err := BuildIndex(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	idx := buildTempIndex(t, map[string]string{"P.md": body})
+
+	// act
 	var got []int
 	for _, b := range idx.Todos {
 		if b.Page == "P" {
 			got = append(got, b.Ordinal)
 		}
 	}
-	// Two open todos on P, ordinals 0 and 1 in document order (DONE skipped).
+
+	// assert — two open todos on P, ordinals 0 and 1 in document order (DONE skipped).
 	if len(got) != 2 || got[0] != 0 || got[1] != 1 {
 		t.Errorf("ordinals: want [0 1], got %v", got)
 	}
 }
 
 func TestBacklinkContextIsTheSourceLine(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	// arrange
 	body := "- intro\r\n- mentions [[Alpha]] here\n- outro\n"
-	if err := os.WriteFile(filepath.Join(dir, "pages", "Src.md"), []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	idx, err := BuildIndex(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	idx := buildTempIndex(t, map[string]string{"Src.md": body})
+
+	// act
 	refs := idx.Backlinks["Alpha"]
+
+	// assert
 	if len(refs) != 1 {
 		t.Fatalf("want 1 backlink to Alpha, got %d", len(refs))
 	}
@@ -283,18 +249,11 @@ func TestBacklinkContextIsTheSourceLine(t *testing.T) {
 }
 
 func TestBuildIndexTodoOrdinalsSkipDoneAndCountPriority(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	// arrange
 	body := "- TODO [#A] first with priority\n- DONE done in the middle\n- LATER third open\n"
-	if err := os.WriteFile(filepath.Join(dir, "pages", "Q.md"), []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	idx, err := BuildIndex(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	idx := buildTempIndex(t, map[string]string{"Q.md": body})
+
+	// act
 	var got []struct {
 		text    string
 		ordinal int
@@ -307,6 +266,8 @@ func TestBuildIndexTodoOrdinalsSkipDoneAndCountPriority(t *testing.T) {
 			}{b.Text, b.Ordinal})
 		}
 	}
+
+	// assert
 	if len(got) != 2 || got[0].ordinal != 0 || got[1].ordinal != 1 {
 		t.Fatalf("ordinals: want two todos with ordinals 0,1, got %+v", got)
 	}

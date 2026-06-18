@@ -25,16 +25,16 @@ func RenderCount() int64 { return renderCount }
 
 // PageView renders a single page with a wiki-link cursor.
 type PageView struct {
-	idx    *graph.Index
-	page   string
-	result render.Result
-	vp     viewport.Model
+	idx      *graph.Index
+	page     string
+	result   render.Result
+	vp       viewport.Model
 	cursor   int    // index into result.Links, or -1
 	emphasis string // transient term to highlight on arrival; "" = none
 	err      error
-	width  int
-	height int
-	cache  map[string]cachedPage
+	width    int
+	height   int
+	cache    map[string]cachedPage
 }
 
 type cachedPage struct {

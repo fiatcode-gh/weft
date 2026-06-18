@@ -11,15 +11,13 @@ import (
 )
 
 func TestTodosDashboardAllFilter(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	td := NewTodos(loadFixture(t), 100, 30)
 	teatest.RequireEqualOutput(t, []byte(td.View()))
 }
 
 func TestTodosDashboardLaterFilter(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	td := NewTodos(loadFixture(t), 100, 30)
 	td.Update("t") // → TODO
 	td.Update("t") // → LATER
@@ -27,8 +25,7 @@ func TestTodosDashboardLaterFilter(t *testing.T) {
 }
 
 func TestTodosUpDownBounds(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	td := NewTodos(loadFixture(t), 100, 30)
 	if len(td.visible) < 2 {
 		t.Fatalf("setup: need >=2 visible todos, got %d", len(td.visible))
@@ -53,8 +50,7 @@ func TestTodosUpDownBounds(t *testing.T) {
 }
 
 func TestTodosEnterReturnsPage(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	td := NewTodos(loadFixture(t), 100, 30)
 	if len(td.visible) == 0 {
 		t.Fatal("setup: no visible todos")
@@ -70,8 +66,7 @@ func TestTodosEnterReturnsPage(t *testing.T) {
 }
 
 func TestTodosFilterCycleEndsAtAll(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	td := NewTodos(loadFixture(t), 100, 30)
 	if td.filter != "" {
 		t.Fatalf("initial filter: want \"\", got %q", td.filter)
@@ -86,8 +81,7 @@ func TestTodosFilterCycleEndsAtAll(t *testing.T) {
 }
 
 func TestTodosEscAndQCancel(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	for _, k := range []string{"esc", "q"} {
 		td := NewTodos(loadFixture(t), 100, 30)
 		res := td.Update(k)
@@ -106,8 +100,7 @@ func TestTodosSetSize(t *testing.T) {
 }
 
 func TestTodosSelClampedOnFilter(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	td := NewTodos(loadFixture(t), 100, 30)
 	if len(td.visible) < 2 {
 		t.Skip("not enough bullets to clamp test")
@@ -128,8 +121,7 @@ func TestTodosSelClampedOnFilter(t *testing.T) {
 // window always contains t.sel, even when sel sits at the far ends of
 // a list much larger than the terminal-row budget.
 func TestTodosScrollWindowKeepsSelectionVisible(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 	// Replace fixture todos with 60 bullets across 12 groups so the
 	// list is comfortably larger than the visibleRows budget at any
@@ -160,8 +152,7 @@ func TestTodosScrollWindowKeepsSelectionVisible(t *testing.T) {
 // TestTodosScrollHintsAppear asserts the "more above" / "more below"
 // chrome appears when bullets fall outside the rendered window.
 func TestTodosScrollHintsAppear(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 	idx.Todos = idx.Todos[:0]
 	for g := 0; g < 8; g++ {
@@ -197,8 +188,7 @@ func TestTodosScrollHintsAppear(t *testing.T) {
 }
 
 func TestTodosLongRowStaysOneLine(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 
 	// Build an index with a single very long bullet so the scroll window
 	// is guaranteed to include it.

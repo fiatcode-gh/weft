@@ -91,8 +91,7 @@ func TestAppStatusBarHidesIndicatorWhenFits(t *testing.T) {
 }
 
 func TestAppLoadingSplashBeforePage(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	a := New("/nonexistent/before/build", "test")
 	v := a.View()
 	if !strings.Contains(v, "weft") {
@@ -104,8 +103,7 @@ func TestAppLoadingSplashBeforePage(t *testing.T) {
 }
 
 func TestAppErrorSplashOnIndexFailure(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	a := New("/some/graph", "test")
 	a.Update(indexLoadedMsg{err: errors.New("synthetic build failure")})
 	v := a.View()
@@ -118,8 +116,7 @@ func TestAppErrorSplashOnIndexFailure(t *testing.T) {
 }
 
 func TestAppRetryFromErrorSplash(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	a := New("/some/graph", "test")
 	a.Update(indexLoadedMsg{err: errors.New("synthetic build failure")})
 	if a.loadErr == nil {
@@ -159,8 +156,7 @@ func TestAppMidSessionReindexFailureKeepsPage(t *testing.T) {
 }
 
 func TestAppQuitsBeforePage(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	a := New("/no/such/path", "test")
 	_, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	if cmd == nil {
@@ -495,21 +491,10 @@ func TestPrevNextInertOutsideJournalContext(t *testing.T) {
 // Uses a t.TempDir-based graph (mirroring TestEditKey_ColdStartCreatesTodayJournal)
 // rather than bootAppAt/fixture-graph so creating a file is safe and idempotent.
 func TestEditBootstrapRebuildsPageView(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "journals"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "pages", "Anchor.md"), []byte("anchor\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	// No journal file written — today's journal is missing on disk.
-
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	t.Setenv("EDITOR", "true") // no-op editor that exits 0 immediately
+	// An anchor page, but no journal file — today's journal is missing on disk.
+	dir, _ := writeGraph(t, map[string]string{"pages/Anchor.md": "anchor\n"})
 
 	a := New(dir, "test")
 	today := "2026-05-26"

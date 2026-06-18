@@ -21,8 +21,7 @@ func skipIfNoRipgrep(t *testing.T) {
 }
 
 func TestNewSearchViewIndexesPathToName(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 	s := NewSearchView(idx, 100, 30)
 	if s.width != 100 || s.height != 30 {
@@ -37,8 +36,7 @@ func TestNewSearchViewIndexesPathToName(t *testing.T) {
 }
 
 func TestSearchAccessorsAndSetSize(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
 	if s.Query() != "" {
 		t.Errorf("fresh Query: want \"\", got %q", s.Query())
@@ -54,8 +52,7 @@ func TestSearchAccessorsAndSetSize(t *testing.T) {
 }
 
 func TestSearchUpdateTypesIntoQuery(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
 	for _, k := range []string{"a", "l", "p"} {
 		if res := s.Update(k); res.Accept || res.Cancel || res.Selected != "" || res.Cmd != nil {
@@ -68,8 +65,7 @@ func TestSearchUpdateTypesIntoQuery(t *testing.T) {
 }
 
 func TestSearchUpdateBackspace(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.SetQuery("abc")
 	s.hits = []search.Hit{{FilePath: "x", Line: 1, Context: "y"}}
@@ -91,8 +87,7 @@ func TestSearchUpdateBackspace(t *testing.T) {
 }
 
 func TestSearchUpdateSpaceVariants(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.SetQuery("foo")
 
@@ -108,8 +103,7 @@ func TestSearchUpdateSpaceVariants(t *testing.T) {
 }
 
 func TestSearchSelectionBounds(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.hits = []search.Hit{
 		{FilePath: "a", Line: 1, Context: "x"},
@@ -140,8 +134,7 @@ func TestSearchSelectionBounds(t *testing.T) {
 }
 
 func TestSearchEnterEmptyQueryNoop(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
 	if res := s.Update("enter"); res.Accept || res.Cancel || res.Selected != "" || res.Cmd != nil {
 		t.Errorf("enter on empty query: want zero result, got %+v", res)
@@ -149,8 +142,7 @@ func TestSearchEnterEmptyQueryNoop(t *testing.T) {
 }
 
 func TestSearchEnterFirstTimeRunsCmd(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.SetQuery("Beta")
 
@@ -167,8 +159,7 @@ func TestSearchEnterFirstTimeRunsCmd(t *testing.T) {
 }
 
 func TestSearchEnterWhileRunningIsNoop(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.SetQuery("Beta")
 	s.running = true
@@ -179,8 +170,7 @@ func TestSearchEnterWhileRunningIsNoop(t *testing.T) {
 }
 
 func TestSearchEnterResolvesHitToPageName(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 	s := NewSearchView(idx, 80, 24)
 	s.SetQuery("Beta")
@@ -210,8 +200,7 @@ func TestSearchEnterResolvesHitToPageName(t *testing.T) {
 }
 
 func TestSearchEscCancels(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
 	res := s.Update("esc")
 	if !res.Cancel || res.Accept || res.Cmd != nil {
@@ -220,8 +209,7 @@ func TestSearchEscCancels(t *testing.T) {
 }
 
 func TestSearchApplyPopulatesHits(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.running = true
 	s.sel = 5
@@ -243,8 +231,7 @@ func TestSearchApplyPopulatesHits(t *testing.T) {
 }
 
 func TestSearchApplyKeepsValidSel(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.sel = 1
 	s.Apply(searchDoneMsg{hits: []search.Hit{
@@ -257,8 +244,7 @@ func TestSearchApplyKeepsValidSel(t *testing.T) {
 }
 
 func TestSearchApplyRecordsError(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.running = true
 	s.Apply(searchDoneMsg{err: errors.New("boom")})
@@ -271,8 +257,7 @@ func TestSearchApplyRecordsError(t *testing.T) {
 }
 
 func TestHitLabelKnownVsUnknown(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 	s := NewSearchView(idx, 80, 24)
 
@@ -326,8 +311,7 @@ func TestMatchesWithinEmpty(t *testing.T) {
 }
 
 func TestHighlightMatches(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 
 	if got := highlightMatches("hello world", nil); got != "hello world" {
 		t.Errorf("no spans: want verbatim, got %q", got)
@@ -346,8 +330,7 @@ func TestHighlightMatches(t *testing.T) {
 }
 
 func TestSearchScrollWindow(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.hits = make([]search.Hit, 20)
 	for i := range s.hits {
@@ -382,8 +365,7 @@ func TestSearchScrollWindow(t *testing.T) {
 }
 
 func TestSearchScrollWindowAllFit(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.hits = []search.Hit{{Line: 1}, {Line: 2}, {Line: 3}}
 	start, end := scrollWindow(s.sel, len(s.hits), s.visibleRows())
@@ -415,15 +397,13 @@ func TestSearchVisibleRowsClamps(t *testing.T) {
 }
 
 func TestSearchViewEmptyState(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
 	teatest.RequireEqualOutput(t, []byte(s.View()))
 }
 
 func TestSearchViewWithHits(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.SetQuery("Beta")
 	s.hits = []search.Hit{

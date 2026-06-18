@@ -4,15 +4,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/exp/teatest"
 	"github.com/muesli/termenv"
 )
 
 func TestEditorView_LoadsContentAndTracksDirty(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/Alpha.md", "first line\n", false, 80, 24)
 
 	if got := e.Content(); got != "first line\n" {
@@ -34,8 +33,7 @@ func TestEditorView_LoadsContentAndTracksDirty(t *testing.T) {
 }
 
 func TestEditorView_ContentEndsWithSingleNewline(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/Alpha.md", "", true, 80, 24)
 	e.ta.SetValue("no trailing newline")
 	if got := e.Content(); got != "no trailing newline\n" {
@@ -48,8 +46,7 @@ func TestEditorView_ContentEndsWithSingleNewline(t *testing.T) {
 }
 
 func TestEditorView_CleanAfterSaveWithoutTrailingNewline(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "", true, 80, 24)
 	e.ta.SetValue("no trailing newline") // user typed, no \n
 	e.MarkSaved(e.Content())
@@ -59,8 +56,7 @@ func TestEditorView_CleanAfterSaveWithoutTrailingNewline(t *testing.T) {
 }
 
 func TestEditorView_CleanOnOpenWhenFileLacksTrailingNewline(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "loaded without newline", false, 80, 24)
 	if e.dirty() {
 		t.Errorf("freshly opened buffer should be clean even if the file lacked a trailing newline")
@@ -68,8 +64,7 @@ func TestEditorView_CleanOnOpenWhenFileLacksTrailingNewline(t *testing.T) {
 }
 
 func TestEditorViewOpensAtTop(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	content := "line 1\nline 2\nline 3\nline 4\nline 5\n"
 	e := NewEditorView(nil, "Page", "/tmp/page.md", content, false, 40, 6)
 	if got := e.ta.Line(); got != 0 {
@@ -80,8 +75,7 @@ func TestEditorViewOpensAtTop(t *testing.T) {
 func key(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
 
 func TestEditorUpdate_CtrlSRequestsSaveStaysEditing(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 24)
 	res, _ := e.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
 	if !res.Save || res.Exit {
@@ -93,8 +87,7 @@ func TestEditorUpdate_CtrlSRequestsSaveStaysEditing(t *testing.T) {
 }
 
 func TestEditorUpdate_EscOnCleanExits(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 24)
 	res, _ := e.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if !res.Exit {
@@ -103,8 +96,7 @@ func TestEditorUpdate_EscOnCleanExits(t *testing.T) {
 }
 
 func TestEditorUpdate_EscOnDirtyPromptsThenDiscard(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 24)
 	e.ta.SetValue("x\nmore\n") // make it dirty
 
@@ -129,8 +121,7 @@ func TestEditorUpdate_EscOnDirtyPromptsThenDiscard(t *testing.T) {
 }
 
 func TestEditorUpdate_ConfirmSaveExits(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 24)
 	e.ta.SetValue("x\nmore\n")
 	e.Update(tea.KeyMsg{Type: tea.KeyEsc}) // -> confirmingExit
@@ -141,8 +132,7 @@ func TestEditorUpdate_ConfirmSaveExits(t *testing.T) {
 }
 
 func TestEditorUpdate_TypingInsertsAndIsDirty(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "", true, 80, 24)
 	e.Update(key("h"))
 	e.Update(key("i"))
@@ -155,15 +145,13 @@ func TestEditorUpdate_TypingInsertsAndIsDirty(t *testing.T) {
 }
 
 func TestEditorView_Golden(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "- first bullet\n- [[Beta]] link\n", false, 80, 12)
 	teatest.RequireEqualOutput(t, []byte(e.View()))
 }
 
 func TestEditorView_ConfirmGolden(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 12)
 	e.ta.SetValue("x\nedited\n")
 	e.Update(tea.KeyMsg{Type: tea.KeyEsc}) // -> confirmingExit
@@ -171,8 +159,7 @@ func TestEditorView_ConfirmGolden(t *testing.T) {
 }
 
 func TestEditorUpdate_PageDownMovesCursor(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	// 40 numbered lines; height 10 so paging is meaningful.
 	var sb strings.Builder
 	for i := 0; i < 40; i++ {
@@ -192,8 +179,7 @@ func TestEditorUpdate_PageDownMovesCursor(t *testing.T) {
 }
 
 func TestEditorUpdate_CtrlCCancelsConfirm(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 24)
 	e.ta.SetValue("x\nmore\n")
 	e.Update(tea.KeyMsg{Type: tea.KeyEsc}) // -> confirmingExit
@@ -204,8 +190,7 @@ func TestEditorUpdate_CtrlCCancelsConfirm(t *testing.T) {
 }
 
 func TestEditorView_SetErrorRendersInView(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 6)
 	e.SetError("permission denied")
 	if !strings.Contains(e.View(), "permission denied") {
@@ -214,8 +199,7 @@ func TestEditorView_SetErrorRendersInView(t *testing.T) {
 }
 
 func TestEditorView_MarkSavedClearsError(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 6)
 	e.SetError("permission denied")
 	e.MarkSaved(e.Content())
@@ -225,8 +209,7 @@ func TestEditorView_MarkSavedClearsError(t *testing.T) {
 }
 
 func TestEditorView_CompletionGolden(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "", true, 80, 16)
 	typeRunes(e, "link to [[A")
 	if !e.completer.active {
@@ -244,8 +227,7 @@ func typeRunes(e *EditorView, s string) {
 }
 
 func TestEditorCompletion_EnterInsertsExistingLink(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "", true, 80, 24)
 	typeRunes(e, "see [[Alp")
 	if !e.completer.active {
@@ -261,8 +243,7 @@ func TestEditorCompletion_EnterInsertsExistingLink(t *testing.T) {
 }
 
 func TestEditorCompletion_TabAlsoAccepts(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "", true, 80, 24)
 	typeRunes(e, "[[Alp")
 	e.Update(tea.KeyMsg{Type: tea.KeyTab})
@@ -272,8 +253,7 @@ func TestEditorCompletion_TabAlsoAccepts(t *testing.T) {
 }
 
 func TestEditorCompletion_CreateRowInsertsTypedName(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "", true, 80, 24)
 	typeRunes(e, "[[Zxqv")
 	e.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -283,8 +263,7 @@ func TestEditorCompletion_CreateRowInsertsTypedName(t *testing.T) {
 }
 
 func TestEditorCompletion_EscDismissesKeepsBuffer(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "", true, 80, 24)
 	typeRunes(e, "[[Alp")
 	res, _ := e.Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -300,8 +279,7 @@ func TestEditorCompletion_EscDismissesKeepsBuffer(t *testing.T) {
 }
 
 func TestEditorCompletion_ArrowsStealOnlyWhenActive(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "", true, 80, 24)
 	typeRunes(e, "[[")
 	before := e.ta.Value()
@@ -315,8 +293,7 @@ func TestEditorCompletion_ArrowsStealOnlyWhenActive(t *testing.T) {
 }
 
 func TestEditorCompletion_NotActiveInsideClosedBrackets(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "[[]] tail\n", false, 80, 24)
 	e.ta.SetCursor(2) // between the [[ and ]]
 	e.refreshCompleter(true)
@@ -326,8 +303,7 @@ func TestEditorCompletion_NotActiveInsideClosedBrackets(t *testing.T) {
 }
 
 func TestEditorCompletion_NotActiveEditingExistingLink(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "[[Alpha]] rest\n", false, 80, 24)
 	e.ta.SetCursor(4) // [[Al|pha]]
 	e.refreshCompleter(true)
@@ -337,8 +313,7 @@ func TestEditorCompletion_NotActiveEditingExistingLink(t *testing.T) {
 }
 
 func TestEditorCompletion_MidLineAcceptKeepsTrailingText(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "ab", false, 80, 24)
 	e.ta.SetCursor(1) // single row "ab"; cursor between a and b
 	typeRunes(e, "[[Alp")
@@ -349,8 +324,7 @@ func TestEditorCompletion_MidLineAcceptKeepsTrailingText(t *testing.T) {
 }
 
 func TestEditorCompletion_AcceptOnSecondLine(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "first", false, 80, 24)
 	e.ta.CursorEnd()
 	e.Update(tea.KeyMsg{Type: tea.KeyEnter}) // completer inactive -> newline, cursor to row 1
@@ -362,8 +336,7 @@ func TestEditorCompletion_AcceptOnSecondLine(t *testing.T) {
 }
 
 func TestEditorCompletion_StripFitsSmallTerminal(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "", true, 40, 12)
 	typeRunes(e, "[[") // empty partial -> full recent list
 	if !e.completer.active {
@@ -376,8 +349,7 @@ func TestEditorCompletion_StripFitsSmallTerminal(t *testing.T) {
 }
 
 func TestEditorCompletion_CursorStaysVisibleAtBottom(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	// A buffer taller than the viewport, with a recognizable last line.
 	var sb strings.Builder
 	for i := 0; i < 60; i++ {
@@ -423,8 +395,7 @@ func TestEditorCompletion_CursorStaysVisibleAtBottom(t *testing.T) {
 // that ends in one, or paging should never spontaneously pop the strip.
 
 func TestEditorCompletion_OpeningFileDoesNotAutoOpen(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	// File ends in an unclosed [[Alpha (cursor lands at end on mount).
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "notes [[Alpha", false, 80, 24)
 	if e.completer.active {
@@ -433,8 +404,7 @@ func TestEditorCompletion_OpeningFileDoesNotAutoOpen(t *testing.T) {
 }
 
 func TestEditorCompletion_NavigationOntoUnclosedDoesNotOpen(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "- draft [[Alpha", false, 80, 24)
 	e.Update(tea.KeyMsg{Type: tea.KeyHome}) // caret to col 0 — no [[ before it, strip closed
 	if e.completer.active {
@@ -447,10 +417,9 @@ func TestEditorCompletion_NavigationOntoUnclosedDoesNotOpen(t *testing.T) {
 }
 
 func TestEditorCompletion_DismissThenNavStaysClosed(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "", true, 80, 24)
-	typeRunes(e, "[[Alp") // strip opens
+	typeRunes(e, "[[Alp")                    // strip opens
 	e.Update(tea.KeyMsg{Type: tea.KeyEsc})   // dismiss
 	e.Update(tea.KeyMsg{Type: tea.KeyRight}) // pure navigation, no buffer change
 	if e.completer.active {
@@ -459,8 +428,7 @@ func TestEditorCompletion_DismissThenNavStaysClosed(t *testing.T) {
 }
 
 func TestEditorCompletion_TypingIntoUnclosedAfterNavReopens(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "draft [[Alph", false, 80, 24)
 	e.Update(tea.KeyMsg{Type: tea.KeyHome})
 	e.Update(tea.KeyMsg{Type: tea.KeyEnd}) // navigation must not open (the fix)
@@ -474,8 +442,7 @@ func TestEditorCompletion_TypingIntoUnclosedAfterNavReopens(t *testing.T) {
 }
 
 func TestEditorViewIsLeftInset(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "hello world\n", false, 40, 10)
 	out := e.View()
 	for i, line := range strings.Split(out, "\n") {
@@ -489,8 +456,7 @@ func TestEditorViewIsLeftInset(t *testing.T) {
 }
 
 func TestEditorViewHasTopMargin(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	const h = 10
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "# Title\n", false, 40, h)
 	lines := strings.Split(e.View(), "\n")
@@ -515,8 +481,7 @@ func TestEditorViewHasTopMargin(t *testing.T) {
 // moves to the end of that first row before each Enter.
 
 func TestEditorEnterContinuesBullet(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "- first\nsecond\n", false, 40, 10)
 	e.ta.CursorEnd()
 	e.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -526,8 +491,7 @@ func TestEditorEnterContinuesBullet(t *testing.T) {
 }
 
 func TestEditorEnterContinuesNestedBullet(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "  - nested\nsecond\n", false, 40, 10)
 	e.ta.CursorEnd()
 	e.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -537,8 +501,7 @@ func TestEditorEnterContinuesNestedBullet(t *testing.T) {
 }
 
 func TestEditorEnterEmptyBulletTerminates(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "- \nsecond\n", false, 40, 10)
 	e.ta.CursorEnd()
 	e.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -548,8 +511,7 @@ func TestEditorEnterEmptyBulletTerminates(t *testing.T) {
 }
 
 func TestEditorEnterNonBulletInsertsNewline(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "plain\nsecond\n", false, 40, 10)
 	e.ta.CursorEnd()
 	e.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -585,8 +547,7 @@ func TestEditorViewTintsHeadings(t *testing.T) {
 }
 
 func TestEditorCtrlTCyclesMarker(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "- task\n", false, 40, 10)
 	e.ta.CursorEnd()
 
@@ -605,8 +566,7 @@ func TestEditorCtrlTCyclesMarker(t *testing.T) {
 }
 
 func TestEditorCtrlTNoOpOnNonBullet(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "# heading\n", false, 40, 10)
 	e.ta.CursorEnd()
 	e.Update(tea.KeyMsg{Type: tea.KeyCtrlT})
@@ -616,8 +576,7 @@ func TestEditorCtrlTNoOpOnNonBullet(t *testing.T) {
 }
 
 func TestEditorRepositionsAfterContinuation(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	// A buffer taller than the viewport, ending in a bullet with a unique tag.
 	var sb strings.Builder
 	for i := 0; i < 60; i++ {
@@ -648,8 +607,7 @@ func TestEditorRepositionsAfterContinuation(t *testing.T) {
 }
 
 func TestEditorTabIndents(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "- foo\nx\n", false, 40, 10)
 	e.ta.CursorEnd() // end of "- foo" on row 0
 	e.Update(tea.KeyMsg{Type: tea.KeyTab})
@@ -663,8 +621,7 @@ func TestEditorTabIndents(t *testing.T) {
 }
 
 func TestEditorShiftTabDedents(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "  - foo\nx\n", false, 40, 10)
 	e.ta.CursorEnd()
 	e.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
@@ -678,8 +635,7 @@ func TestEditorShiftTabDedents(t *testing.T) {
 }
 
 func TestEditorShiftTabNoOpAtZeroIndent(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "- foo\nx\n", false, 40, 10)
 	e.ta.CursorEnd()
 	e.Update(tea.KeyMsg{Type: tea.KeyShiftTab})

@@ -90,7 +90,7 @@ func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, wid
 		e.ta.CursorUp()
 	}
 	e.ta.CursorStart()
-	e.baseline = e.Content() // normalize so open-time dirty() is accurate
+	e.baseline = e.Content()  // normalize so open-time dirty() is accurate
 	e.refreshCompleter(false) // opening a file must not pop the strip
 	return e
 }

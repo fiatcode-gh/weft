@@ -9,8 +9,7 @@ import (
 )
 
 func TestNewHelpRendersVersion(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	view := NewHelp("v0.1.2", 80, 0).View()
 	if !strings.Contains(view, "weft v0.1.2") {
 		t.Errorf("help view missing version segment; got:\n%s", view)
@@ -21,8 +20,7 @@ func TestNewHelpRendersVersion(t *testing.T) {
 }
 
 func TestNewHelpEmptyVersionHidesSegment(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	view := NewHelp("", 80, 0).View()
 	if !strings.Contains(view, "? or esc to close") {
 		t.Errorf("help view missing close hint; got:\n%s", view)
@@ -38,8 +36,7 @@ func TestNewHelpEmptyVersionHidesSegment(t *testing.T) {
 // the terminal width even when the natural content (e.g. "ctrl-p ...
 // picker — find any page") would otherwise be wider.
 func TestHelpRespectsNarrowWidth(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	const w = 30
 	view := NewHelp("v0.1.2", w, 0).View()
 	for _, line := range strings.Split(view, "\n") {
@@ -53,8 +50,7 @@ func TestHelpRespectsNarrowWidth(t *testing.T) {
 // passing width=0 leaves the panel content-sized (used by tests that
 // don't care about width).
 func TestHelpZeroWidthDisablesClamp(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	view := NewHelp("v0.1.2", 0, 0).View()
 	// With no width constraint the panel renders two content-sized columns,
 	// far wider than 30 cells.
@@ -70,8 +66,7 @@ func TestHelpZeroWidthDisablesClamp(t *testing.T) {
 }
 
 func TestHelpGolden(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	// Width 130 is wide enough to exercise the two-column layout; height 0
 	// disables the height cap so the golden captures the full panel.
 	h := NewHelp("v1.0.0", 130, 0)
@@ -79,8 +74,7 @@ func TestHelpGolden(t *testing.T) {
 }
 
 func TestHelpSetSizeUpdatesWidth(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	h := NewHelp("v1.0.0", 80, 0)
 	h.SetSize(30, 10) // shrink below natural content width
 	for _, line := range strings.Split(h.View(), "\n") {
@@ -95,8 +89,7 @@ func TestHelpSetSizeUpdatesWidth(t *testing.T) {
 // than the terminal: body lines past the cap are dropped, the close hint
 // stays visible, and a "resize" indicator signals the truncation.
 func TestHelpHeightGuardClipsToTerminal(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	const ht = 12
 	view := NewHelp("v1.0.0", 130, ht).View()
 	if n := len(strings.Split(view, "\n")); n > ht {

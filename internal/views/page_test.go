@@ -2,7 +2,6 @@ package views
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -27,16 +26,14 @@ func loadFixture(t *testing.T) *graph.Index {
 }
 
 func TestPageViewRendersAlpha(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 	pv := NewPageView(idx, "Alpha", 80, 24)
 	teatest.RequireEqualOutput(t, []byte(pv.View()))
 }
 
 func TestPageViewOffsetCursorAccessors(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 	// Small viewport so HalfPageDown actually moves YOffset against
 	// Alpha's ~10 styled lines of content.
@@ -61,8 +58,7 @@ func TestPageViewOffsetCursorAccessors(t *testing.T) {
 }
 
 func TestPageViewRestoreRoundtrip(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 	pv := NewPageView(idx, "Alpha", 80, 5)
 
@@ -76,8 +72,7 @@ func TestPageViewRestoreRoundtrip(t *testing.T) {
 }
 
 func TestPageViewRestoreClampsCursor(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 	pv := NewPageView(idx, "Alpha", 80, 24)
 
@@ -95,8 +90,7 @@ func TestPageViewRestoreClampsCursor(t *testing.T) {
 }
 
 func TestPageViewGotoTopBottom(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 	// Small viewport so Alpha (~10 styled lines) is scrollable.
 	pv := NewPageView(idx, "Alpha", 80, 5)
@@ -119,8 +113,7 @@ func TestPageViewGotoTopBottom(t *testing.T) {
 }
 
 func TestPageViewScrollIndicatorFitsViewport(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 	// Tall viewport so Alpha fits entirely — no scroll possible.
 	pv := NewPageView(idx, "Alpha", 80, 100)
@@ -131,8 +124,7 @@ func TestPageViewScrollIndicatorFitsViewport(t *testing.T) {
 }
 
 func TestPageViewScrollIndicatorTopBottom(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 	// Small viewport so Alpha is scrollable.
 	pv := NewPageView(idx, "Alpha", 80, 5)
@@ -149,8 +141,7 @@ func TestPageViewScrollIndicatorTopBottom(t *testing.T) {
 }
 
 func TestPageViewScrollIndicatorMid(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 	// Small viewport against Alpha's ~10 styled lines so a single
 	// HalfPageDown from the top lands at a non-boundary scroll position.
@@ -174,8 +165,7 @@ func TestPageViewScrollIndicatorMid(t *testing.T) {
 }
 
 func TestPageFollowCursorNoLink(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	pv := NewPageView(loadFixture(t), "Alpha", 80, 24)
 	if got := pv.FollowCursor(); got != "" {
 		t.Errorf("no cursor set: want \"\", got %q", got)
@@ -183,8 +173,7 @@ func TestPageFollowCursorNoLink(t *testing.T) {
 }
 
 func TestPageFollowCursorReturnsTarget(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	pv := NewPageView(loadFixture(t), "Alpha", 80, 24)
 	pv.CycleLink(+1)
 	if got := pv.FollowCursor(); got == "" {
@@ -193,8 +182,7 @@ func TestPageFollowCursorReturnsTarget(t *testing.T) {
 }
 
 func TestPageViewRenderCacheSkipsRender(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 	before := RenderCount()
 	a := NewPageView(idx, "Alpha", 80, 24)
@@ -209,8 +197,7 @@ func TestPageViewRenderCacheSkipsRender(t *testing.T) {
 }
 
 func TestPageViewRendersIdenticalBodyOnRevisit(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 	a := NewPageView(idx, "Alpha", 80, 24)
 	b := NewPageView(idx, "Beta", 80, 24)
@@ -222,8 +209,7 @@ func TestPageViewRendersIdenticalBodyOnRevisit(t *testing.T) {
 }
 
 func TestPageLineUpDownAndHalfPageUp(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	pv := NewPageView(loadFixture(t), "Alpha", 80, 5)
 
 	pv.LineDown()
@@ -246,12 +232,7 @@ func TestPageLineUpDownAndHalfPageUp(t *testing.T) {
 }
 
 func TestScrollToTaskCentresOnTodo(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	quietTerm(t)
 	var b strings.Builder
 	for i := 0; i < 40; i++ {
 		fmt.Fprintf(&b, "- filler bullet number %d\n", i)
@@ -260,13 +241,7 @@ func TestScrollToTaskCentresOnTodo(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		fmt.Fprintf(&b, "- trailing bullet %d\n", i)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "pages", "Long.md"), []byte(b.String()), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	idx, err := graph.BuildIndex(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	_, idx := writeGraph(t, map[string]string{"pages/Long.md": b.String()})
 	pv := NewPageView(idx, "Long", 80, 20)
 
 	pv.ScrollToTask(0) // the page's single open todo
@@ -282,8 +257,7 @@ func TestScrollToTaskCentresOnTodo(t *testing.T) {
 }
 
 func TestScrollToTaskOutOfRangeNoop(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	pv := NewPageView(loadFixture(t), "Alpha", 80, 24)
 	pv.ScrollToTask(99) // no such ordinal
 	if pv.Offset() != 0 {
@@ -292,8 +266,7 @@ func TestScrollToTaskOutOfRangeNoop(t *testing.T) {
 }
 
 func TestPageViewFocusLinkTo(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 	pv := NewPageView(idx, "kb/notes", 80, 24) // kb/notes contains [[Hub]]
 	pv.FocusLinkTo("Hub")
@@ -312,25 +285,13 @@ func TestPageViewFocusLinkTo(t *testing.T) {
 }
 
 func TestPageViewEmphasizeScrollsThenClears(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
-	tmp := t.TempDir()
-	pages := filepath.Join(tmp, "pages")
-	if err := os.MkdirAll(pages, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	quietTerm(t)
 	var sb strings.Builder
 	for i := 0; i < 80; i++ {
 		sb.WriteString("- filler line\n")
 	}
 	sb.WriteString("- a bare Alpha mention near the bottom\n")
-	if err := os.WriteFile(filepath.Join(pages, "Note.md"), []byte(sb.String()), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	idx, err := graph.BuildIndex(tmp)
-	if err != nil {
-		t.Fatal(err)
-	}
+	_, idx := writeGraph(t, map[string]string{"pages/Note.md": sb.String()})
 	pv := NewPageView(idx, "Note", 80, 24)
 	if len(pv.result.Finds) != 0 {
 		t.Fatalf("no emphasis yet → no finds; got %d", len(pv.result.Finds))

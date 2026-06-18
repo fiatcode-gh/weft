@@ -142,8 +142,7 @@ func TestAppSearchDoneMsgRouting(t *testing.T) {
 }
 
 func TestAppViewWithOverlay(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	a := bootApp(t)
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")})
 	v := a.View()
@@ -156,8 +155,7 @@ func TestAppViewWithOverlay(t *testing.T) {
 }
 
 func TestAppCenterOverlayFallback(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	a := New("/no/such/path", "test")
 	if got := a.centerOverlay("hello"); got != "hello" {
 		t.Errorf("zero-size fallback: want raw content, got %q", got)
@@ -165,8 +163,7 @@ func TestAppCenterOverlayFallback(t *testing.T) {
 }
 
 func TestAppCenterOverlayPlacesContent(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	a := bootApp(t)
 	out := a.centerOverlay("X")
 	if !strings.Contains(out, "X") {

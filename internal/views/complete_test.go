@@ -4,10 +4,10 @@ import "testing"
 
 func TestExtractPartial(t *testing.T) {
 	cases := []struct {
-		name    string
-		before  string
-		want    string
-		wantOK  bool
+		name   string
+		before string
+		want   string
+		wantOK bool
 	}{
 		{"open bracket simple", "see [[bar", "bar", true},
 		{"empty partial just opened", "x [[", "", true},
@@ -28,8 +28,7 @@ func TestExtractPartial(t *testing.T) {
 }
 
 func TestLinkCompleterRefresh(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	c := newLinkCompleter(loadFixture(t))
 
 	c.refresh("just text", "", true)
@@ -60,8 +59,7 @@ func TestLinkCompleterRefresh(t *testing.T) {
 }
 
 func TestLinkCompleterDismissAndReopen(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	c := newLinkCompleter(loadFixture(t))
 	c.refresh("[[Alp", "", true)
 	c.dismiss()
@@ -79,8 +77,7 @@ func TestLinkCompleterDismissAndReopen(t *testing.T) {
 }
 
 func TestLinkCompleterEmptyPartialShowsRecent(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	c := newLinkCompleter(loadFixture(t))
 	c.refresh("[[", "", true)
 	if !c.active {
@@ -107,8 +104,7 @@ func TestLinkCompleterNilIndex(t *testing.T) {
 }
 
 func TestLinkCompleterAllowOpenGate(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	c := newLinkCompleter(loadFixture(t))
 
 	// A bare caret move (allowOpen=false) onto an unclosed [[ must not open a
@@ -138,8 +134,7 @@ func TestLinkCompleterAllowOpenGate(t *testing.T) {
 }
 
 func TestLinkCompleterClosingAhead(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	c := newLinkCompleter(loadFixture(t))
 	c.refresh("[[Alp", "]] tail", true) // cursor inside an already-closed link
 	if c.active {

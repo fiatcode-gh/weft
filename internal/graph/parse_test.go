@@ -6,10 +6,15 @@ import (
 )
 
 func TestExtractWikiLinks(t *testing.T) {
+	// arrange
 	body := "- See [[Alpha]] and [[Beta|the second]].\n" +
 		"```\n[[InsideFence]]\n```\n" +
 		"- Another [[proj/nested]] ref."
+
+	// act
 	got := ExtractWikiLinks(body)
+
+	// assert
 	want := []LinkHit{
 		{Target: "Alpha", Line: 1},
 		{Target: "Beta", Line: 1},
@@ -59,6 +64,7 @@ func TestExtractWikiLinksInlineCodeMidDocument(t *testing.T) {
 }
 
 func TestExtractTodos(t *testing.T) {
+	// arrange
 	body := "- TODO Buy milk\n" +
 		"- LATER [#A] Review the doc\n" +
 		"- DONE Should be ignored\n" +
@@ -69,7 +75,11 @@ func TestExtractTodos(t *testing.T) {
 		"- TODO Inside fence should be ignored\n" +
 		"```\n" +
 		"- TODO After fence"
+
+	// act
 	got := ExtractTodos(body)
+
+	// assert
 	want := []TodoHit{
 		{Marker: "TODO", Priority: "", Text: "Buy milk", Line: 1},
 		{Marker: "LATER", Priority: "A", Text: "Review the doc", Line: 2},

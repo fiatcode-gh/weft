@@ -9,8 +9,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
 )
 
 func TestTodayJournalNameUsesNowFunc(t *testing.T) {
@@ -26,8 +24,7 @@ func TestTodayJournalNameUsesNowFunc(t *testing.T) {
 // that exercise the . / < / > keys against the fixture.
 func bootAppAt(t *testing.T, now time.Time) *App {
 	t.Helper()
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	abs, err := filepath.Abs("../../testdata/fixture-graph")
 	if err != nil {
 		t.Fatal(err)
@@ -53,10 +50,7 @@ func bootAppAt(t *testing.T, now time.Time) *App {
 // minus the async hop.
 func bootApp(t *testing.T) *App {
 	t.Helper()
-	// Match page_test.go's environment so the package-wide lipgloss color
-	// profile is not primed with truecolor by whichever test runs first.
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	abs, err := filepath.Abs("../../testdata/fixture-graph")
 	if err != nil {
 		t.Fatal(err)
@@ -99,33 +93,26 @@ func TestAppNavigateFocusingLink(t *testing.T) {
 }
 
 func TestAppNavigateHighlighting(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
-	tmp := t.TempDir()
-	pages := filepath.Join(tmp, "pages")
-	if err := os.MkdirAll(pages, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	// arrange
+	quietTerm(t)
 	var sb strings.Builder
 	for i := 0; i < 60; i++ {
 		sb.WriteString("- filler\n")
 	}
 	sb.WriteString("- mentions Hub down here\n")
-	if err := os.WriteFile(filepath.Join(pages, "Note.md"), []byte(sb.String()), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(pages, "Hub.md"), []byte("# Hub\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	idx, err := graph.BuildIndex(tmp)
-	if err != nil {
-		t.Fatal(err)
-	}
+	tmp, idx := writeGraph(t, map[string]string{
+		"pages/Note.md": sb.String(),
+		"pages/Hub.md":  "# Hub\n",
+	})
 	a := New(tmp, "test")
 	a.idx = idx
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	a.page = NewPageView(idx, "Hub", 80, 24)
+
+	// act
 	a.navigateHighlighting("Note", "Hub")
+
+	// assert
 	if a.page.Page() != "Note" {
 		t.Fatalf("should navigate to Note; got %q", a.page.Page())
 	}
@@ -135,35 +122,26 @@ func TestAppNavigateHighlighting(t *testing.T) {
 }
 
 func TestAppBacklinkUnlinkedEnterHighlights(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	// arrange
+	quietTerm(t)
 	if _, err := exec.LookPath("rg"); err != nil {
 		t.Skip("rg not on PATH")
-	}
-	tmp := t.TempDir()
-	pages := filepath.Join(tmp, "pages")
-	if err := os.MkdirAll(pages, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(pages, "Topic.md"), []byte("# Topic\n"), 0o644); err != nil {
-		t.Fatal(err)
 	}
 	var sb strings.Builder
 	for i := 0; i < 60; i++ {
 		sb.WriteString("- filler\n")
 	}
 	sb.WriteString("- a bare Topic mention\n")
-	if err := os.WriteFile(filepath.Join(pages, "Note.md"), []byte(sb.String()), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	idx, err := graph.BuildIndex(tmp)
-	if err != nil {
-		t.Fatal(err)
-	}
+	tmp, idx := writeGraph(t, map[string]string{
+		"pages/Topic.md": "# Topic\n",
+		"pages/Note.md":  sb.String(),
+	})
 	a := New(tmp, "test")
 	a.idx = idx
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	a.page = NewPageView(idx, "Topic", 80, 24)
+
+	// act + assert
 	// Open backlinks for Topic; Note has an unlinked "Topic" mention.
 	a.Update(key("b"))
 	// The backlinks panel for "Topic": no linked refs, one unlinked (Note).
@@ -182,27 +160,19 @@ func TestAppUnlinkedRefs(t *testing.T) {
 	if _, err := exec.LookPath("rg"); err != nil {
 		t.Skip("rg not on PATH; install ripgrep to run this test")
 	}
-	tmp := t.TempDir()
-	pages := filepath.Join(tmp, "pages")
-	if err := os.MkdirAll(pages, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	// Alpha.md mentions its own name (must be excluded as self),
+	// arrange — Alpha.md mentions its own name (must be excluded as self),
 	// Note.md has one bare mention (kept) and one already-linked (dropped).
-	if err := os.WriteFile(filepath.Join(pages, "Alpha.md"), []byte("# Alpha\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(pages, "Note.md"), []byte("a bare Alpha mention\nand a linked [[Alpha]]\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	idx, err := graph.BuildIndex(tmp)
-	if err != nil {
-		t.Fatal(err)
-	}
+	tmp, idx := writeGraph(t, map[string]string{
+		"pages/Alpha.md": "# Alpha\n",
+		"pages/Note.md":  "a bare Alpha mention\nand a linked [[Alpha]]\n",
+	})
 	a := New(tmp, "test")
 	a.idx = idx
 
+	// act
 	refs := a.unlinkedRefs("Alpha")
+
+	// assert
 	if len(refs) != 1 {
 		t.Fatalf("want 1 unlinked ref (Note bare mention), got %d: %+v", len(refs), refs)
 	}
@@ -212,27 +182,15 @@ func TestAppUnlinkedRefs(t *testing.T) {
 }
 
 func TestAppLinkifyWritesAndRefreshes(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	if _, err := exec.LookPath("rg"); err != nil {
 		t.Skip("rg not on PATH; install ripgrep to run this test")
 	}
-	tmp := t.TempDir()
-	pages := filepath.Join(tmp, "pages")
-	if err := os.MkdirAll(pages, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(pages, "Topic.md"), []byte("# Topic\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	notePath := filepath.Join(pages, "Note.md")
-	if err := os.WriteFile(notePath, []byte("- a bare Topic mention\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	idx, err := graph.BuildIndex(tmp)
-	if err != nil {
-		t.Fatal(err)
-	}
+	tmp, idx := writeGraph(t, map[string]string{
+		"pages/Topic.md": "# Topic\n",
+		"pages/Note.md":  "- a bare Topic mention\n",
+	})
+	notePath := filepath.Join(tmp, "pages", "Note.md")
 	a := New(tmp, "test")
 	a.idx = idx
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
@@ -264,27 +222,15 @@ func TestAppLinkifyWritesAndRefreshes(t *testing.T) {
 }
 
 func TestAppLinkifyMentionGoneShowsError(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	if _, err := exec.LookPath("rg"); err != nil {
 		t.Skip("rg not on PATH; install ripgrep to run this test")
 	}
-	tmp := t.TempDir()
-	pages := filepath.Join(tmp, "pages")
-	if err := os.MkdirAll(pages, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(pages, "Topic.md"), []byte("# Topic\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	notePath := filepath.Join(pages, "Note.md")
-	if err := os.WriteFile(notePath, []byte("- a bare Topic mention\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	idx, err := graph.BuildIndex(tmp)
-	if err != nil {
-		t.Fatal(err)
-	}
+	tmp, idx := writeGraph(t, map[string]string{
+		"pages/Topic.md": "# Topic\n",
+		"pages/Note.md":  "- a bare Topic mention\n",
+	})
+	notePath := filepath.Join(tmp, "pages", "Note.md")
 	a := New(tmp, "test")
 	a.idx = idx
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})

@@ -137,20 +137,9 @@ func TestEditorExitedMsg_HintOnError(t *testing.T) {
 // non-nil editor cmd. This is the case the user reported as broken
 // when the create logic was tied to `.` only.
 func TestShiftE_ColdStartCreatesTodayJournal(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "journals"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "pages", "Anchor.md"), []byte("anchor\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	// No journal file written — today's journal is missing on disk.
-
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
+	// An anchor page, but no journal file — today's journal is missing on disk.
+	dir, _ := writeGraph(t, map[string]string{"pages/Anchor.md": "anchor\n"})
 	a := New(dir, "test")
 	a.nowFunc = func() time.Time { return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC) }
 	cmd := a.Init()
@@ -196,18 +185,8 @@ func TestShiftE_ColdStartCreatesTodayJournal(t *testing.T) {
 }
 
 func TestE_ColdStart_DefersCreation(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "journals"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "pages", "Anchor.md"), []byte("anchor\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
+	dir, _ := writeGraph(t, map[string]string{"pages/Anchor.md": "anchor\n"})
 	a := New(dir, "test")
 	a.nowFunc = func() time.Time { return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC) }
 	if cmd := a.Init(); cmd != nil {
@@ -239,20 +218,9 @@ func TestE_ColdStart_DefersCreation(t *testing.T) {
 // now in the index and the editor cmd fires. Same outcome as the
 // cold-start test, different path.
 func TestDotKey_CreatesMissingTodayJournal_ThenEditReachable(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "journals"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "pages", "Anchor.md"), []byte("anchor\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	// No journal file written — today's journal is missing on disk.
-
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
+	// An anchor page, but no journal file — today's journal is missing on disk.
+	dir, _ := writeGraph(t, map[string]string{"pages/Anchor.md": "anchor\n"})
 	a := New(dir, "test")
 	a.nowFunc = func() time.Time { return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC) }
 	cmd := a.Init()
@@ -305,19 +273,8 @@ func TestDotKey_CreatesMissingTodayJournal_ThenEditReachable(t *testing.T) {
 // that race, so this test stays as a smoke check that the no-op
 // path doesn't crash.
 func TestShiftE_EnsureFileStillUsed(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "journals"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "pages", "Alpha.md"), []byte("content\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
+	dir, _ := writeGraph(t, map[string]string{"pages/Alpha.md": "content\n"})
 	a := New(dir, "test")
 	cmd := a.Init()
 	if cmd != nil {

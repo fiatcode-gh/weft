@@ -8,19 +8,68 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-func TestRenderPageReturnsLinksWithTargets(t *testing.T) {
-	body := "- See [[Alpha]] and [[Beta|the second]]."
-	out, err := Render(body, 80)
+// mustRender renders body at the given width and fails the test on error. It is
+// the shared arrange step for the many single-scenario render tests.
+func mustRender(t *testing.T, body string, width int) Result {
+	t.Helper()
+	out, err := Render(body, width)
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	gotTargets := make([]string, 0, len(out.Links))
-	for _, l := range out.Links {
-		gotTargets = append(gotTargets, l.Target)
+	return out
+}
+
+// mustRenderEmphasis renders body with an emphasis term and fails on error.
+func mustRenderEmphasis(t *testing.T, body string, width int, term string) Result {
+	t.Helper()
+	out, err := RenderWithEmphasis(body, width, term)
+	if err != nil {
+		t.Fatalf("RenderWithEmphasis: %v", err)
 	}
+	return out
+}
+
+// plainText strips ANSI styling so assertions can match on visible text.
+func plainText(out Result) string {
+	return ansi.Strip(out.Styled)
+}
+
+// linkTargets pulls the Target field out of each recorded link, in order.
+func linkTargets(out Result) []string {
+	targets := make([]string, 0, len(out.Links))
+	for _, l := range out.Links {
+		targets = append(targets, l.Target)
+	}
+	return targets
+}
+
+// rowOf returns the zero-based line number that a Styled byte offset lands on.
+func rowOf(out Result, off int) int {
+	return strings.Count(out.Styled[:off], "\n")
+}
+
+func leadingSpaceCount(s string) int {
+	n := 0
+	for _, r := range s {
+		if r != ' ' {
+			break
+		}
+		n++
+	}
+	return n
+}
+
+func TestRenderPageReturnsLinksWithTargets(t *testing.T) {
+	// arrange
+	body := "- See [[Alpha]] and [[Beta|the second]]."
+
+	// act
+	out := mustRender(t, body, 80)
+
+	// assert
 	want := []string{"Alpha", "Beta"}
-	if strings.Join(gotTargets, ",") != strings.Join(want, ",") {
-		t.Errorf("link targets: want %v, got %v", want, gotTargets)
+	if got := linkTargets(out); strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("link targets: want %v, got %v", want, got)
 	}
 	if out.Styled == "" {
 		t.Error("Styled output empty")
@@ -34,16 +83,17 @@ func TestRenderPageReturnsLinksWithTargets(t *testing.T) {
 }
 
 func TestRenderPageHandlesEmptyBody(t *testing.T) {
-	out, err := Render("", 80)
-	if err != nil {
-		t.Fatalf("Render: %v", err)
-	}
+	// arrange / act
+	out := mustRender(t, "", 80)
+
+	// assert
 	if len(out.Links) != 0 {
 		t.Errorf("empty body should have no links, got %v", out.Links)
 	}
 }
 
 func TestRenderStripsLogbookBlocks(t *testing.T) {
+	// arrange
 	body := strings.Join([]string{
 		"- a normal bullet",
 		"  :LOGBOOK:",
@@ -51,12 +101,12 @@ func TestRenderStripsLogbookBlocks(t *testing.T) {
 		"  :END:",
 		"- another bullet",
 	}, "\n")
-	out, err := Render(body, 80)
-	if err != nil {
-		t.Fatalf("Render: %v", err)
-	}
-	plain := ansi.Strip(out.Styled)
-	plain = strings.Join(strings.Fields(plain), " ") // collapse Glamour's word-by-word spacing
+
+	// act
+	out := mustRender(t, body, 80)
+
+	// assert
+	plain := strings.Join(strings.Fields(plainText(out)), " ") // collapse Glamour's word-by-word spacing
 	for _, s := range []string{":LOGBOOK:", ":END:", "CLOCK:"} {
 		if strings.Contains(plain, s) {
 			t.Errorf("Styled still contains %q: %q", s, plain)
@@ -70,16 +120,17 @@ func TestRenderStripsLogbookBlocks(t *testing.T) {
 }
 
 func TestRenderWikiLinkWrapsAtRightMargin(t *testing.T) {
-	// A line whose wiki-link sits near the right margin: the link's rendered
-	// display is much wider than the raw `<id>` sentinel, so without
+	// arrange — a line whose wiki-link sits near the right margin: the link's
+	// rendered display is much wider than the raw `<id>` sentinel, so without
 	// width-padding Glamour wraps based on the sentinel and the substituted
 	// link overflows the column budget.
 	body := "- Some text leading up to [[VeryLongPageNameRightAtTheEnd]]"
-	out, err := Render(body, 40)
-	if err != nil {
-		t.Fatalf("Render: %v", err)
-	}
-	plain := ansi.Strip(out.Styled)
+
+	// act
+	out := mustRender(t, body, 40)
+
+	// assert
+	plain := plainText(out)
 	maxLine := 0
 	for _, line := range strings.Split(plain, "\n") {
 		// strip trailing spaces lipgloss adds to pad to width
@@ -94,12 +145,14 @@ func TestRenderWikiLinkWrapsAtRightMargin(t *testing.T) {
 }
 
 func TestRenderHangingIndentOnWrappedBullets(t *testing.T) {
+	// arrange
 	body := "- This bullet has enough text that Glamour will wrap it across two lines for sure."
-	out, err := Render(body, 40)
-	if err != nil {
-		t.Fatalf("Render: %v", err)
-	}
-	plain := ansi.Strip(out.Styled)
+
+	// act
+	out := mustRender(t, body, 40)
+
+	// assert
+	plain := plainText(out)
 	lines := strings.Split(plain, "\n")
 	var bullet, continuation int = -1, -1
 	for i, line := range lines {
@@ -122,63 +175,54 @@ func TestRenderHangingIndentOnWrappedBullets(t *testing.T) {
 	}
 }
 
-func leadingSpaceCount(s string) int {
-	n := 0
-	for _, r := range s {
-		if r != ' ' {
-			break
-		}
-		n++
-	}
-	return n
-}
-
 func TestRenderPageBlockRefBecomesLink(t *testing.T) {
-	res, err := Render("see [[Alpha#summary]] for the upshot\n", 80)
-	if err != nil {
-		t.Fatal(err)
+	// arrange / act
+	out := mustRender(t, "see [[Alpha#summary]] for the upshot\n", 80)
+
+	// assert
+	if len(out.Links) != 1 {
+		t.Fatalf("want 1 link, got %d (%+v)", len(out.Links), out.Links)
 	}
-	if len(res.Links) != 1 {
-		t.Fatalf("want 1 link, got %d (%+v)", len(res.Links), res.Links)
-	}
-	if res.Links[0].Target != "Alpha" {
-		t.Errorf("target = %q, want Alpha", res.Links[0].Target)
+	if out.Links[0].Target != "Alpha" {
+		t.Errorf("target = %q, want Alpha", out.Links[0].Target)
 	}
 }
 
 func TestRenderPageBlockRefWithAlias(t *testing.T) {
-	res, err := Render("see [[Alpha#summary|the summary]] for context\n", 80)
-	if err != nil {
-		t.Fatal(err)
+	// arrange / act
+	out := mustRender(t, "see [[Alpha#summary|the summary]] for context\n", 80)
+
+	// assert
+	if len(out.Links) != 1 {
+		t.Fatalf("want 1 link, got %d (%+v)", len(out.Links), out.Links)
 	}
-	if len(res.Links) != 1 {
-		t.Fatalf("want 1 link, got %d (%+v)", len(res.Links), res.Links)
+	if out.Links[0].Target != "Alpha" {
+		t.Errorf("target = %q, want Alpha", out.Links[0].Target)
 	}
-	if res.Links[0].Target != "Alpha" {
-		t.Errorf("target = %q, want Alpha", res.Links[0].Target)
-	}
-	if res.Links[0].Display != "the summary" {
-		t.Errorf("display = %q, want 'the summary'", res.Links[0].Display)
+	if out.Links[0].Display != "the summary" {
+		t.Errorf("display = %q, want 'the summary'", out.Links[0].Display)
 	}
 }
 
 func TestRenderPageEmptyBlockFragmentIsNotALink(t *testing.T) {
-	res, err := Render("anchor: [[#summary]] here\n", 80)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(res.Links) != 0 {
-		t.Errorf("want 0 links for [[#anchor]], got %d (%+v)", len(res.Links), res.Links)
+	// arrange / act
+	out := mustRender(t, "anchor: [[#summary]] here\n", 80)
+
+	// assert
+	if len(out.Links) != 0 {
+		t.Errorf("want 0 links for [[#anchor]], got %d (%+v)", len(out.Links), out.Links)
 	}
 }
 
 func TestRenderPageStripsQueryAndEmbedBlocks(t *testing.T) {
+	// arrange
 	body := "before\n{{query (and [[tag]] )}}\nstill query\n}}\nafter\n{{embed [[Other]]}}\n"
-	res, err := Render(body, 80)
-	if err != nil {
-		t.Fatal(err)
-	}
-	plain := ansi.Strip(res.Styled)
+
+	// act
+	out := mustRender(t, body, 80)
+
+	// assert
+	plain := plainText(out)
 	if strings.Contains(plain, "{{query") {
 		t.Errorf("query block leaked into output:\n%s", plain)
 	}
@@ -191,16 +235,18 @@ func TestRenderPageStripsQueryAndEmbedBlocks(t *testing.T) {
 }
 
 func TestRenderTaskMarkersSurviveStyling(t *testing.T) {
+	// arrange
 	body := strings.Join([]string{
 		"- TODO Buy milk",
 		"- DOING Write the parser",
 		"- DONE Old item",
 	}, "\n")
-	out, err := Render(body, 80)
-	if err != nil {
-		t.Fatalf("Render: %v", err)
-	}
-	plain := ansi.Strip(out.Styled)
+
+	// act
+	out := mustRender(t, body, 80)
+
+	// assert
+	plain := plainText(out)
 	for _, marker := range []string{"TODO", "DOING", "DONE"} {
 		if !strings.Contains(plain, marker) {
 			t.Errorf("missing marker %q in stripped output: %q", marker, plain)
@@ -222,16 +268,12 @@ func TestRenderPageBacktickWrappedWikiLinkIsLiteral(t *testing.T) {
 	// appear in the output as the literal "[[Foo]]" text, not as a styled
 	// wiki link. weft's preprocessor previously matched `[[...]]` inside
 	// backticks; this test pins the fix.
-	body := "see `[[Foo]]` for the literal text\n"
-	res, err := Render(body, 80)
-	if err != nil {
-		t.Fatal(err)
+	out := mustRender(t, "see `[[Foo]]` for the literal text\n", 80)
+
+	if len(out.Links) != 0 {
+		t.Errorf("want 0 links (wiki link inside backticks should be literal), got %d (%+v)", len(out.Links), out.Links)
 	}
-	if len(res.Links) != 0 {
-		t.Errorf("want 0 links (wiki link inside backticks should be literal), got %d (%+v)", len(res.Links), res.Links)
-	}
-	plain := ansi.Strip(res.Styled)
-	if !strings.Contains(plain, "[[Foo]]") {
+	if plain := plainText(out); !strings.Contains(plain, "[[Foo]]") {
 		t.Errorf("expected literal [[Foo]] in output, got:\n%s", plain)
 	}
 }
@@ -240,19 +282,15 @@ func TestRenderPageMixedBacktickAndPlainLinks(t *testing.T) {
 	// On a line that mixes backtick-wrapped and plain wiki links, only the
 	// plain one should be preprocessed. The backtick-wrapped one stays
 	// literal in the output.
-	body := "code `[[Fake]]` and real [[Real]] end\n"
-	res, err := Render(body, 80)
-	if err != nil {
-		t.Fatal(err)
+	out := mustRender(t, "code `[[Fake]]` and real [[Real]] end\n", 80)
+
+	if len(out.Links) != 1 {
+		t.Fatalf("want 1 link (only the plain one), got %d (%+v)", len(out.Links), out.Links)
 	}
-	if len(res.Links) != 1 {
-		t.Fatalf("want 1 link (only the plain one), got %d (%+v)", len(res.Links), res.Links)
+	if out.Links[0].Target != "Real" {
+		t.Errorf("link target = %q, want Real", out.Links[0].Target)
 	}
-	if res.Links[0].Target != "Real" {
-		t.Errorf("link target = %q, want Real", res.Links[0].Target)
-	}
-	plain := ansi.Strip(res.Styled)
-	if !strings.Contains(plain, "[[Fake]]") {
+	if plain := plainText(out); !strings.Contains(plain, "[[Fake]]") {
 		t.Errorf("expected literal [[Fake]] to survive, got:\n%s", plain)
 	}
 }
@@ -260,40 +298,37 @@ func TestRenderPageMixedBacktickAndPlainLinks(t *testing.T) {
 func TestRenderPageMultipleInlineCodeSpansOnOneLine(t *testing.T) {
 	// `code1` ... `code2` alternation: both code spans should be left
 	// literal, and the plain wiki link between them preprocessed.
-	body := "first `[[A]]` middle [[B]] last `[[C]]` end\n"
-	res, err := Render(body, 80)
-	if err != nil {
-		t.Fatal(err)
+	out := mustRender(t, "first `[[A]]` middle [[B]] last `[[C]]` end\n", 80)
+
+	if len(out.Links) != 1 {
+		t.Fatalf("want 1 link (only [[B]]), got %d (%+v)", len(out.Links), out.Links)
 	}
-	if len(res.Links) != 1 {
-		t.Fatalf("want 1 link (only [[B]]), got %d (%+v)", len(res.Links), res.Links)
-	}
-	if res.Links[0].Target != "B" {
-		t.Errorf("link target = %q, want B", res.Links[0].Target)
+	if out.Links[0].Target != "B" {
+		t.Errorf("link target = %q, want B", out.Links[0].Target)
 	}
 }
 
 func TestRenderRecordsOpenTaskPositions(t *testing.T) {
+	// arrange
 	body := strings.Join([]string{
 		"- DONE finished thing",
 		"- TODO first open",
 		"- some note",
 		"- LATER second open",
 	}, "\n")
-	out, err := Render(body, 80)
-	if err != nil {
-		t.Fatalf("Render: %v", err)
-	}
-	// DONE is excluded; the two open markers are recorded in document order.
+
+	// act
+	out := mustRender(t, body, 80)
+
+	// assert — DONE is excluded; the two open markers are recorded in document order.
 	if len(out.Tasks) != 2 {
 		t.Fatalf("open task count: want 2, got %d (%v)", len(out.Tasks), out.Tasks)
 	}
-	row := func(off int) int { return strings.Count(out.Styled[:off], "\n") }
-	r0, r1 := row(out.Tasks[0]), row(out.Tasks[1])
+	r0, r1 := rowOf(out, out.Tasks[0]), rowOf(out, out.Tasks[1])
 	if r0 >= r1 {
 		t.Errorf("task rows not ascending: %d, %d", r0, r1)
 	}
-	lines := strings.Split(ansi.Strip(out.Styled), "\n")
+	lines := strings.Split(plainText(out), "\n")
 	if r0 >= len(lines) || !strings.Contains(lines[r0], "first open") {
 		t.Errorf("task 0 offset lands on wrong row %d: %q", r0, lines)
 	}
@@ -303,46 +338,48 @@ func TestRenderRecordsOpenTaskPositions(t *testing.T) {
 }
 
 func TestRenderOpenTaskExcludesPunctuationAdjacentMarker(t *testing.T) {
-	// "- TODO: x" is NOT a todo per graph.ExtractTodos (it requires whitespace
-	// after the marker), so it must not be recorded in Tasks — otherwise the
-	// deep-link ordinal misaligns. Only the real "- TODO buy milk" counts.
+	// arrange — "- TODO: x" is NOT a todo per graph.ExtractTodos (it requires
+	// whitespace after the marker), so it must not be recorded in Tasks —
+	// otherwise the deep-link ordinal misaligns. Only "- TODO buy milk" counts.
 	body := strings.Join([]string{
 		"- TODO: not a real todo",
 		"- TODO buy milk",
 	}, "\n")
-	out, err := Render(body, 80)
-	if err != nil {
-		t.Fatalf("Render: %v", err)
-	}
+
+	// act
+	out := mustRender(t, body, 80)
+
+	// assert
 	if len(out.Tasks) != 1 {
 		t.Fatalf("open task count: want 1 (only the whitespace-separated todo), got %d", len(out.Tasks))
 	}
-	row := strings.Count(out.Styled[:out.Tasks[0]], "\n")
-	lines := strings.Split(ansi.Strip(out.Styled), "\n")
+	row := rowOf(out, out.Tasks[0])
+	lines := strings.Split(plainText(out), "\n")
 	if row >= len(lines) || !strings.Contains(lines[row], "buy milk") {
 		t.Errorf("recorded task offset lands on wrong row %d: %q", row, lines)
 	}
 }
 
 func TestRenderOpenTaskOrdinalAlignmentWithInterleavedAndPriority(t *testing.T) {
-	// Open-todo offsets are recorded in document order, skipping DONE even
-	// when it sits between two open todos, and a priority marker is still
+	// arrange — open-todo offsets are recorded in document order, skipping DONE
+	// even when it sits between two open todos, and a priority marker is still
 	// counted — keeping render's Tasks index aligned with graph's ordinal.
 	body := strings.Join([]string{
 		"- TODO [#A] first with priority",
 		"- DONE done in the middle",
 		"- LATER third open",
 	}, "\n")
-	out, err := Render(body, 80)
-	if err != nil {
-		t.Fatalf("Render: %v", err)
-	}
+
+	// act
+	out := mustRender(t, body, 80)
+
+	// assert
 	if len(out.Tasks) != 2 {
 		t.Fatalf("open task count: want 2 (DONE skipped), got %d", len(out.Tasks))
 	}
-	lines := strings.Split(ansi.Strip(out.Styled), "\n")
+	lines := strings.Split(plainText(out), "\n")
 	rowText := func(off int) string {
-		r := strings.Count(out.Styled[:off], "\n")
+		r := rowOf(out, off)
 		if r >= len(lines) {
 			return ""
 		}
@@ -357,54 +394,56 @@ func TestRenderOpenTaskOrdinalAlignmentWithInterleavedAndPriority(t *testing.T) 
 }
 
 func TestRenderWithEmphasisRecordsFinds(t *testing.T) {
-	res, err := RenderWithEmphasis("see Alpha here\n", 80, "Alpha")
-	if err != nil {
-		t.Fatal(err)
+	// arrange / act
+	out := mustRenderEmphasis(t, "see Alpha here\n", 80, "Alpha")
+
+	// assert
+	if len(out.Finds) != 1 {
+		t.Fatalf("want 1 find, got %d", len(out.Finds))
 	}
-	if len(res.Finds) != 1 {
-		t.Fatalf("want 1 find, got %d", len(res.Finds))
-	}
-	if !strings.Contains(res.Styled, "Alpha") {
+	if !strings.Contains(out.Styled, "Alpha") {
 		t.Errorf("emphasised term should still appear in output")
 	}
 }
 
 func TestRenderNoEmphasisNoFinds(t *testing.T) {
-	res, err := Render("see Alpha here\n", 80)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(res.Finds) != 0 {
-		t.Errorf("Render should record no finds; got %d", len(res.Finds))
+	// arrange / act
+	out := mustRender(t, "see Alpha here\n", 80)
+
+	// assert
+	if len(out.Finds) != 0 {
+		t.Errorf("Render should record no finds; got %d", len(out.Finds))
 	}
 }
 
 func TestRenderWithEmphasisSkipsLinkCodeFence(t *testing.T) {
+	// arrange
 	body := "bare Alpha here\n" +
 		"a [[Alpha]] link\n" +
 		"inline `Alpha` code\n" +
 		"```\nAlpha in fence\n```\n"
-	res, err := RenderWithEmphasis(body, 80, "Alpha")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(res.Finds) != 1 {
-		t.Fatalf("only the bare mention should be highlighted; got %d finds", len(res.Finds))
+
+	// act
+	out := mustRenderEmphasis(t, body, 80, "Alpha")
+
+	// assert
+	if len(out.Finds) != 1 {
+		t.Fatalf("only the bare mention should be highlighted; got %d finds", len(out.Finds))
 	}
 }
 
 func TestRenderWithEmphasisWholeWordCasePreserved(t *testing.T) {
-	res, err := RenderWithEmphasis("an alpha and Alphabet\n", 80, "Alpha")
-	if err != nil {
-		t.Fatal(err)
+	// arrange / act
+	out := mustRenderEmphasis(t, "an alpha and Alphabet\n", 80, "Alpha")
+
+	// assert
+	if len(out.Finds) != 1 {
+		t.Fatalf("want 1 find (alpha, not Alphabet); got %d", len(out.Finds))
 	}
-	if len(res.Finds) != 1 {
-		t.Fatalf("want 1 find (alpha, not Alphabet); got %d", len(res.Finds))
-	}
-	if !strings.Contains(res.Styled, "alpha") {
+	if !strings.Contains(out.Styled, "alpha") {
 		t.Errorf("original casing 'alpha' must be preserved in output")
 	}
-	if !strings.Contains(res.Styled, "Alphabet") {
+	if !strings.Contains(out.Styled, "Alphabet") {
 		t.Errorf("Alphabet must remain in output untouched")
 	}
 }
@@ -420,12 +459,9 @@ func TestRenderWithEmphasisUnicodeAndPunctuationBoundaries(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			res, err := RenderWithEmphasis(tc.body, 80, tc.term)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(res.Finds) != 1 {
-				t.Errorf("term %q should highlight once (matching ripgrep -w); got %d finds", tc.term, len(res.Finds))
+			out := mustRenderEmphasis(t, tc.body, 80, tc.term)
+			if len(out.Finds) != 1 {
+				t.Errorf("term %q should highlight once (matching ripgrep -w); got %d finds", tc.term, len(out.Finds))
 			}
 		})
 	}
@@ -433,26 +469,25 @@ func TestRenderWithEmphasisUnicodeAndPunctuationBoundaries(t *testing.T) {
 
 func TestRenderWithEmphasisStillWholeWord(t *testing.T) {
 	// Whole-word still holds: substring occurrences don't match.
-	res, err := RenderWithEmphasis("Alphabet and alpha\n", 80, "Alpha")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(res.Finds) != 1 { // only the standalone "alpha"
-		t.Fatalf("want 1 find (whole-word), got %d", len(res.Finds))
+	out := mustRenderEmphasis(t, "Alphabet and alpha\n", 80, "Alpha")
+
+	if len(out.Finds) != 1 { // only the standalone "alpha"
+		t.Fatalf("want 1 find (whole-word), got %d", len(out.Finds))
 	}
 }
 
 func TestRenderWithEmphasisRespectsWrapWidth(t *testing.T) {
-	// The emphasised term sits near the wrap boundary; without sentinel
-	// padding Glamour wraps on the short sentinel and the restored term
-	// overflows the right margin.
+	// arrange — the emphasised term sits near the wrap boundary; without
+	// sentinel padding Glamour wraps on the short sentinel and the restored
+	// term overflows the right margin.
 	body := "This is some padding text: Remarkable end\n"
-	res, err := RenderWithEmphasis(body, 40, "Remarkable")
-	if err != nil {
-		t.Fatal(err)
-	}
+
+	// act
+	out := mustRenderEmphasis(t, body, 40, "Remarkable")
+
+	// assert
 	maxw := 0
-	for _, line := range strings.Split(res.Styled, "\n") {
+	for _, line := range strings.Split(out.Styled, "\n") {
 		if w := lipgloss.Width(line); w > maxw {
 			maxw = w
 		}

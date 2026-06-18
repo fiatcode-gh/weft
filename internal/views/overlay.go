@@ -17,8 +17,8 @@ type OverlayResult struct {
 	// the top.
 	TaskOrdinal int
 	DeepLink    bool
-	Accept      bool    // user chose Selected; App navigates (if non-empty) and closes
-	Cancel      bool    // user dismissed; App closes the overlay
+	Accept      bool // user chose Selected; App navigates (if non-empty) and closes
+	Cancel      bool // user dismissed; App closes the overlay
 	// Create, when Accept is true, means "create the page named Selected"
 	// rather than open an existing one. Only the Picker sets it.
 	Create bool

@@ -15,8 +15,7 @@ import (
 )
 
 func TestPickerFiltersOnQuery(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	p := NewPicker(loadFixture(t), 80, 30)
 	// Zero out mtimes so the relative-time hint doesn't drift with
 	// checkout time. relativeTime returns "" for a zero mtime.
@@ -115,8 +114,7 @@ func TestConsumeKeyMultiCharNoop(t *testing.T) {
 }
 
 func TestPickerUpDownBounds(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	p := NewPicker(loadFixture(t), 80, 30)
 	if len(p.matches) < 2 {
 		t.Fatalf("setup: need >=2 matches, got %d", len(p.matches))
@@ -141,8 +139,7 @@ func TestPickerUpDownBounds(t *testing.T) {
 }
 
 func TestPickerEnterReturnsSelected(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	p := NewPicker(loadFixture(t), 80, 30)
 	if len(p.matches) == 0 {
 		t.Fatal("setup: no matches")
@@ -161,8 +158,7 @@ func TestPickerEnterReturnsSelected(t *testing.T) {
 // fuzzy matches (so the Create row is the only selectable row) returns a
 // Create result rather than doing nothing.
 func TestPickerCreate_EnterOnIsolatedRow(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	p := NewPicker(loadFixture(t), 80, 30)
 	for _, r := range "zzzzzzzzznotapage" {
 		p.Update(string(r))
@@ -179,8 +175,7 @@ func TestPickerCreate_EnterOnIsolatedRow(t *testing.T) {
 }
 
 func TestPickerEscCancels(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	p := NewPicker(loadFixture(t), 80, 30)
 	res := p.Update("esc")
 	if res.Selected != "" || res.Accept || !res.Cancel {
@@ -226,8 +221,7 @@ func TestPickerScrollWindowMiddle(t *testing.T) {
 // the inner-width clamp allows (inner = 30). Without clamping the hint,
 // the footer line wraps and breaks the panel's rounded border.
 func TestOverlayFootersFitNarrowWidth(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 
 	cases := []struct {
@@ -273,8 +267,7 @@ func TestPickerSetSize(t *testing.T) {
 // display; capping the underlying slice hid pages a user could otherwise
 // scroll to.
 func TestPickerNoSilentCap(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	idx := loadFixture(t)
 	for i := 0; i < 100; i++ {
 		meta := graph.PageMeta{
@@ -356,8 +349,7 @@ func typeQuery(p *Picker, s string) {
 }
 
 func TestPickerCreate_OfferedForNewName(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	p := NewPicker(loadFixture(t), 80, 30)
 	typeQuery(p, "Brand New Page")
 	if p.createName != "Brand New Page" {
@@ -366,8 +358,7 @@ func TestPickerCreate_OfferedForNewName(t *testing.T) {
 }
 
 func TestPickerCreate_StripsMdExtension(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	p := NewPicker(loadFixture(t), 80, 30)
 	typeQuery(p, "Notes.md")
 	if p.createName != "Notes" {
@@ -376,8 +367,7 @@ func TestPickerCreate_StripsMdExtension(t *testing.T) {
 }
 
 func TestPickerCreate_SuppressedForExistingPage(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	p := NewPicker(loadFixture(t), 80, 30)
 	typeQuery(p, "Alpha") // exists in the fixture
 	if p.createName != "" {
@@ -386,8 +376,7 @@ func TestPickerCreate_SuppressedForExistingPage(t *testing.T) {
 }
 
 func TestPickerCreate_SuppressedForDateShaped(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	p := NewPicker(loadFixture(t), 80, 30)
 	typeQuery(p, "2026-06-15")
 	if p.createName != "" {
@@ -396,8 +385,7 @@ func TestPickerCreate_SuppressedForDateShaped(t *testing.T) {
 }
 
 func TestPickerCreate_EnterReturnsCreateResult(t *testing.T) {
-	t.Setenv("TERM", "dumb")
-	t.Setenv("NO_COLOR", "1")
+	quietTerm(t)
 	p := NewPicker(loadFixture(t), 80, 30)
 	typeQuery(p, "Zzz New") // no fuzzy matches in fixture
 	res := p.Update(keyEnter)
