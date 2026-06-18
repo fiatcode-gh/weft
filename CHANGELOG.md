@@ -4,6 +4,12 @@ All notable changes to weft are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2026-06-18
+
+### Fixed
+
+- Saving a page now writes atomically. The in-app editor's save and the one-key linkify (which writes to *other* pages' files) now write to a temporary file that is renamed into place, so a crash mid-write can no longer leave a page truncated or half-written. A page's existing file permissions are preserved across a save.
+
 ## [2.2.0] - 2026-06-17
 
 ### Added
