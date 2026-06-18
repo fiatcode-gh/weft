@@ -72,15 +72,59 @@ func EnsureFile(path string) (created bool, err error) {
 	return true, nil
 }
 
-// WriteFile writes data to path, creating the parent directory if it does
-// not yet exist. It is the second deliberate write path in the project
-// (alongside the EnsureFile bootstrap); all disk writes still funnel
-// through package edit.
+// defaultFileMode is the permission a newly-created page file is born with,
+// matching EnsureFile's bootstrap mode.
+const defaultFileMode os.FileMode = 0o644
+
+// WriteFile writes data to path atomically, creating the parent directory if
+// it does not yet exist. It is the second deliberate write path in the project
+// (alongside the EnsureFile bootstrap); all disk writes still funnel through
+// package edit.
+//
+// The write goes to a temp file in the destination directory and is moved into
+// place with os.Rename, so a crash mid-write leaves the original intact rather
+// than truncated — load-bearing now that linkify writes to files other than
+// the page being edited. The destination's existing mode is preserved (a new
+// file gets defaultFileMode), since the temp file is born 0o600.
+//
+// path is assumed to be a regular file (the only kind weft's callers pass) —
+// renaming over a symlink replaces the link, not its target. No fsync is done:
+// rename guarantees atomicity against a process crash, which is the failure
+// this protects against; durability against power loss is out of scope for a
+// local notes TUI.
 func WriteFile(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+
+	mode := defaultFileMode
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode().Perm()
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	tmp, err := os.CreateTemp(dir, ".weft-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	// On any failure past this point, drop the temp so a botched write
+	// never strands a partial file next to the page.
+	defer os.Remove(tmpPath)
+
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpPath, mode); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
 }
 
 // SnapshotMtime returns the file's modification time, or time.Time{}

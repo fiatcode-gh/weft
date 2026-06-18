@@ -140,38 +140,158 @@ func TestEnsureFile(t *testing.T) {
 	})
 }
 
+// seedFile writes an existing file at dir/name with the given content and an
+// explicit mode (chmod is umask-proof, unlike the WriteFile perm arg). It is
+// the shared arrange step for the overwrite-path WriteFile tests.
+func seedFile(t *testing.T, dir, name, content string, mode os.FileMode) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, mode); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// readBack returns the file's content; a read failure is fatal to the test.
+func readBack(t *testing.T, path string) string {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read back %s: %v", path, err)
+	}
+	return string(body)
+}
+
+// permOf returns the file's permission bits; a stat failure is fatal.
+func permOf(t *testing.T, path string) os.FileMode {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat %s: %v", path, err)
+	}
+	return info.Mode().Perm()
+}
+
+// fileNames lists the entry names in dir, sorted by ReadDir.
+func fileNames(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	return names
+}
+
 func TestWriteFile(t *testing.T) {
 	t.Run("writes content and creates parent dir", func(t *testing.T) {
+		// arrange
 		dir := t.TempDir()
 		path := filepath.Join(dir, "pages", "New Page.md")
-		if err := WriteFile(path, []byte("hello\n")); err != nil {
+
+		// act
+		err := WriteFile(path, []byte("hello\n"))
+
+		// assert
+		if err != nil {
 			t.Fatalf("WriteFile: %v", err)
 		}
-		body, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read back: %v", err)
+		if got := readBack(t, path); got != "hello\n" {
+			t.Errorf("content: got %q, want %q", got, "hello\n")
 		}
-		if string(body) != "hello\n" {
-			t.Errorf("content: got %q, want %q", body, "hello\n")
-		}
-		info, _ := os.Stat(path)
-		if info.Mode().Perm() != 0o644 {
-			t.Errorf("mode: got %v, want 0o644", info.Mode().Perm())
+		if got := permOf(t, path); got != 0o644 {
+			t.Errorf("mode: got %v, want 0o644 (new-file default)", got)
 		}
 	})
 
-	t.Run("overwrites existing file", func(t *testing.T) {
+	t.Run("overwrites an existing file's content", func(t *testing.T) {
+		// arrange
 		dir := t.TempDir()
-		path := filepath.Join(dir, "p.md")
-		if err := os.WriteFile(path, []byte("old\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if err := WriteFile(path, []byte("new\n")); err != nil {
+		path := seedFile(t, dir, "p.md", "old\n", 0o644)
+
+		// act
+		err := WriteFile(path, []byte("new\n"))
+
+		// assert
+		if err != nil {
 			t.Fatalf("WriteFile: %v", err)
 		}
-		body, _ := os.ReadFile(path)
-		if string(body) != "new\n" {
-			t.Errorf("content: got %q, want %q", body, "new\n")
+		if got := readBack(t, path); got != "new\n" {
+			t.Errorf("content: got %q, want %q", got, "new\n")
+		}
+	})
+
+	t.Run("preserves an existing file's custom mode", func(t *testing.T) {
+		// arrange — 0o640 differs from both the 0o644 default and the
+		// 0o600 a temp file is born with, so a naive temp+rename that
+		// skips the chmod step fails this assertion.
+		dir := t.TempDir()
+		path := seedFile(t, dir, "p.md", "old\n", 0o640)
+
+		// act
+		err := WriteFile(path, []byte("new\n"))
+
+		// assert
+		if err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		if got := permOf(t, path); got != 0o640 {
+			t.Errorf("mode: got %v, want 0o640 (preserved)", got)
+		}
+	})
+
+	t.Run("leaves no temp files behind on success", func(t *testing.T) {
+		// arrange
+		dir := t.TempDir()
+		path := filepath.Join(dir, "p.md")
+
+		// act
+		err := WriteFile(path, []byte("data\n"))
+
+		// assert
+		if err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		if got := fileNames(t, dir); len(got) != 1 || got[0] != "p.md" {
+			t.Errorf("dir entries: got %v, want [p.md] (temp cleaned up)", got)
+		}
+	})
+
+	t.Run("a failed write leaves the original intact and strands no temp", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("root bypasses directory permission bits")
+		}
+		// arrange — seed a file, then make its directory read-only so the
+		// temp create fails. This is the whole point of the atomic rewrite:
+		// a botched write must not destroy the file that was already there.
+		dir := t.TempDir()
+		path := seedFile(t, dir, "p.md", "original\n", 0o644)
+		if err := os.Chmod(dir, 0o500); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { os.Chmod(dir, 0o700) }) // let t.TempDir clean up
+
+		// act
+		err := WriteFile(path, []byte("replacement\n"))
+
+		// assert
+		if err == nil {
+			t.Fatal("WriteFile: want error writing into a read-only dir, got nil")
+		}
+		if err := os.Chmod(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if got := readBack(t, path); got != "original\n" {
+			t.Errorf("content: got %q, want %q (original must survive a failed write)", got, "original\n")
+		}
+		if got := fileNames(t, dir); len(got) != 1 || got[0] != "p.md" {
+			t.Errorf("dir entries: got %v, want [p.md] (no temp stranded)", got)
 		}
 	})
 }
