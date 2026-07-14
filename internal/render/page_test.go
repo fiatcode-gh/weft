@@ -308,6 +308,50 @@ func TestRenderPageMultipleInlineCodeSpansOnOneLine(t *testing.T) {
 	}
 }
 
+func TestHideMarkdownLinkURLs(t *testing.T) {
+	// Rewrites [text](url) -> [text](#) so Glamour renders only the styled
+	// link text; images, wiki links, and code-span examples are left alone.
+	cases := []struct {
+		name, in, want string
+	}{
+		{"basic link", "see [PR 17](https://x/y) done", "see [PR 17](#) done"},
+		{"multiple links", "[a](u1) and [b](u2)", "[a](#) and [b](#)"},
+		{"leaves image", "![alt](http://img/x.png)", "![alt](http://img/x.png)"},
+		{"leaves wiki link", "a [[Wiki]] link", "a [[Wiki]] link"},
+		{"inline-code example is literal", "`[x](http://y)` stays", "`[x](http://y)` stays"},
+		{"plain text unchanged", "no links here", "no links here"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := hideMarkdownLinkURLs(tc.in); got != tc.want {
+				t.Errorf("hideMarkdownLinkURLs(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestHideMarkdownLinkURLsSkipsFencedCode(t *testing.T) {
+	// A markdown link inside a fenced code block is a literal example and must
+	// keep its URL verbatim.
+	body := "```\nsee [x](http://y) in code\n```\n"
+	if got := hideMarkdownLinkURLs(body); !strings.Contains(got, "[x](http://y)") {
+		t.Errorf("expected fenced markdown link to survive, got:\n%s", got)
+	}
+}
+
+func TestRenderMarkdownLinkHidesURL(t *testing.T) {
+	// End-to-end: the rendered read view shows the link text but not the URL.
+	out := mustRender(t, "see [PR 17](https://git.fiatcode.dev/fiatcode/weft/pulls/17) done\n", 80)
+
+	plain := plainText(out)
+	if !strings.Contains(plain, "PR 17") {
+		t.Errorf("expected link text \"PR 17\" in output, got:\n%s", plain)
+	}
+	if strings.Contains(plain, "https://") {
+		t.Errorf("expected URL hidden, but it appears in output:\n%s", plain)
+	}
+}
+
 func TestRenderRecordsOpenTaskPositions(t *testing.T) {
 	// arrange
 	body := strings.Join([]string{

@@ -45,6 +45,7 @@ type Result struct {
 
 var (
 	wikiLinkRe     = regexp.MustCompile(`\[\[([^\]\|]+)(?:\|([^\]]*))?\]\]`)
+	markdownLinkRe = regexp.MustCompile(`(!?)\[([^\]]*)\]\(([^)]*)\)`)
 	fenceRe        = regexp.MustCompile("^\\s*```")
 	taskMarkerRe   = regexp.MustCompile(`^(\s*-\s+)(TODO|DOING|LATER|WAITING|DONE|CANCELED|CANCELLED|NOW)\b`)
 	logbookStartRe = regexp.MustCompile(`(?i)^\s*:LOGBOOK:\s*$`)
@@ -315,6 +316,59 @@ func preprocessWikiLinks(body string) (string, []linkSubst) {
 	return out.String(), subs
 }
 
+// hideMarkdownLinkURLs rewrites the URL of every inline markdown link
+// [text](url) to the bare anchor "#". Glamour's LinkElement skips rendering a
+// URL that is only an anchor (ansi/link.go), so this drops the noisy inline
+// href Glamour otherwise appends after every link — turning link-dense pages
+// into unreadable walls — while keeping the link text and its LinkText styling
+// untouched. Images (![alt](url)) are left alone so an image reference isn't
+// silently emptied, and links inside fenced or inline code stay literal
+// (they're syntax examples). The real URL remains in the source file; only the
+// read view hides it. Runs on the raw body before wiki-link/task preprocessing;
+// the pattern never matches [[wiki links]] or the sentinels those produce.
+func hideMarkdownLinkURLs(body string) string {
+	var out strings.Builder
+	out.Grow(len(body))
+	inFence := false
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		switch {
+		case fenceRe.MatchString(line):
+			inFence = !inFence
+			out.WriteString(line)
+		case inFence:
+			out.WriteString(line)
+		default:
+			out.WriteString(hideMarkdownLinkURLsOutsideInlineCode(line))
+		}
+		if i < len(lines)-1 {
+			out.WriteByte('\n')
+		}
+	}
+	return out.String()
+}
+
+// hideMarkdownLinkURLsOutsideInlineCode applies the [text](url) -> [text](#)
+// rewrite to the non-inline-code segments of a single line. Backtick-delimited
+// spans (odd-indexed after the split) are literal and left untouched, mirroring
+// replaceWikiLinksOutsideInlineCode.
+func hideMarkdownLinkURLsOutsideInlineCode(line string) string {
+	parts := strings.Split(line, "`")
+	for i, part := range parts {
+		if i%2 == 1 {
+			continue // inside backticks — literal
+		}
+		parts[i] = markdownLinkRe.ReplaceAllStringFunc(part, func(match string) string {
+			m := markdownLinkRe.FindStringSubmatch(match)
+			if m[1] == "!" {
+				return match // image — leave Glamour's default rendering
+			}
+			return "[" + m[2] + "](#)"
+		})
+	}
+	return strings.Join(parts, "`")
+}
+
 // preprocessTaskMarkers replaces leading TODO/DOING/etc. markers on non-fenced
 // bullet lines with sentinels, returning the rewritten body and the captured
 // marker text indexed by sentinel id.
@@ -520,6 +574,7 @@ func Render(body string, width int) (Result, error) {
 func RenderWithEmphasis(body string, width int, emphasis string) (Result, error) {
 	body = stripLogbookBlocks(body)
 	body = stripQueryAndEmbedBlocks(body)
+	body = hideMarkdownLinkURLs(body)
 	pre, wikiSubs := preprocessWikiLinks(body)
 	pre, taskMarkers := preprocessTaskMarkers(pre)
 	pre, emphSubs := preprocessEmphasis(pre, emphasis)
