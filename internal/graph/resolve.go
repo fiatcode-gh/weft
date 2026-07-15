@@ -31,8 +31,6 @@ func PageNameFromFilename(name string) string {
 // path when creating today's journal on demand.
 func FilenameFromPageName(name string) string {
 	if m := journalPageNameRe.FindStringSubmatch(name); m != nil {
-		// Reuse journalRe's capture groups by hand: the page name is
-		// YYYY-MM-DD; emit YYYY_MM_DD.md.
 		return strings.ReplaceAll(name, "-", "_") + ".md"
 	}
 	if strings.Contains(name, "/") {

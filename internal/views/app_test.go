@@ -286,7 +286,7 @@ func TestReindexPreservesScrollPosition(t *testing.T) {
 
 	// act — R reindex, driven synchronously
 	_, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("R")})
-	drainCmds(t, a, cmd) // deliver the batch's indexLoadedMsg; reuse/adapt the package's existing cmd-draining idiom
+	drainCmds(t, a, cmd) // deliver the batch's indexLoadedMsg
 
 	// assert
 	if got := a.page.Offset(); got != want {

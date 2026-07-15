@@ -590,31 +590,14 @@ func TestSearchHighlightStopsBeforeEllipsis(t *testing.T) {
 	// An SGR open code always ends in 'm' and is immediately followed by the
 	// styled text. Check that wherever "…" appears it is NOT the text right
 	// after an SGR opening sequence for the match style.
-	idx := strings.Index(view, ellipsisBytes)
-	if idx < 0 {
+	if !strings.Contains(view, ellipsisBytes) {
 		t.Fatal("ellipsis not found in raw (styled) view")
 	}
-	// The byte immediately before "…" in a styled run would be 'm' (the SGR
-	// terminator). If that 'm' is the close of the match-style open sequence,
-	// the ellipsis is being highlighted. After the fix the span is bounded to
-	// ctxLimit so no SGR wraps the ellipsis.
-	prefix := view[:idx]
-	// Rendered match: searchMatch.Render(text) → "\x1b[...]m" + text + "\x1b[0m"
-	// After the fix, the ellipsis follows a reset or plain text, never an SGR
-	// open for the match colour (11 = bright yellow in 256-colour = "33;1" or
-	// "\x1b[1;33m" / "\x1b[38;5;11m"). Simplest check: the last non-reset SGR
-	// in the prefix must NOT be the match-open sequence.
-	// We use a coarse check: the match style render of "zzz" should NOT appear
-	// anywhere in the view output followed by the ellipsis bytes.
+	// The span is bounded to ctxLimit, so no match SGR may wrap the ellipsis:
+	// the match-styled "zzz" must never be immediately followed by the
+	// ellipsis bytes.
 	matchZzz := searchMatch.Render("zzz")
 	if strings.Contains(view, matchZzz+ellipsisBytes) {
 		t.Errorf("match SGR wraps the ellipsis: found %q immediately before \"…\" in view", matchZzz)
 	}
-	// Additionally, confirm no SGR sequence ending in 'm' sits in the last 20
-	// bytes of the prefix (just before "…") — that would indicate some style
-	// is still opening there.
-	if len(prefix) > 20 {
-		prefix = prefix[len(prefix)-20:]
-	}
-	_ = prefix // available for manual debugging; the matchZzz check above is the assertion
 }

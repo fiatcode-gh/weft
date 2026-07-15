@@ -1,6 +1,6 @@
-// Package edit is the single disk-writing surface in weft. It hands a
-// page's .md file off to the user's editor and detects whether the file
-// changed on return. No other package in the project writes to disk.
+// Package edit hands a page's .md file off to the user's editor and detects
+// whether the file changed on return. Together with internal/sync it is one
+// of weft's two deliberate disk-mutating surfaces.
 package edit
 
 import (
@@ -80,9 +80,8 @@ func EnsureFile(path string) (created bool, err error) {
 const defaultFileMode os.FileMode = 0o644
 
 // WriteFile writes data to path atomically, creating the parent directory if
-// it does not yet exist. It is the second deliberate write path in the project
-// (alongside the EnsureFile bootstrap); all disk writes still funnel through
-// package edit.
+// it does not yet exist. It is package edit's second write path (alongside
+// the EnsureFile bootstrap).
 //
 // The write goes to a temp file in the destination directory and is moved into
 // place with os.Rename, so a crash mid-write leaves the original intact rather

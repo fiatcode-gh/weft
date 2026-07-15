@@ -112,11 +112,6 @@ func TestTodosSelClampedOnFilter(t *testing.T) {
 	}
 }
 
-// TestTodosLongRowStaysOneLine guards against layout shift from unclamped
-// long todos: without clamping, a long bullet wraps inside the panel —
-// continuation lines have no hanging indent (they look like sibling
-// bullets) and a wrapped selected row carries the ▶ marker only on its
-// first visible line.
 // TestTodosScrollWindowKeepsSelectionVisible asserts that the computed
 // window always contains t.sel, even when sel sits at the far ends of
 // a list much larger than the terminal-row budget.
@@ -187,6 +182,11 @@ func TestTodosScrollHintsAppear(t *testing.T) {
 	}
 }
 
+// TestTodosLongRowStaysOneLine guards against layout shift from unclamped
+// long todos: without clamping, a long bullet wraps inside the panel —
+// continuation lines have no hanging indent (they look like sibling
+// bullets) and a wrapped selected row carries the ▶ marker only on its
+// first visible line.
 func TestTodosLongRowStaysOneLine(t *testing.T) {
 	quietTerm(t)
 

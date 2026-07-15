@@ -166,7 +166,6 @@ func TestPickerCreate_EnterOnIsolatedRow(t *testing.T) {
 	if len(p.matches) != 0 {
 		t.Fatalf("setup: query should yield no matches, got %d", len(p.matches))
 	}
-	// With the create row present, Enter now returns a Create result.
 	res := p.Update("enter")
 	if !res.Accept || !res.Create || res.Selected != "zzzzzzzzznotapage" {
 		t.Errorf("enter with create row: want Accept+Create+Selected, got (%q,%v,%v,%v)",
@@ -251,7 +250,6 @@ func TestOverlayFootersFitNarrowWidth(t *testing.T) {
 			}
 		})
 	}
-	_ = fuzzy.Match{} // keep fuzzy import
 }
 
 func TestPickerSetSize(t *testing.T) {

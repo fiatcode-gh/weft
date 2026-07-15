@@ -240,9 +240,9 @@ func TestRenderLinkTargetKeepsHash(t *testing.T) {
 }
 
 func TestRenderPageHashOnlyTargetIsADanglingLink(t *testing.T) {
-	// [[#summary]] has no [[page#fragment]] meaning in Logseq, so it is now
-	// a normal (likely dangling) link named "#summary" rather than being
-	// treated as an empty target and left as literal text.
+	// [[#summary]] has no [[page#fragment]] meaning in Logseq, so it renders
+	// as a normal (likely dangling) link named "#summary", not as literal
+	// text.
 	// arrange / act
 	out := mustRender(t, "anchor: [[#summary]] here\n", 80)
 

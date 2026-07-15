@@ -160,7 +160,7 @@ func TestEditorView_ConfirmGolden(t *testing.T) {
 
 func TestEditorUpdate_PageDownMovesCursor(t *testing.T) {
 	quietTerm(t)
-	// 40 numbered lines; height 10 so paging is meaningful.
+	// 40 lines; height 10 so paging is meaningful.
 	var sb strings.Builder
 	for i := 0; i < 40; i++ {
 		sb.WriteString("line\n")
@@ -357,7 +357,7 @@ func TestEditorCompletion_CursorStaysVisibleAtBottom(t *testing.T) {
 	}
 	sb.WriteString("EDITHERE")
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", sb.String(), false, 80, 24)
-	// The editor now opens at the top; this test edits at the bottom, so move
+	// The editor opens at the top; this test edits at the bottom, so move
 	// the cursor to the last line first.
 	for {
 		before := e.ta.Line()
@@ -462,7 +462,7 @@ func TestEditorCompletion_TypingIntoUnclosedAfterNavReopens(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "draft [[Alph", false, 80, 24)
 	e.Update(tea.KeyMsg{Type: tea.KeyHome})
-	e.Update(tea.KeyMsg{Type: tea.KeyEnd}) // navigation must not open (the fix)
+	e.Update(tea.KeyMsg{Type: tea.KeyEnd}) // navigation must not open
 	if e.completer.active {
 		t.Fatalf("precondition: navigation should leave the completer closed")
 	}

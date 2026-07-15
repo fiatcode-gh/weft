@@ -28,9 +28,8 @@ func fixtureGraph(t *testing.T) string {
 	return abs
 }
 
-// writePage seeds a page file under dir/pages/name with the given body and
-// returns the graph root (dir). It is the shared arrange step for tests that
-// grep over a freshly built temp graph.
+// writePage seeds a page file under dir/pages/name with the given body. It is
+// the shared arrange step for tests that grep over a freshly built temp graph.
 func writePage(t *testing.T, dir, name, body string) {
 	t.Helper()
 	pages := filepath.Join(dir, "pages")

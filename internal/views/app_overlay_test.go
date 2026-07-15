@@ -194,8 +194,6 @@ func TestAppCenterOverlayPlacesContent(t *testing.T) {
 	}
 }
 
-// TestAppResizePropagatesToOverlays asserts that a WindowSizeMsg arriving while
-// an overlay is open updates the overlay's cached size.
 func TestPickerCreate_OpensEditorOnNewPage(t *testing.T) {
 	a := bootApp(t)
 	a.active = NewPicker(a.idx, a.width, a.height)
@@ -224,6 +222,8 @@ func TestPickerCreate_OpensEditorOnNewPage(t *testing.T) {
 	}
 }
 
+// TestAppResizePropagatesToOverlays asserts that a WindowSizeMsg arriving while
+// an overlay is open updates the overlay's cached size.
 func TestAppResizePropagatesToOverlays(t *testing.T) {
 	a := bootApp(t)
 

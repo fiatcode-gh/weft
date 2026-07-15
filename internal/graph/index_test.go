@@ -29,7 +29,7 @@ func TestBuildIndex(t *testing.T) {
 		t.Errorf("page names: want %v, got %v", want, names)
 	}
 
-	// Backlinks: Alpha is linked from Beta and 2026-05-24
+	// Backlinks: Alpha is linked from Beta, Hub, 2026-05-15, and 2026-05-24
 	gotAlpha := pageNamesOfRefs(idx.Backlinks[strings.ToLower("Alpha")])
 	sort.Strings(gotAlpha)
 	wantAlpha := []string{"2026-05-15", "2026-05-24", "Beta", "Hub"}

@@ -6,7 +6,7 @@ import "time"
 type PageMeta struct {
 	Name      string    // logical page name (e.g., "proj/nested" or "2026-05-24")
 	Path      string    // absolute filesystem path
-	IsJournal bool      //
+	IsJournal bool      // true when the page lives under journals/
 	ModTime   time.Time // file modification time; zero if stat failed
 }
 

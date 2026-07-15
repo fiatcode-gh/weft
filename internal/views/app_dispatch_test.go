@@ -208,13 +208,9 @@ func TestAppReindexFromPage(t *testing.T) {
 // an ellipsis so the bar fits on one line.
 func TestStatusBarTruncatesLongLeft(t *testing.T) {
 	a := bootApp(t)
-	// Tight terminal width — left ("Alpha · 5 links" ish) plus right
-	// ("? help") still wants ~25 cells; shrink so the page name itself
-	// can dominate the budget. Then navigate so the page is forced; we
-	// already use Alpha which is short, so the page name itself fits.
-	// To make the bar overflow we force a width narrower than the page
-	// name's length-plus-right and verify the bar's total rendered
-	// width stays bounded.
+	// Width 20 is narrower than left ("Alpha · N links") plus right
+	// ("? help"), forcing the left clamp; assert no rendered line exceeds
+	// the terminal width.
 	a.navigate("Alpha")
 	a.Update(tea.WindowSizeMsg{Width: 20, Height: 24})
 
@@ -263,8 +259,8 @@ func TestPeriodJumpsToTodayJournal(t *testing.T) {
 }
 
 func TestPeriodOnAbsentTodayCreatesAndNavigates(t *testing.T) {
-	// 2026-06-15 has no journal in the fixture. `.` now creates the
-	// file and navigates, instead of hinting "no journal for <date>".
+	// 2026-06-15 has no journal in the fixture; `.` must create the file
+	// and navigate to it.
 	a := bootAppAt(t, time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC))
 	a.navigate("Alpha")
 
@@ -285,9 +281,8 @@ func TestPeriodOnAbsentTodayCreatesAndNavigates(t *testing.T) {
 }
 
 func TestHintClearsOnNextKey(t *testing.T) {
-	// `.` on a missing journal now creates+navigates instead of
-	// setting a hint. Trigger a hint via `<` at the oldest journal
-	// instead, which still surfaces "no earlier journal".
+	// `.` on a missing journal creates+navigates rather than hinting, so
+	// trigger a hint via `<` at the oldest journal ("no earlier journal").
 	a := bootAppAt(t, time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC))
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
 	if a.hint == "" {

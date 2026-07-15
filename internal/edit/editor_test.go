@@ -8,11 +8,11 @@ import (
 	"time"
 )
 
-// fakeLookPath returns a lookPath that resolves a fixed set of names and
-// returns ErrNotFound for everything else. errNotFound matches the
-// surface of exec.LookPath on missing binaries.
+// errNotFound matches the surface of exec.LookPath on missing binaries.
 var errNotFound = errors.New("not found")
 
+// fakeLookPath returns a lookPath that resolves a fixed set of names and
+// returns errNotFound for everything else.
 func fakeLookPath(present map[string]string) func(string) (string, error) {
 	return func(bin string) (string, error) {
 		if p, ok := present[bin]; ok {

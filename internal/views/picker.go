@@ -144,7 +144,6 @@ func (p *Picker) Update(key string) OverlayResult {
 		p.moveDown(p.rowCount())
 		return OverlayResult{}
 	}
-	// Otherwise feed the key into the text input.
 	p.input, _ = consumeKey(p.input, key)
 	p.search(p.input.Value())
 	return OverlayResult{}
