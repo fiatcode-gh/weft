@@ -79,7 +79,7 @@ func fencedLines(body string) map[int]bool {
 // match is already linked, in code, or there are no matches.
 func firstUnlinkedMatch(line string, matches []search.Span) (search.Span, bool) {
 	links := wikiLinkRe.FindAllStringIndex(line, -1)
-	code := inlineCodeSpans(line)
+	code := InlineCodeSpans(line)
 	for _, m := range matches {
 		inside := false
 		for _, l := range links {
@@ -96,7 +96,7 @@ func firstUnlinkedMatch(line string, matches []search.Span) (search.Span, bool) 
 	return search.Span{}, false
 }
 
-// inlineCodeSpans returns the byte ranges of inline code spans on line —
+// InlineCodeSpans returns the byte ranges of inline code spans on line —
 // the odd segments of a backtick split, mirroring how parse.go
 // (appendWikiLinks) and render.replaceWikiLinksOutsideInlineCode treat
 // backticks: split the line on "`", even-indexed segments are literal text,
@@ -105,7 +105,10 @@ func firstUnlinkedMatch(line string, matches []search.Span) (search.Span, bool) 
 // An unpaired trailing backtick still opens a code span that runs to the end
 // of the line — strings.Split leaves that final segment at an odd index too,
 // so parse/render already treat it as code, and this must match.
-func inlineCodeSpans(line string) []search.Span {
+//
+// Exported because internal/render also needs it (hideMarkdownLinkURLsOutsideInlineCode):
+// render and parse must agree byte-for-byte on what counts as inline code.
+func InlineCodeSpans(line string) []search.Span {
 	var spans []search.Span
 	start := -1
 	for i := 0; i < len(line); i++ {

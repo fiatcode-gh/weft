@@ -3,13 +3,13 @@ package views
 import (
 	"errors"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/teatest"
 
+	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
 	"git.fiatcode.dev/fiatcode/weft/v2/internal/search"
 )
 
@@ -59,8 +59,8 @@ func TestSearchUpdateTypesIntoQuery(t *testing.T) {
 			t.Errorf("typing %q: want zero result, got %+v", k, res)
 		}
 	}
-	if s.query != "alp" {
-		t.Errorf("query: want \"alp\", got %q", s.query)
+	if s.Query() != "alp" {
+		t.Errorf("query: want \"alp\", got %q", s.Query())
 	}
 }
 
@@ -71,8 +71,8 @@ func TestSearchUpdateBackspace(t *testing.T) {
 	s.hits = []search.Hit{{FilePath: "x", Line: 1, Context: "y"}}
 
 	s.Update("backspace")
-	if s.query != "ab" {
-		t.Errorf("after first backspace: want \"ab\", got %q", s.query)
+	if s.Query() != "ab" {
+		t.Errorf("after first backspace: want \"ab\", got %q", s.Query())
 	}
 	if s.hits != nil {
 		t.Errorf("after backspace: hits must clear, got %+v", s.hits)
@@ -81,8 +81,8 @@ func TestSearchUpdateBackspace(t *testing.T) {
 	s.Update("backspace")
 	s.Update("backspace")
 	s.Update("backspace")
-	if s.query != "" {
-		t.Errorf("after draining: want \"\", got %q", s.query)
+	if s.Query() != "" {
+		t.Errorf("after draining: want \"\", got %q", s.Query())
 	}
 }
 
@@ -92,13 +92,13 @@ func TestSearchUpdateSpaceVariants(t *testing.T) {
 	s.SetQuery("foo")
 
 	s.Update(" ")
-	if s.query != "foo " {
-		t.Errorf("after literal space: want \"foo \", got %q", s.query)
+	if s.Query() != "foo " {
+		t.Errorf("after literal space: want \"foo \", got %q", s.Query())
 	}
 
 	s.Update("space")
-	if s.query != "foo  " {
-		t.Errorf("after named space: want \"foo  \", got %q", s.query)
+	if s.Query() != "foo  " {
+		t.Errorf("after named space: want \"foo  \", got %q", s.Query())
 	}
 }
 
@@ -300,11 +300,12 @@ func TestHitLabelKnownVsUnknown(t *testing.T) {
 	idx := loadFixture(t)
 	s := NewSearchView(idx, 80, 24)
 
-	for _, p := range idx.Pages {
-		if got := s.hitLabel(p.Path); got != p.Name {
-			t.Errorf("known path %q: want %q, got %q", p.Path, p.Name, got)
-		}
-		break
+	if len(idx.Pages) == 0 {
+		t.Fatal("fixture graph has no pages")
+	}
+	p := idx.Pages[0]
+	if got := s.hitLabel(p.Path); got != p.Name {
+		t.Errorf("known path %q: want %q, got %q", p.Path, p.Name, got)
 	}
 	if got, want := s.hitLabel("/totally/elsewhere/file.md"), "elsewhere/file.md"; got != want {
 		t.Errorf("unknown path label: want %q, got %q", want, got)
@@ -491,12 +492,13 @@ func TestShortPath(t *testing.T) {
 
 func TestSearchCmdRoundtrip(t *testing.T) {
 	skipIfNoRipgrep(t)
-	abs, err := filepath.Abs("../../testdata/fixture-graph")
+	abs := cloneFixtureGraph(t)
+	idx, err := graph.BuildIndex(abs)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	s := NewSearchView(loadFixture(t), 80, 24)
+	s := NewSearchView(idx, 80, 24)
 	s.SetQuery("Beta")
 	cmd := s.SearchCmd(abs)
 	if cmd == nil {

@@ -3,8 +3,8 @@ package views
 import (
 	"fmt"
 	"strings"
-	"unicode/utf8"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -15,7 +15,7 @@ import (
 type SearchView struct {
 	listBox
 	idx        *graph.Index
-	query      string
+	input      textinput.Model
 	gen        int // bumped on every query mutation; tags in-flight searches
 	hits       []search.Hit
 	running    bool
@@ -25,7 +25,9 @@ type SearchView struct {
 }
 
 func NewSearchView(idx *graph.Index, width, height int) *SearchView {
-	s := &SearchView{listBox: listBox{width: width, height: height}, idx: idx}
+	ti := textinput.New()
+	ti.Focus()
+	s := &SearchView{listBox: listBox{width: width, height: height}, idx: idx, input: ti}
 	s.pathToName = make(map[string]string, len(idx.Pages))
 	for _, p := range idx.Pages {
 		s.pathToName[p.Path] = p.Name
@@ -42,19 +44,19 @@ func (s *SearchView) hitLabel(filePath string) string {
 	return shortPath(filePath)
 }
 
-func (s *SearchView) Query() string { return s.query }
+func (s *SearchView) Query() string { return s.input.Value() }
 
 // SetQuery sets the query directly; test-only — it does not bump gen, so
 // production code must mutate the query through Update to keep the
 // staleness guard correct.
-func (s *SearchView) SetQuery(q string) { s.query = q }
+func (s *SearchView) SetQuery(q string) { s.input.SetValue(q) }
 
 // SearchCmd returns a tea.Cmd that runs rg and returns a searchDoneMsg tagged
 // with this view instance and the query's generation at launch time, so a
 // result for an edited-away query (or a since-replaced overlay) can be
 // dropped instead of landing under whatever query is current now.
 func (s *SearchView) SearchCmd(graphPath string) tea.Cmd {
-	q := s.query
+	q := s.input.Value()
 	gen := s.gen
 	return func() tea.Msg {
 		hits, err := search.Run(graphPath, q)
@@ -97,7 +99,7 @@ func (s *SearchView) Update(key string) OverlayResult {
 	case keyEsc:
 		return OverlayResult{Cancel: true}
 	case keyEnter:
-		if s.running || s.query == "" {
+		if s.running || s.input.Value() == "" {
 			return OverlayResult{}
 		}
 		if len(s.hits) == 0 {
@@ -115,30 +117,21 @@ func (s *SearchView) Update(key string) OverlayResult {
 		s.moveUp()
 	case keyDown, keyCtrlJ:
 		s.moveDown(len(s.hits))
-	case keyBackspace:
-		if len(s.query) > 0 {
-			r := []rune(s.query)
-			s.query = string(r[:len(r)-1])
-			s.hits = nil
-			s.searched = false
-			s.gen++
-			s.running = false
-		}
-	case " ", keySpace:
-		s.query += " "
-		s.hits = nil
-		s.searched = false
-		s.gen++
-		s.running = false
 	default:
-		// A single-rune key string is a printable character (named keys like
-		// "enter"/"ctrl+x" are multi-rune and ignored here).
-		if utf8.RuneCountInString(key) == 1 {
-			s.query += key
+		before := s.input.Value()
+		ti, handled := consumeKey(s.input, key)
+		if !handled {
+			return OverlayResult{}
+		}
+		s.input = ti
+		if s.input.Value() != before {
+			// Query changed: previous results and any in-flight search
+			// no longer apply (gen guard drops late arrivals).
+			s.gen++
 			s.hits = nil
 			s.searched = false
-			s.gen++
 			s.running = false
+			s.err = nil
 		}
 	}
 	return OverlayResult{}
@@ -209,21 +202,22 @@ func (s *SearchView) View() string {
 	b.WriteString(styleTitle.Render("Search the graph"))
 	b.WriteString("\n\n")
 	b.WriteString(styleFaint.Render("/ "))
-	b.WriteString(clamp(s.query, inner-3))
+	query := s.input.Value()
+	b.WriteString(clamp(query, inner-3))
 	switch {
 	case s.err != nil:
 		b.WriteString(styleFaint.Render(clamp(fmt.Sprintf("   error: %v", s.err), inner)))
 	case s.running:
 		b.WriteString(styleFaint.Render("   searching…"))
-	case s.searched && len(s.hits) == 0 && s.query != "":
+	case s.searched && len(s.hits) == 0 && query != "":
 		b.WriteString(styleFaint.Render("   no matches"))
-	case len(s.hits) == 0 && s.query != "":
+	case len(s.hits) == 0 && query != "":
 		b.WriteString(styleFaint.Render("   press enter to search"))
 	}
 	b.WriteString("\n")
 	b.WriteString(styleFaint.Render(strings.Repeat("─", inner)))
 	b.WriteString("\n")
-	if len(s.hits) == 0 && s.query == "" {
+	if len(s.hits) == 0 && query == "" {
 		b.WriteString(styleFaint.Render("  type a query and press enter"))
 		b.WriteString("\n")
 	}

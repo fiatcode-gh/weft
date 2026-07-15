@@ -161,10 +161,10 @@ func (p *PageView) FocusLinkTo(name string) {
 }
 
 // LineDown/LineUp/HalfPage/Goto delegates to viewport.
-func (p *PageView) LineDown()     { p.vp.LineDown(1) }
-func (p *PageView) LineUp()       { p.vp.LineUp(1) }
-func (p *PageView) HalfPageDown() { p.vp.HalfViewDown() }
-func (p *PageView) HalfPageUp()   { p.vp.HalfViewUp() }
+func (p *PageView) LineDown()     { p.vp.ScrollDown(1) }
+func (p *PageView) LineUp()       { p.vp.ScrollUp(1) }
+func (p *PageView) HalfPageDown() { p.vp.HalfPageDown() }
+func (p *PageView) HalfPageUp()   { p.vp.HalfPageUp() }
 func (p *PageView) GotoTop()      { p.vp.GotoTop() }
 func (p *PageView) GotoBottom()   { p.vp.GotoBottom() }
 

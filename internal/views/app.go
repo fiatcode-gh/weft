@@ -206,10 +206,11 @@ func (a *App) navigate(name string) {
 	a.navigateToTask(name, -1)
 }
 
-// navigateToTask is navigate plus an open-todo deep-link target. When
-// ordinal >= 0 the new history entry stores it and the page is scrolled to
-// that todo on first display. Restore ignores it — it stays a one-shot jump.
-func (a *App) navigateToTask(name string, ordinal int) {
+// pushHistory captures the departing page's position into the current
+// history entry, truncates any forward history, and pushes a fresh
+// entry for name (which becomes current). The invariant every navigation
+// relies on: the page being left always has its offset/cursor saved.
+func (a *App) pushHistory(name string, taskOrdinal int) {
 	if a.histIdx >= 0 && a.histIdx < len(a.hist) {
 		a.hist[a.histIdx].offset = a.page.Offset()
 		a.hist[a.histIdx].cursor = a.page.Cursor()
@@ -218,9 +219,16 @@ func (a *App) navigateToTask(name string, ordinal int) {
 		page:        name,
 		offset:      0,
 		cursor:      -1,
-		taskOrdinal: ordinal,
+		taskOrdinal: taskOrdinal,
 	})
 	a.histIdx = len(a.hist) - 1
+}
+
+// navigateToTask is navigate plus an open-todo deep-link target. When
+// ordinal >= 0 the new history entry stores it and the page is scrolled to
+// that todo on first display. Restore ignores it — it stays a one-shot jump.
+func (a *App) navigateToTask(name string, ordinal int) {
+	a.pushHistory(name, ordinal)
 	a.page.SetPage(name)
 	if ordinal >= 0 {
 		a.page.ScrollToTask(ordinal)
@@ -232,17 +240,7 @@ func (a *App) navigateToTask(name string, ordinal int) {
 // on (and highlights) the referencing link. The resulting cursor is stored in
 // the new history entry so it survives [ / ] history navigation.
 func (a *App) navigateFocusingLink(name, backTarget string) {
-	if a.histIdx >= 0 && a.histIdx < len(a.hist) {
-		a.hist[a.histIdx].offset = a.page.Offset()
-		a.hist[a.histIdx].cursor = a.page.Cursor()
-	}
-	a.hist = append(a.hist[:a.histIdx+1], historyEntry{
-		page:        name,
-		offset:      0,
-		cursor:      -1,
-		taskOrdinal: -1,
-	})
-	a.histIdx = len(a.hist) - 1
+	a.pushHistory(name, -1)
 	a.page.SetPage(name)
 	a.page.FocusLinkTo(backTarget)
 	a.hist[a.histIdx].cursor = a.page.Cursor()
@@ -253,17 +251,7 @@ func (a *App) navigateFocusingLink(name, backTarget string) {
 // unlinked references, which have no link to focus a cursor on. One-shot: the
 // new history entry stores no emphasis, so [ / ] restore lands without it.
 func (a *App) navigateHighlighting(name, term string) {
-	if a.histIdx >= 0 && a.histIdx < len(a.hist) {
-		a.hist[a.histIdx].offset = a.page.Offset()
-		a.hist[a.histIdx].cursor = a.page.Cursor()
-	}
-	a.hist = append(a.hist[:a.histIdx+1], historyEntry{
-		page:        name,
-		offset:      0,
-		cursor:      -1,
-		taskOrdinal: -1,
-	})
-	a.histIdx = len(a.hist) - 1
+	a.pushHistory(name, -1)
 	a.page.SetPageEmphasizing(name, term)
 }
 
@@ -527,9 +515,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.idx = m.idx
 		a.loadErr = nil
 		if a.page != nil {
-			// Refresh path (R): rebuild PageView for the same page so it
-			// picks up new links / todos from the rebuilt index.
+			// Refresh path (R, sync-pull, editor save-exit): rebuild PageView
+			// for the same page so it picks up new links/todos — but keep the
+			// user's place. Restore clamps if the page shrank.
+			off, cur := a.page.Offset(), a.page.Cursor()
 			a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
+			a.page.Restore(off, cur)
 		} else {
 			a.tryInitPage()
 		}
@@ -635,7 +626,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// then refreshes the indicator.
 					cmds = append(cmds, a.buildIndexCmd())
 				} else {
+					off, cur := a.page.Offset(), a.page.Cursor()
 					a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
+					a.page.Restore(off, cur)
 				}
 			} else if res.Save {
 				// A save without exit doesn't reindex, so probe directly.
@@ -643,8 +636,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return a, tea.Batch(cmds...)
 		}
-		// An open overlay swallows all keys until it accepts or cancels.
+		// An open overlay swallows all keys until it accepts or cancels —
+		// except ctrl+c, which must always quit (Bubble Tea convention; it
+		// works in every other mode).
 		if a.active != nil {
+			if key == "ctrl+c" {
+				return a, tea.Quit
+			}
 			res := a.active.Update(key)
 			if res.Cancel {
 				a.active = nil

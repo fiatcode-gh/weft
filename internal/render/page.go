@@ -88,14 +88,14 @@ var taskMarkerStyles = map[string]lipgloss.Style{
 // links and task markers use distinct PUA ranges so the two substitution
 // passes can't collide.
 const (
-	wikiSentinelStart = ""
-	wikiSentinelEnd   = ""
-	wikiSentinelPad   = ""
-	taskSentinelStart = ""
-	taskSentinelEnd   = ""
-	emphSentinelStart = "" // emphasis sentinel — distinct PUA range from wiki (–) and task (–)
-	emphSentinelEnd   = ""
-	emphSentinelPad   = "" // width-padding for the emphasis sentinel (see wikiSentinelPad)
+	wikiSentinelStart = "\ue000"
+	wikiSentinelEnd   = "\ue001"
+	wikiSentinelPad   = "\ue004"
+	taskSentinelStart = "\ue002"
+	taskSentinelEnd   = "\ue003"
+	emphSentinelStart = "\ue005" // emphasis sentinel — distinct PUA range from wiki (E000–E001) and task (E002–E003)
+	emphSentinelEnd   = "\ue006"
+	emphSentinelPad   = "\ue007" // width-padding for the emphasis sentinel (see wikiSentinelPad)
 )
 
 // sentinelRe matches a wiki-link, task-marker, or emphasis sentinel.
@@ -118,7 +118,7 @@ var sentinelRe = regexp.MustCompile(
 // the decimal digits of sentinel ids. Ids must not be ASCII digits: a
 // numeric emphasis term would match inside a sentinel (the PUA delimiters
 // are word boundaries) and corrupt it.
-const sentinelDigit0 = ''
+const sentinelDigit0 = '\ue010'
 
 // encodeSentinelID renders id as a run of PUA digit runes for embedding
 // inside a sentinel. Each rune is exactly one cell wide (like an ASCII
@@ -209,17 +209,20 @@ func stripLogbookBlocks(body string) string {
 	var fence graph.FenceState
 	inLogbook := false
 	for i, line := range lines {
-		switch {
-		case fence.Step(line):
-			out.WriteString(line)
-		case !inLogbook && logbookStartRe.MatchString(line):
-			inLogbook = true
-			continue // drop the :LOGBOOK: line; no newline either
-		case inLogbook:
+		if inLogbook {
+			// Everything inside the block is dropped without touching
+			// fence state — a ``` line here is metadata garbage.
 			if logbookEndRe.MatchString(line) {
 				inLogbook = false
 			}
 			continue
+		}
+		switch {
+		case fence.Step(line):
+			out.WriteString(line)
+		case logbookStartRe.MatchString(line):
+			inLogbook = true
+			continue // drop the :LOGBOOK: line; no newline either
 		default:
 			out.WriteString(line)
 		}
@@ -241,17 +244,20 @@ func stripQueryAndEmbedBlocks(body string) string {
 	var fence graph.FenceState
 	inBlock := false
 	for i, line := range lines {
-		switch {
-		case fence.Step(line):
-			out.WriteString(line)
-		case !inBlock && queryOrEmbedRe.MatchString(line):
-			inBlock = true
-			continue // drop the opening line
-		case inBlock:
+		if inBlock {
+			// Everything inside the block is dropped without touching
+			// fence state — a ``` line here is metadata garbage.
 			if strings.TrimSpace(line) == "}}" {
 				inBlock = false
 			}
 			continue
+		}
+		switch {
+		case fence.Step(line):
+			out.WriteString(line)
+		case queryOrEmbedRe.MatchString(line):
+			inBlock = true
+			continue // drop the opening line
 		default:
 			out.WriteString(line)
 		}
@@ -308,15 +314,12 @@ func replaceWikiLinksOutsideInlineCode(line string, subs *[]linkSubst) string {
 		parts[i] = wikiLinkRe.ReplaceAllStringFunc(part, func(match string) string {
 			m := wikiLinkRe.FindStringSubmatch(match)
 			target := m[1]
-			// Strip optional #block fragment: [[Alpha#summary]] -> "Alpha".
-			if j := strings.IndexByte(target, '#'); j >= 0 {
-				target = target[:j]
-			}
 			if target == "" {
-				// No page name (e.g. [[#anchor]] or [[#]]) — leave the
-				// literal text in the output so the view layer doesn't see
-				// a phantom link with an empty target. Mirrors the empty-
-				// target guard in internal/graph/parse.go.
+				// Defensive no-op: wikiLinkRe's capture is [^\]\|]+ (always ≥1
+				// char) and render does not TrimSpace, so target is never empty
+				// here — unlike internal/graph/parse.go, which trims m[1] and
+				// genuinely relies on its empty-target guard. Kept only to guard
+				// against future regex changes.
 				return match
 			}
 			display := target
@@ -370,24 +373,37 @@ func hideMarkdownLinkURLs(body string) string {
 }
 
 // hideMarkdownLinkURLsOutsideInlineCode applies the [text](url) -> [text](#)
-// rewrite to the non-inline-code segments of a single line. Backtick-delimited
-// spans (odd-indexed after the split) are literal and left untouched, mirroring
-// replaceWikiLinksOutsideInlineCode.
+// rewrite to a single line. A match FULLY inside a backtick code span is a
+// literal syntax example and stays untouched; a link whose text merely
+// contains a code span is still a real link and gets rewritten. Uses
+// graph.InlineCodeSpans so render and parse agree on what counts as code.
 func hideMarkdownLinkURLsOutsideInlineCode(line string) string {
-	parts := strings.Split(line, "`")
-	for i, part := range parts {
-		if i%2 == 1 {
-			continue // inside backticks — literal
-		}
-		parts[i] = markdownLinkRe.ReplaceAllStringFunc(part, func(match string) string {
-			m := markdownLinkRe.FindStringSubmatch(match)
-			if m[1] == "!" {
-				return match // image — leave Glamour's default rendering
-			}
-			return "[" + m[2] + "](#)"
-		})
+	locs := markdownLinkRe.FindAllStringSubmatchIndex(line, -1)
+	if locs == nil {
+		return line
 	}
-	return strings.Join(parts, "`")
+	code := graph.InlineCodeSpans(line)
+	inCode := func(start, end int) bool {
+		for _, s := range code {
+			if start >= s.Start && end <= s.End {
+				return true
+			}
+		}
+		return false
+	}
+	var b strings.Builder
+	last := 0
+	for _, m := range locs {
+		start, end := m[0], m[1]
+		if inCode(start, end) || line[m[2]:m[3]] == "!" {
+			continue // literal example, or an image — leave verbatim
+		}
+		b.WriteString(line[last:start])
+		b.WriteString("[" + line[m[4]:m[5]] + "](#)")
+		last = end
+	}
+	b.WriteString(line[last:])
+	return b.String()
 }
 
 // preprocessTaskMarkers replaces leading TODO/DOING/etc. markers on non-fenced

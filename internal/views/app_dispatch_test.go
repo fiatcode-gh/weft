@@ -9,30 +9,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
 )
-
-// withJournalCleanup schedules a removal of graphPath/journals/<file>.md
-// if the file did not exist when this helper is called. Used by tests
-// that drive the `.` (today's journal) handler on a missing date — the
-// handler now creates the file as a side effect, and we don't want that
-// to leak into other tests that read the fixture. Returns the resolved
-// journal path so callers can reference it.
-func withJournalCleanup(t *testing.T, graphPath, pageName string) string {
-	t.Helper()
-	path := filepath.Join(graphPath, "journals", graph.FilenameFromPageName(pageName))
-	existed := true
-	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-		existed = false
-	}
-	t.Cleanup(func() {
-		if !existed {
-			_ = os.Remove(path)
-		}
-	})
-	return path
-}
 
 func TestPageEdgeKeys(t *testing.T) {
 	a := bootApp(t)
@@ -288,12 +265,6 @@ func TestPeriodJumpsToTodayJournal(t *testing.T) {
 func TestPeriodOnAbsentTodayCreatesAndNavigates(t *testing.T) {
 	// 2026-06-15 has no journal in the fixture. `.` now creates the
 	// file and navigates, instead of hinting "no journal for <date>".
-	abs, err := filepath.Abs("../../testdata/fixture-graph")
-	if err != nil {
-		t.Fatal(err)
-	}
-	withJournalCleanup(t, abs, "2026-06-15")
-
 	a := bootAppAt(t, time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC))
 	a.navigate("Alpha")
 
@@ -305,8 +276,9 @@ func TestPeriodOnAbsentTodayCreatesAndNavigates(t *testing.T) {
 	if _, ok := a.idx.ByName["2026-06-15"]; !ok {
 		t.Errorf("after . on absent today: 2026-06-15 should be in idx.ByName")
 	}
-	// The newly created file should be on disk (and removed by cleanup).
-	path := filepath.Join(abs, "journals", "2026_06_15.md")
+	// The newly created file should be on disk in the throwaway clone
+	// (t.TempDir() cleans it up automatically — no manual cleanup needed).
+	path := filepath.Join(a.graphPath, "journals", "2026_06_15.md")
 	if _, err := os.Stat(path); err != nil {
 		t.Errorf("after . on absent today: journal file should exist; stat err=%v", err)
 	}
@@ -589,5 +561,111 @@ func TestSaveFailureKeepsEditorAndBuffer(t *testing.T) {
 	}
 	if a.editor.saved {
 		t.Error("editor reports saved=true after a failed save")
+	}
+}
+
+// TestEditCurrentRecreatesDeletedFile pins the defensive branch in
+// editCurrent that handles a page whose file vanished between BuildIndex
+// and the `e` keypress (e.g. an external tool deleted it mid-session): the
+// stub is recreated on disk before the editor is handed off, rather than
+// failing or handing the editor a nonexistent path.
+func TestEditCurrentRecreatesDeletedFile(t *testing.T) {
+	// arrange — indexed page whose file vanished before E
+	quietTerm(t)
+	dir, _ := writeGraph(t, map[string]string{"pages/A.md": "- x\n"})
+	a := New(dir, "test")
+	a.Update(a.Init()())
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	a.navigate("A")
+	fake, err := filepath.Abs("../../testdata/fake-editor.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("VISUAL", fake)
+	path := filepath.Join(dir, "pages", "A.md")
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+
+	// act — editCurrent must recreate the stub before handing off
+	cmd := a.editCurrent()
+
+	// assert
+	if cmd == nil {
+		t.Fatalf("editCurrent returned nil cmd (hint: %q)", a.hint)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("deleted file was not recreated: %v", err)
+	}
+}
+
+// TestEditCurrentSurfacesEditorResolutionFailure pins the defensive branch
+// in editCurrent where edit.Resolve fails to find any usable editor: a
+// "cannot resolve editor" hint is surfaced instead of a panic or a silently
+// dropped keypress.
+//
+// edit.Resolve falls back to the absolute path /usr/bin/vi, and
+// exec.LookPath resolves absolute paths by stat-ing them directly —
+// it does not consult $PATH for those, so clearing $PATH cannot hide
+// /usr/bin/vi from the fallback. On a machine that has vi installed at
+// that exact path, resolution failure cannot be forced portably, so this
+// test is skipped there rather than faked.
+func TestEditCurrentSurfacesEditorResolutionFailure(t *testing.T) {
+	if _, err := os.Stat("/usr/bin/vi"); err == nil {
+		t.Skip("/usr/bin/vi exists on this machine; edit.Resolve's fallback " +
+			"will always succeed via LookPath regardless of $PATH, so " +
+			"resolution failure cannot be forced portably here")
+	}
+
+	// arrange — no resolvable editor anywhere in the chain
+	quietTerm(t)
+	dir, _ := writeGraph(t, map[string]string{"pages/A.md": "- x\n"})
+	a := New(dir, "test")
+	a.Update(a.Init()())
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	a.navigate("A")
+	t.Setenv("VISUAL", "/nonexistent/editor-binary")
+	t.Setenv("EDITOR", "/nonexistent/editor-binary")
+	t.Setenv("PATH", t.TempDir()) // hides /usr/bin/vi from LookPath's fallback
+
+	// act
+	_ = a.editCurrent()
+
+	// assert — setHint stamps a.hint synchronously; the cmd it returns is
+	// only the expiry tick (executing it would sleep hintTTL and then
+	// CLEAR the hint under assertion)
+	if !strings.Contains(a.hint, "cannot resolve editor") {
+		t.Fatalf("hint = %q, want editor-resolution failure", a.hint)
+	}
+}
+
+// TestEditorExitUnchangedMtimeSkipsReindex pins the index-invalidation gate
+// in the editorExitedMsg handler: when the editor exits without having
+// touched the file (mtime unchanged from the snapshot taken before
+// hand-off), only the sync-status probe runs — no reindex is scheduled.
+// indexGen is bumped synchronously inside buildIndexCmd, so it's the
+// observable for "was a reindex scheduled".
+func TestEditorExitUnchangedMtimeSkipsReindex(t *testing.T) {
+	// arrange
+	quietTerm(t)
+	dir, _ := writeGraph(t, map[string]string{"pages/A.md": "- x\n"})
+	a := New(dir, "test")
+	a.Update(a.Init()())
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	a.navigate("A")
+	path := filepath.Join(dir, "pages", "A.md")
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	genBefore := a.indexGen
+
+	// act — editor exited without touching the file
+	a.Update(editorExitedMsg{path: path, t0: info.ModTime()})
+
+	// assert — no reindex was scheduled (indexGen is bumped
+	// synchronously inside buildIndexCmd, so it's the observable)
+	if a.indexGen != genBefore {
+		t.Fatal("unchanged-mtime editor exit triggered a reindex")
 	}
 }

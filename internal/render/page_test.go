@@ -122,6 +122,26 @@ func TestRenderStripsLogbookBlocks(t *testing.T) {
 	}
 }
 
+func TestLogbookBlockContainingFenceLineIsFullyStripped(t *testing.T) {
+	// arrange — a fence delimiter inside :LOGBOOK: metadata must not
+	// flip fence state for the rest of the page
+	body := "- item\n  :LOGBOOK:\n  ```\n  :END:\n- [[After]]\n"
+
+	// act
+	res, err := Render(body, 80)
+
+	// assert
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(res.Styled, ":END:") {
+		t.Fatal(":LOGBOOK: block leaked into the rendered page")
+	}
+	if len(res.Links) != 1 || res.Links[0].Target != "After" {
+		t.Fatalf("links = %+v, want [[After]]", res.Links)
+	}
+}
+
 func TestRenderWikiLinkWrapsAtRightMargin(t *testing.T) {
 	// arrange — a line whose wiki-link sits near the right margin: the link's
 	// rendered display is much wider than the raw `<id>` sentinel, so without
@@ -179,6 +199,8 @@ func TestRenderHangingIndentOnWrappedBullets(t *testing.T) {
 }
 
 func TestRenderPageBlockRefBecomesLink(t *testing.T) {
+	// Logseq has no [[page#fragment]] syntax and allows "#" in page names,
+	// so "#" and everything after it must stay part of the target.
 	// arrange / act
 	out := mustRender(t, "see [[Alpha#summary]] for the upshot\n", 80)
 
@@ -186,8 +208,8 @@ func TestRenderPageBlockRefBecomesLink(t *testing.T) {
 	if len(out.Links) != 1 {
 		t.Fatalf("want 1 link, got %d (%+v)", len(out.Links), out.Links)
 	}
-	if out.Links[0].Target != "Alpha" {
-		t.Errorf("target = %q, want Alpha", out.Links[0].Target)
+	if out.Links[0].Target != "Alpha#summary" {
+		t.Errorf("target = %q, want Alpha#summary", out.Links[0].Target)
 	}
 }
 
@@ -199,21 +221,37 @@ func TestRenderPageBlockRefWithAlias(t *testing.T) {
 	if len(out.Links) != 1 {
 		t.Fatalf("want 1 link, got %d (%+v)", len(out.Links), out.Links)
 	}
-	if out.Links[0].Target != "Alpha" {
-		t.Errorf("target = %q, want Alpha", out.Links[0].Target)
+	if out.Links[0].Target != "Alpha#summary" {
+		t.Errorf("target = %q, want Alpha#summary", out.Links[0].Target)
 	}
 	if out.Links[0].Display != "the summary" {
 		t.Errorf("display = %q, want 'the summary'", out.Links[0].Display)
 	}
 }
 
-func TestRenderPageEmptyBlockFragmentIsNotALink(t *testing.T) {
+func TestRenderLinkTargetKeepsHash(t *testing.T) {
+	// arrange / act
+	res := mustRender(t, "- [[C#]]\n", 80)
+
+	// assert
+	if len(res.Links) != 1 || res.Links[0].Target != "C#" {
+		t.Fatalf("links = %+v, want target C#", res.Links)
+	}
+}
+
+func TestRenderPageHashOnlyTargetIsADanglingLink(t *testing.T) {
+	// [[#summary]] has no [[page#fragment]] meaning in Logseq, so it is now
+	// a normal (likely dangling) link named "#summary" rather than being
+	// treated as an empty target and left as literal text.
 	// arrange / act
 	out := mustRender(t, "anchor: [[#summary]] here\n", 80)
 
 	// assert
-	if len(out.Links) != 0 {
-		t.Errorf("want 0 links for [[#anchor]], got %d (%+v)", len(out.Links), out.Links)
+	if len(out.Links) != 1 {
+		t.Fatalf("want 1 link for [[#summary]], got %d (%+v)", len(out.Links), out.Links)
+	}
+	if out.Links[0].Target != "#summary" {
+		t.Errorf("target = %q, want #summary", out.Links[0].Target)
 	}
 }
 
@@ -347,6 +385,36 @@ func TestHideMarkdownLinkURLsBalancedParens(t *testing.T) {
 	want := "see [Go](#) now\n"
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestHideMarkdownLinkURLsWithCodeSpanInText(t *testing.T) {
+	// arrange — the link text contains a code span, but the whole thing is
+	// still a real link: splitting the line on backticks first would sever
+	// it and leave the URL exposed.
+	in := "see [the `go` docs](https://go.dev/doc) now\n"
+	want := "see [the `go` docs](#) now\n"
+
+	// act
+	got := hideMarkdownLinkURLs(in)
+
+	// assert
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestHideMarkdownLinkURLsLeavesLiteralExampleInCode(t *testing.T) {
+	// arrange — a markdown-link-shaped example fully inside a code span is
+	// literal text and must stay untouched.
+	in := "type `[x](http://y)` literally\n"
+
+	// act
+	got := hideMarkdownLinkURLs(in)
+
+	// assert
+	if got != in {
+		t.Fatalf("literal example inside inline code was rewritten: %q", got)
 	}
 }
 

@@ -70,6 +70,11 @@ func BuildIndex(graphPath string) (*Index, error) {
 			if existing.Name != name {
 				fmt.Fprintf(os.Stderr, "weft: ambiguous page name %q vs %q (case-insensitive); [[%s]] resolves to %q\n",
 					name, existing.Name, fold, existing.Name)
+				// The folded key stays first-wins, but an exact-name lookup
+				// has no ambiguity — it must still find this page.
+				if _, dup := idx.ByName[name]; !dup {
+					idx.ByName[name] = &idx.Pages[i]
+				}
 			}
 			continue
 		}

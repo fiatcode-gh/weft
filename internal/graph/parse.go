@@ -70,10 +70,6 @@ func appendWikiLinks(out []LinkHit, line string, lineNo int) []LinkHit {
 		}
 		for _, m := range wikiLinkRe.FindAllStringSubmatch(part, -1) {
 			raw := strings.TrimSpace(m[1])
-			// Strip optional #block fragment: [[Alpha#summary]] -> "Alpha".
-			if j := strings.IndexByte(raw, '#'); j >= 0 {
-				raw = raw[:j]
-			}
 			if raw == "" {
 				continue
 			}

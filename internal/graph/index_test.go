@@ -363,17 +363,54 @@ func TestBuildIndexFoldCollisionIsDeterministicAndWarns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, q := range []string{"alpha", "ALPHA", "Alpha"} {
+	// "alpha" is an exact match for the second page and must resolve to it
+	// (not the fold-collision winner); "ALPHA" has no exact match, so it
+	// falls back to the deterministic first-walked folded entry, "Alpha".
+	for q, want := range map[string]string{"alpha": "alpha", "ALPHA": "Alpha", "Alpha": "Alpha"} {
 		got, ok := idx.Resolve(q)
 		if !ok {
 			t.Fatalf("Resolve(%q) = (_, false), want (_, true)", q)
 		}
-		if got.Name != "Alpha" {
-			t.Errorf("Resolve(%q).Name = %q, want deterministic %q (first in readdir order)", q, got.Name, "Alpha")
+		if got.Name != want {
+			t.Errorf("Resolve(%q).Name = %q, want %q", q, got.Name, want)
 		}
 	}
 	if !strings.Contains(string(out), "ambiguous page name") {
 		t.Errorf("expected an ambiguous-page-name warning on stderr, got:\n%s", out)
+	}
+}
+
+func TestFoldCollisionKeepsExactNameResolution(t *testing.T) {
+	// arrange — two pages differing only by case
+	dir := t.TempDir()
+	pages := filepath.Join(dir, "pages")
+	if err := os.MkdirAll(pages, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"Alpha.md", "alpha.md"} {
+		if err := os.WriteFile(filepath.Join(pages, n), []byte("- x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// act
+	idx, err := BuildIndex(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// assert — exact lookups win for BOTH; the ambiguous folded lookup
+	// stays deterministic (first-walked: ReadDir is filename-sorted,
+	// "Alpha.md" < "alpha.md" in ASCII)
+	for name, want := range map[string]string{
+		"Alpha": "Alpha",
+		"alpha": "alpha",
+		"ALPHA": "Alpha",
+	} {
+		meta, ok := idx.Resolve(name)
+		if !ok || meta.Name != want {
+			t.Errorf("Resolve(%q) = %v/%v, want %q", name, meta, ok, want)
+		}
 	}
 }
 

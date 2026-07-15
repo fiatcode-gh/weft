@@ -32,6 +32,26 @@ func activeKind(a *App) string {
 	}
 }
 
+func TestCtrlCQuitsWithOverlayOpen(t *testing.T) {
+	// arrange — open the picker overlay
+	a := bootApp(t)
+	a.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
+	if a.active == nil {
+		t.Fatal("precondition: overlay did not open")
+	}
+
+	// act
+	_, cmd := a.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+
+	// assert
+	if cmd == nil {
+		t.Fatal("ctrl+c with overlay open returned no cmd")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("ctrl+c with overlay open did not quit (got %T)", cmd())
+	}
+}
+
 func TestAppOpensAndCancelsPicker(t *testing.T) {
 	a := bootApp(t)
 	if activeKind(a) != "page" {

@@ -66,7 +66,7 @@ func firstUnlinkedOccurrence(line, target string) (search.Span, bool) {
 		return search.Span{}, false
 	}
 	links := wikiLinkRe.FindAllStringIndex(line, -1)
-	code := inlineCodeSpans(line)
+	code := InlineCodeSpans(line)
 	for _, loc := range locs {
 		start, end := loc[0], loc[1]
 		if !wholeWordAt(line, start, end) {

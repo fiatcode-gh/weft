@@ -25,10 +25,7 @@ func TestTodayJournalNameUsesNowFunc(t *testing.T) {
 func bootAppAt(t *testing.T, now time.Time) *App {
 	t.Helper()
 	quietTerm(t)
-	abs, err := filepath.Abs("../../testdata/fixture-graph")
-	if err != nil {
-		t.Fatal(err)
-	}
+	abs := cloneFixtureGraph(t)
 	a := New(abs, "test")
 	a.nowFunc = func() time.Time { return now }
 	cmd := a.Init()
@@ -51,10 +48,7 @@ func bootAppAt(t *testing.T, now time.Time) *App {
 func bootApp(t *testing.T) *App {
 	t.Helper()
 	quietTerm(t)
-	abs, err := filepath.Abs("../../testdata/fixture-graph")
-	if err != nil {
-		t.Fatal(err)
-	}
+	abs := cloneFixtureGraph(t)
 	a := New(abs, "test")
 	// Drive the deferred index build synchronously.
 	cmd := a.Init()
@@ -255,6 +249,83 @@ func TestAppLinkifyMentionGoneShowsError(t *testing.T) {
 	got, _ := os.ReadFile(notePath)
 	if string(got) != "- nothing here now\n" {
 		t.Errorf("file must be untouched when the mention is gone; got %q", string(got))
+	}
+}
+
+// drainCmds delivers the indexLoadedMsg produced by cmd — running any
+// tea.Batch children concurrently via drainFor — directly into a.Update, the
+// same way the real Bubble Tea runtime feeds an async result back into the
+// model. Reuses drainFor's batch-draining idiom rather than reimplementing it.
+func drainCmds(t *testing.T, a *App, cmd tea.Cmd) {
+	t.Helper()
+	msg := drainFor[indexLoadedMsg](t, cmd)
+	a.Update(msg)
+}
+
+// TestReindexPreservesScrollPosition pins the fix for a real regression: R
+// rebuilds PageView from scratch to pick up the freshly reindexed links/todos,
+// but a from-scratch NewPageView starts at offset 0 — silently discarding the
+// user's scroll position on every reindex.
+func TestReindexPreservesScrollPosition(t *testing.T) {
+	// arrange — long page, scrolled deep
+	quietTerm(t)
+	dir, _ := writeGraph(t, map[string]string{
+		"pages/Long.md": strings.Repeat("- line\n", 80),
+	})
+	a := New(dir, "test")
+	a.Update(a.Init()())
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 12})
+	a.navigate("Long")
+	for i := 0; i < 30; i++ {
+		a.page.LineDown()
+	}
+	want := a.page.Offset()
+	if want == 0 {
+		t.Fatal("precondition: page not scrolled")
+	}
+
+	// act — R reindex, driven synchronously
+	_, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("R")})
+	drainCmds(t, a, cmd) // deliver the batch's indexLoadedMsg; reuse/adapt the package's existing cmd-draining idiom
+
+	// assert
+	if got := a.page.Offset(); got != want {
+		t.Fatalf("offset after R = %d, want %d", got, want)
+	}
+}
+
+// TestEditorDiscardExitPreservesScrollPosition pins the same regression on the
+// editor discard-exit path: pressing e then a clean esc (no unsaved changes,
+// no confirm) rebuilds PageView for the same page and must keep the reader's
+// place instead of resetting to the top.
+func TestEditorDiscardExitPreservesScrollPosition(t *testing.T) {
+	// arrange — same long page, scrolled, then e → esc (clean buffer)
+	quietTerm(t)
+	dir, _ := writeGraph(t, map[string]string{
+		"pages/Long.md": strings.Repeat("- line\n", 80),
+	})
+	a := New(dir, "test")
+	a.Update(a.Init()())
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 12})
+	a.navigate("Long")
+	for i := 0; i < 30; i++ {
+		a.page.LineDown()
+	}
+	want := a.page.Offset()
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	if a.editor == nil {
+		t.Fatal("precondition: editor did not open")
+	}
+
+	// act — clean esc discards without confirm and rebuilds the page view
+	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+
+	// assert
+	if a.editor != nil {
+		t.Fatal("editor did not close on clean esc")
+	}
+	if got := a.page.Offset(); got != want {
+		t.Fatalf("offset after e→esc = %d, want %d", got, want)
 	}
 }
 

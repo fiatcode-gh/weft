@@ -69,13 +69,13 @@ func TestInlineCodeSpansUnclosedBacktickRunsToEndOfLine(t *testing.T) {
 	// render's replaceWikiLinksOutsideInlineCode both split on backticks and
 	// treat every odd-indexed segment as inline code, including a trailing
 	// segment with no closing backtick (strings.Split("a `code", "`") ==
-	// ["a ", "code"], and "code" sits at odd index 1). inlineCodeSpans must
+	// ["a ", "code"], and "code" sits at odd index 1). InlineCodeSpans must
 	// mirror that exactly, so an unclosed backtick still hides the rest of
 	// the line from unlinked-ref detection.
 	line := "a `code"
 
 	// act
-	spans := inlineCodeSpans(line)
+	spans := InlineCodeSpans(line)
 
 	// assert
 	if len(spans) != 1 {

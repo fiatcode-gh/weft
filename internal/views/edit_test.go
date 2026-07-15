@@ -65,11 +65,7 @@ func TestEditorExitedMsg_NoReindexOnNoChange(t *testing.T) {
 	// handler takes the "unchanged" branch. Stub the probe to avoid git.
 	a := bootApp(t)
 	a.statusProbe = func(string) (syncpkg.WorktreeStatus, error) { return syncpkg.WorktreeStatus{}, nil }
-	abs, err := filepath.Abs("../../testdata/fixture-graph")
-	if err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(abs, "pages", "Alpha.md")
+	path := filepath.Join(a.graphPath, "pages", "Alpha.md")
 	t0, err := os.Stat(path)
 	if err != nil {
 		t.Fatalf("stat Alpha.md: %v", err)
@@ -88,11 +84,7 @@ func TestEditorExitedMsg_NoReindexOnNoChange(t *testing.T) {
 // buildIndexCmd).
 func TestEditorExitedMsg_TriggersReindexOnMtimeChange(t *testing.T) {
 	a := bootApp(t)
-	abs, err := filepath.Abs("../../testdata/fixture-graph")
-	if err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(abs, "pages", "Alpha.md")
+	path := filepath.Join(a.graphPath, "pages", "Alpha.md")
 
 	// Pick a t0 well before the real mtime so the comparison advances.
 	t0 := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)

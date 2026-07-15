@@ -2,7 +2,6 @@ package views
 
 import (
 	"fmt"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -15,10 +14,7 @@ import (
 
 func loadFixture(t *testing.T) *graph.Index {
 	t.Helper()
-	abs, err := filepath.Abs("../../testdata/fixture-graph")
-	if err != nil {
-		t.Fatal(err)
-	}
+	abs := cloneFixtureGraph(t)
 	idx, err := graph.BuildIndex(abs)
 	if err != nil {
 		t.Fatal(err)

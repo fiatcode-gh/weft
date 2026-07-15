@@ -75,6 +75,22 @@ func TestParseJSON(t *testing.T) {
 	}
 }
 
+func TestParseJSONStripsTrailingCR(t *testing.T) {
+	// arrange — rg reports a CRLF file's line with \r\n intact
+	input := []byte(`{"type":"match","data":{"path":{"text":"pages/A.md"},"lines":{"text":"- hit here\r\n"},"line_number":1,"submatches":[{"start":2,"end":5}]}}` + "\n")
+
+	// act
+	hits, err := parseJSON(input)
+
+	// assert
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 1 || hits[0].Context != "- hit here" {
+		t.Fatalf("Context = %q, want trailing CR stripped", hits[0].Context)
+	}
+}
+
 // TestParseJSONSurfacesScannerOverflow guards against silent truncation: a
 // single rg output line longer than the scanner's buffer cap (a pasted log
 // blob inside any note, for instance) must abort with an error, not just

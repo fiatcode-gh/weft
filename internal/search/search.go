@@ -107,7 +107,7 @@ func parseJSON(b []byte) ([]Hit, error) {
 		if env.Type != "match" {
 			continue
 		}
-		ctx := strings.TrimRight(env.Data.Lines.Text, "\n")
+		ctx := strings.TrimRight(env.Data.Lines.Text, "\r\n")
 		// Strip leading whitespace from indented bullets so list rows line
 		// up. Match spans are byte offsets into the *original* line, so we
 		// also shift them by the number of bytes we trimmed.
