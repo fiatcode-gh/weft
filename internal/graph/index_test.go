@@ -30,7 +30,7 @@ func TestBuildIndex(t *testing.T) {
 	}
 
 	// Backlinks: Alpha is linked from Beta and 2026-05-24
-	gotAlpha := pageNamesOfRefs(idx.Backlinks["Alpha"])
+	gotAlpha := pageNamesOfRefs(idx.Backlinks[strings.ToLower("Alpha")])
 	sort.Strings(gotAlpha)
 	wantAlpha := []string{"2026-05-15", "2026-05-24", "Beta", "Hub"}
 	if !equalSlices(gotAlpha, wantAlpha) {
@@ -39,9 +39,9 @@ func TestBuildIndex(t *testing.T) {
 
 	// Lock down Ref.Context (the source line for the backlink).
 	var betaRef *Ref
-	for i, r := range idx.Backlinks["Alpha"] {
+	for i, r := range idx.Backlinks[strings.ToLower("Alpha")] {
 		if r.FromPage == "Beta" {
-			betaRef = &idx.Backlinks["Alpha"][i]
+			betaRef = &idx.Backlinks[strings.ToLower("Alpha")][i]
 			break
 		}
 	}
@@ -57,8 +57,8 @@ func TestBuildIndex(t *testing.T) {
 	}
 
 	// Dangling refs still recorded
-	if len(idx.Backlinks["DoesNotExist"]) != 1 {
-		t.Errorf("dangling backlink to DoesNotExist not recorded: %v", idx.Backlinks["DoesNotExist"])
+	if len(idx.Backlinks[strings.ToLower("DoesNotExist")]) != 1 {
+		t.Errorf("dangling backlink to DoesNotExist not recorded: %v", idx.Backlinks[strings.ToLower("DoesNotExist")])
 	}
 
 	// Fence-internal wiki-links must NOT be extracted. Alpha has
@@ -66,7 +66,7 @@ func TestBuildIndex(t *testing.T) {
 	// If either name surfaces in Backlinks, ExtractWikiLinks lost fence
 	// awareness.
 	for _, name := range []string{"ShouldNotMatch", "NotALink"} {
-		if refs := idx.Backlinks[name]; len(refs) != 0 {
+		if refs := idx.Backlinks[strings.ToLower(name)]; len(refs) != 0 {
 			t.Errorf("%s should not be in Backlinks (fenced); got %v", name, refs)
 		}
 	}
@@ -236,7 +236,7 @@ func TestBacklinkContextIsTheSourceLine(t *testing.T) {
 	idx := buildTempIndex(t, map[string]string{"Src.md": body})
 
 	// act
-	refs := idx.Backlinks["Alpha"]
+	refs := idx.Backlinks[strings.ToLower("Alpha")]
 
 	// assert
 	if len(refs) != 1 {
@@ -295,6 +295,40 @@ func TestLineContextDoesNotPinFileBody(t *testing.T) {
 		t.Fatal("lineContext result aliases the file body backing array — it pins the whole body in memory")
 	}
 	runtime.KeepAlive(body)
+}
+
+func TestBacklinksAreCaseInsensitive(t *testing.T) {
+	// arrange
+	dir := t.TempDir()
+	pages := filepath.Join(dir, "pages")
+	if err := os.MkdirAll(pages, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(pages, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("Alpha.md", "- the target page\n")
+	// The link is written [[ALPHA]] — a case that differs from BOTH the
+	// canonical page name "Alpha" and its lowercase form "alpha". Pre-fix the
+	// write site keyed Backlinks["ALPHA"] verbatim, so the folded lookup
+	// Backlinks["alpha"] missed. The fix folds the write key too.
+	write("Note.md", "- see [[ALPHA]] here\n")
+
+	// act
+	idx, err := BuildIndex(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// assert — lookup by the canonical on-disk name must find the
+	// case-variant link
+	refs := idx.Backlinks[strings.ToLower("Alpha")]
+	if len(refs) != 1 || refs[0].FromPage != "Note" {
+		t.Fatalf("Backlinks[alpha] = %+v, want one ref from Note", refs)
+	}
 }
 
 func TestBuildIndexFoldCollisionIsDeterministicAndWarns(t *testing.T) {

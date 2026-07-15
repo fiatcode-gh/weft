@@ -140,6 +140,30 @@ func TestEnsureFile(t *testing.T) {
 	})
 }
 
+func TestEnsureFileNeverTruncatesExisting(t *testing.T) {
+	// arrange
+	dir := t.TempDir()
+	path := filepath.Join(dir, "journal.md")
+	if err := os.WriteFile(path, []byte("- precious\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// act
+	created, err := EnsureFile(path)
+
+	// assert
+	if err != nil || created {
+		t.Fatalf("EnsureFile = (%v, %v), want (false, nil)", created, err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "- precious\n" {
+		t.Fatalf("existing content changed: %q", got)
+	}
+}
+
 // seedFile writes an existing file at dir/name with the given content and an
 // explicit mode (chmod is umask-proof, unlike the WriteFile perm arg). It is
 // the shared arrange step for the overwrite-path WriteFile tests.

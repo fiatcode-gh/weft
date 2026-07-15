@@ -1,7 +1,6 @@
 package render
 
 import (
-	"fmt"
 	"os"
 	"regexp"
 	"strconv"
@@ -13,6 +12,8 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
 )
 
 // Link is one wiki-link occurrence inside the styled output.
@@ -45,8 +46,7 @@ type Result struct {
 
 var (
 	wikiLinkRe     = regexp.MustCompile(`\[\[([^\]\|]+)(?:\|([^\]]*))?\]\]`)
-	markdownLinkRe = regexp.MustCompile(`(!?)\[([^\]]*)\]\(([^)]*)\)`)
-	fenceRe        = regexp.MustCompile("^\\s*```")
+	markdownLinkRe = regexp.MustCompile(`(!?)\[([^\]]*)\]\(((?:[^()]|\([^()]*\))*)\)`)
 	taskMarkerRe   = regexp.MustCompile(`^(\s*-\s+)(TODO|DOING|LATER|WAITING|DONE|CANCELED|CANCELLED|NOW)\b`)
 	logbookStartRe = regexp.MustCompile(`(?i)^\s*:LOGBOOK:\s*$`)
 	logbookEndRe   = regexp.MustCompile(`(?i)^\s*:END:\s*$`)
@@ -103,11 +103,47 @@ const (
 // group 3 (m[6:7]) captures the emphasis id.
 // Handling all three in one ordered pass keeps recorded byte offsets aligned
 // with the bytes actually emitted.
+//
+// The id is matched as a run of PUA digit runes (U+E010–U+E019), not ASCII
+// `\d+`: an ASCII-digit id would be reachable by a numeric emphasis/search
+// term, since the PUA delimiters on either side act as word boundaries. See
+// encodeSentinelID/decodeSentinelID.
 var sentinelRe = regexp.MustCompile(
-	wikiSentinelStart + `(\d+)` + wikiSentinelEnd + `(?:` + wikiSentinelPad + `)*` +
-		`|` + taskSentinelStart + `(\d+)` + taskSentinelEnd +
-		`|` + emphSentinelStart + `(\d+)` + emphSentinelEnd + `(?:` + emphSentinelPad + `)*`,
+	wikiSentinelStart + `([\x{E010}-\x{E019}]+)` + wikiSentinelEnd + `(?:` + wikiSentinelPad + `)*` +
+		`|` + taskSentinelStart + `([\x{E010}-\x{E019}]+)` + taskSentinelEnd +
+		`|` + emphSentinelStart + `([\x{E010}-\x{E019}]+)` + emphSentinelEnd + `(?:` + emphSentinelPad + `)*`,
 )
+
+// sentinelDigit0 is the first of ten PUA runes (U+E010..U+E019) that encode
+// the decimal digits of sentinel ids. Ids must not be ASCII digits: a
+// numeric emphasis term would match inside a sentinel (the PUA delimiters
+// are word boundaries) and corrupt it.
+const sentinelDigit0 = ''
+
+// encodeSentinelID renders id as a run of PUA digit runes for embedding
+// inside a sentinel. Each rune is exactly one cell wide (like an ASCII
+// digit), so the padding/word-wrap width math elsewhere is unaffected.
+func encodeSentinelID(id int) string {
+	var b strings.Builder
+	for _, r := range strconv.Itoa(id) {
+		b.WriteRune(sentinelDigit0 + (r - '0'))
+	}
+	return b.String()
+}
+
+// decodeSentinelID is the inverse of encodeSentinelID. It reports false if s
+// contains any rune outside the PUA digit range.
+func decodeSentinelID(s string) (int, bool) {
+	var b strings.Builder
+	for _, r := range s {
+		if r < sentinelDigit0 || r > sentinelDigit0+9 {
+			return 0, false
+		}
+		b.WriteRune('0' + (r - sentinelDigit0))
+	}
+	id, err := strconv.Atoi(b.String())
+	return id, err == nil
+}
 
 var (
 	rendererMu    sync.Mutex
@@ -170,14 +206,11 @@ func stripLogbookBlocks(body string) string {
 	var out strings.Builder
 	out.Grow(len(body))
 	lines := strings.Split(body, "\n")
-	inFence := false
+	var fence graph.FenceState
 	inLogbook := false
 	for i, line := range lines {
 		switch {
-		case fenceRe.MatchString(line):
-			inFence = !inFence
-			out.WriteString(line)
-		case inFence:
+		case fence.Step(line):
 			out.WriteString(line)
 		case !inLogbook && logbookStartRe.MatchString(line):
 			inLogbook = true
@@ -205,14 +238,11 @@ func stripQueryAndEmbedBlocks(body string) string {
 	var out strings.Builder
 	out.Grow(len(body))
 	lines := strings.Split(body, "\n")
-	inFence := false
+	var fence graph.FenceState
 	inBlock := false
 	for i, line := range lines {
 		switch {
-		case fenceRe.MatchString(line):
-			inFence = !inFence
-			out.WriteString(line)
-		case inFence:
+		case fence.Step(line):
 			out.WriteString(line)
 		case !inBlock && queryOrEmbedRe.MatchString(line):
 			inBlock = true
@@ -224,6 +254,30 @@ func stripQueryAndEmbedBlocks(body string) string {
 			continue
 		default:
 			out.WriteString(line)
+		}
+		if i < len(lines)-1 {
+			out.WriteByte('\n')
+		}
+	}
+	return out.String()
+}
+
+// mapLinesOutsideFences rewrites body line by line: lines inside (or
+// delimiting) a fenced code block pass through verbatim; every other line
+// goes through f. The shared walker keeps the fence-detection logic in one
+// place for all the preprocessing passes that transform lines in place
+// (as opposed to stripLogbookBlocks/stripQueryAndEmbedBlocks, which drop
+// lines and so don't fit this shape).
+func mapLinesOutsideFences(body string, f func(line string) string) string {
+	var out strings.Builder
+	out.Grow(len(body))
+	lines := strings.Split(body, "\n")
+	var fence graph.FenceState
+	for i, line := range lines {
+		if fence.Step(line) {
+			out.WriteString(line)
+		} else {
+			out.WriteString(f(line))
 		}
 		if i < len(lines)-1 {
 			out.WriteByte('\n')
@@ -271,7 +325,7 @@ func replaceWikiLinksOutsideInlineCode(line string, subs *[]linkSubst) string {
 			}
 			id := len(*subs)
 			*subs = append(*subs, linkSubst{target: target, display: display})
-			core := fmt.Sprintf("%s%d%s", wikiSentinelStart, id, wikiSentinelEnd)
+			core := wikiSentinelStart + encodeSentinelID(id) + wikiSentinelEnd
 			// Pad sentinel to the rendered link's display width so Glamour's
 			// word-wrap reserves enough columns. Otherwise a short sentinel
 			// (e.g. <id 0>) at the end of a line lets Glamour fit it within
@@ -295,25 +349,10 @@ func replaceWikiLinksOutsideInlineCode(line string, subs *[]linkSubst) string {
 // brackets — which silently breaks any regex that requires a contiguous "[[".
 func preprocessWikiLinks(body string) (string, []linkSubst) {
 	var subs []linkSubst
-	var out strings.Builder
-	out.Grow(len(body))
-	inFence := false
-	lines := strings.Split(body, "\n")
-	for i, line := range lines {
-		switch {
-		case fenceRe.MatchString(line):
-			inFence = !inFence
-			out.WriteString(line)
-		case inFence:
-			out.WriteString(line)
-		default:
-			out.WriteString(replaceWikiLinksOutsideInlineCode(line, &subs))
-		}
-		if i < len(lines)-1 {
-			out.WriteByte('\n')
-		}
-	}
-	return out.String(), subs
+	body = mapLinesOutsideFences(body, func(line string) string {
+		return replaceWikiLinksOutsideInlineCode(line, &subs)
+	})
+	return body, subs
 }
 
 // hideMarkdownLinkURLs rewrites the URL of every inline markdown link
@@ -327,25 +366,7 @@ func preprocessWikiLinks(body string) (string, []linkSubst) {
 // read view hides it. Runs on the raw body before wiki-link/task preprocessing;
 // the pattern never matches [[wiki links]] or the sentinels those produce.
 func hideMarkdownLinkURLs(body string) string {
-	var out strings.Builder
-	out.Grow(len(body))
-	inFence := false
-	lines := strings.Split(body, "\n")
-	for i, line := range lines {
-		switch {
-		case fenceRe.MatchString(line):
-			inFence = !inFence
-			out.WriteString(line)
-		case inFence:
-			out.WriteString(line)
-		default:
-			out.WriteString(hideMarkdownLinkURLsOutsideInlineCode(line))
-		}
-		if i < len(lines)-1 {
-			out.WriteByte('\n')
-		}
-	}
-	return out.String()
+	return mapLinesOutsideFences(body, hideMarkdownLinkURLsOutsideInlineCode)
 }
 
 // hideMarkdownLinkURLsOutsideInlineCode applies the [text](url) -> [text](#)
@@ -374,44 +395,27 @@ func hideMarkdownLinkURLsOutsideInlineCode(line string) string {
 // marker text indexed by sentinel id.
 func preprocessTaskMarkers(body string) (string, []taskInfo) {
 	var markers []taskInfo
-	var out strings.Builder
-	out.Grow(len(body))
-	inFence := false
-	lines := strings.Split(body, "\n")
-	for i, line := range lines {
-		switch {
-		case fenceRe.MatchString(line):
-			inFence = !inFence
-			out.WriteString(line)
-		case inFence:
-			out.WriteString(line)
-		default:
-			if m := taskMarkerRe.FindStringSubmatch(line); m != nil {
-				prefix := m[1]
-				marker := m[2]
-				id := len(markers)
-				rest := line[len(prefix)+len(marker):]
-				// "open" mirrors graph.ExtractTodos: an open marker followed by
-				// whitespace and then non-empty text. The leading-whitespace
-				// check matters because taskMarkerRe ends the marker at a \b
-				// boundary (so it also matches "- TODO: x"), whereas graph
-				// requires "\s+" after the marker — without this guard the two
-				// disagree and the deep-link ordinal misaligns.
-				open := openTaskMarkers[marker] && len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t') && strings.TrimSpace(rest) != ""
-				markers = append(markers, taskInfo{marker: marker, open: open})
-				sentinel := fmt.Sprintf("%s%d%s", taskSentinelStart, id, taskSentinelEnd)
-				out.WriteString(prefix)
-				out.WriteString(sentinel)
-				out.WriteString(rest)
-			} else {
-				out.WriteString(line)
-			}
+	body = mapLinesOutsideFences(body, func(line string) string {
+		m := taskMarkerRe.FindStringSubmatch(line)
+		if m == nil {
+			return line
 		}
-		if i < len(lines)-1 {
-			out.WriteByte('\n')
-		}
-	}
-	return out.String(), markers
+		prefix := m[1]
+		marker := m[2]
+		id := len(markers)
+		rest := line[len(prefix)+len(marker):]
+		// "open" mirrors graph.ExtractTodos: an open marker followed by
+		// whitespace and then non-empty text. The leading-whitespace
+		// check matters because taskMarkerRe ends the marker at a \b
+		// boundary (so it also matches "- TODO: x"), whereas graph
+		// requires "\s+" after the marker — without this guard the two
+		// disagree and the deep-link ordinal misaligns.
+		open := openTaskMarkers[marker] && len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t') && strings.TrimSpace(rest) != ""
+		markers = append(markers, taskInfo{marker: marker, open: open})
+		sentinel := taskSentinelStart + encodeSentinelID(id) + taskSentinelEnd
+		return prefix + sentinel + rest
+	})
+	return body, markers
 }
 
 // bulletLineRe matches a Glamour-rendered bullet row: optional leading spaces,
@@ -478,25 +482,10 @@ func preprocessEmphasis(body, term string) (string, []string) {
 	}
 	re := regexp.MustCompile(`(?i)` + regexp.QuoteMeta(term))
 	var subs []string
-	var out strings.Builder
-	out.Grow(len(body))
-	inFence := false
-	lines := strings.Split(body, "\n")
-	for i, line := range lines {
-		switch {
-		case fenceRe.MatchString(line):
-			inFence = !inFence
-			out.WriteString(line)
-		case inFence:
-			out.WriteString(line)
-		default:
-			out.WriteString(emphasizeOutsideInlineCode(line, re, &subs))
-		}
-		if i < len(lines)-1 {
-			out.WriteByte('\n')
-		}
-	}
-	return out.String(), subs
+	body = mapLinesOutsideFences(body, func(line string) string {
+		return emphasizeOutsideInlineCode(line, re, &subs)
+	})
+	return body, subs
 }
 
 // emphasizeOutsideInlineCode wraps whole-word matches of re (a literal,
@@ -532,7 +521,7 @@ func emphasizeWholeWords(s string, re *regexp.Regexp, subs *[]string) string {
 		match := s[start:end]
 		id := len(*subs)
 		*subs = append(*subs, match)
-		core := fmt.Sprintf("%s%d%s", emphSentinelStart, id, emphSentinelEnd)
+		core := emphSentinelStart + encodeSentinelID(id) + emphSentinelEnd
 		if pad := lipgloss.Width(match) - lipgloss.Width(core); pad > 0 {
 			core += strings.Repeat(emphSentinelPad, pad)
 		}
@@ -604,8 +593,8 @@ func RenderWithEmphasis(body string, width int, emphasis string) (Result, error)
 		last = m[1]
 		switch {
 		case m[2] >= 0: // wiki-link sentinel
-			id, err := strconv.Atoi(styled[m[2]:m[3]])
-			if err != nil || id < 0 || id >= len(wikiSubs) {
+			id, ok := decodeSentinelID(styled[m[2]:m[3]])
+			if !ok || id >= len(wikiSubs) {
 				out.WriteString(styled[m[0]:m[1]])
 				continue
 			}
@@ -619,8 +608,8 @@ func RenderWithEmphasis(body string, width int, emphasis string) (Result, error)
 				End:     start + len(rendered),
 			})
 		case m[4] >= 0: // task-marker sentinel
-			id, err := strconv.Atoi(styled[m[4]:m[5]])
-			if err != nil || id < 0 || id >= len(taskMarkers) {
+			id, ok := decodeSentinelID(styled[m[4]:m[5]])
+			if !ok || id >= len(taskMarkers) {
 				out.WriteString(styled[m[0]:m[1]])
 				continue
 			}
@@ -629,8 +618,8 @@ func RenderWithEmphasis(body string, width int, emphasis string) (Result, error)
 			}
 			out.WriteString(renderTaskMarker(taskMarkers[id].marker))
 		case m[6] >= 0: // emphasis sentinel
-			id, err := strconv.Atoi(styled[m[6]:m[7]])
-			if err != nil || id < 0 || id >= len(emphSubs) {
+			id, ok := decodeSentinelID(styled[m[6]:m[7]])
+			if !ok || id >= len(emphSubs) {
 				out.WriteString(styled[m[0]:m[1]])
 				continue
 			}

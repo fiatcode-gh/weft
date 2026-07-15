@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/exp/teatest"
 
 	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
@@ -281,6 +282,55 @@ func TestPageViewFocusLinkTo(t *testing.T) {
 	pv2.FocusLinkTo("Orphan")
 	if pv2.Cursor() != -1 {
 		t.Errorf("FocusLinkTo to an unlinked page should be a no-op; cursor=%d", pv2.Cursor())
+	}
+}
+
+func TestSetPageResetsScroll(t *testing.T) {
+	// arrange — two pages long enough to scroll at height 10
+	quietTerm(t)
+	long := strings.Repeat("- line\n", 60)
+	_, idx := writeGraph(t, map[string]string{
+		"pages/A.md": long,
+		"pages/B.md": long,
+	})
+	p := NewPageView(idx, "A", 80, 10)
+	for i := 0; i < 20; i++ {
+		p.LineDown()
+	}
+	if p.Offset() == 0 {
+		t.Fatal("precondition: expected page A to be scrolled")
+	}
+
+	// act
+	p.SetPage("B")
+
+	// assert
+	if p.Offset() != 0 {
+		t.Fatalf("Offset after SetPage = %d, want 0", p.Offset())
+	}
+}
+
+func TestResizeRerendersAtNewWidth(t *testing.T) {
+	// arrange
+	quietTerm(t)
+	_, idx := writeGraph(t, map[string]string{
+		"pages/A.md": "- " + strings.Repeat("word ", 40) + "\n",
+	})
+	p := NewPageView(idx, "A", 100, 24)
+	before := p.result.Styled
+
+	// act
+	p.SetSize(40, 24)
+
+	// assert — content must be re-wrapped, not served from the
+	// width-100 cache entry
+	if p.result.Styled == before {
+		t.Fatal("resize served the stale width-100 render")
+	}
+	for _, line := range strings.Split(p.result.Styled, "\n") {
+		if w := lipgloss.Width(line); w > 40 {
+			t.Fatalf("line wider than viewport after resize: %d cells", w)
+		}
 	}
 }
 

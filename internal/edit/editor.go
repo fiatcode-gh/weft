@@ -52,24 +52,27 @@ func Resolve(env Env, lookPath func(string) (string, error)) (Resolved, error) {
 
 // EnsureFile creates an empty file at path with mode 0o644 if it does
 // not exist. Returns (true, nil) on create, (false, nil) if the file
-// already existed, or (false, err) for any other stat/write failure
-// (including the case where path resolves to a directory).
+// already existed, or (false, err) for any other failure (including the
+// case where path resolves to a directory). Creation uses O_EXCL so a
+// file that appears between check and create (e.g. a concurrent git
+// pull materializing today's journal) is never truncated.
 // This is the create-today-journal hook.
 func EnsureFile(path string) (created bool, err error) {
-	info, err := os.Stat(path)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err == nil {
-		if info.IsDir() {
-			return false, fmt.Errorf("ensure %s: is a directory", path)
-		}
-		return false, nil
+		return true, f.Close()
 	}
-	if !os.IsNotExist(err) {
+	if !os.IsExist(err) {
 		return false, err
 	}
-	if err := os.WriteFile(path, nil, 0o644); err != nil {
-		return false, err
+	info, statErr := os.Stat(path)
+	if statErr != nil {
+		return false, statErr
 	}
-	return true, nil
+	if info.IsDir() {
+		return false, fmt.Errorf("ensure %s: is a directory", path)
+	}
+	return false, nil
 }
 
 // defaultFileMode is the permission a newly-created page file is born with,

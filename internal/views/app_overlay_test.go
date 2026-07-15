@@ -133,7 +133,7 @@ func TestAppSearchDoneMsgRouting(t *testing.T) {
 	if !ok {
 		t.Fatalf("setup: search not open, got %s", activeKind(a))
 	}
-	a.Update(searchDoneMsg{hits: []search.Hit{
+	a.Update(searchDoneMsg{view: s, gen: s.gen, hits: []search.Hit{
 		{FilePath: "/x", Line: 1, Context: "hello"},
 	}})
 	if len(s.hits) != 1 {

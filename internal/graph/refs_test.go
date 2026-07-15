@@ -2,6 +2,7 @@ package graph
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"git.fiatcode.dev/fiatcode/weft/v2/internal/search"
@@ -9,7 +10,6 @@ import (
 
 func TestFilterUnlinked(t *testing.T) {
 	// arrange
-	target := "Alpha"
 	targetPath := "/g/pages/Alpha.md"
 	read := mapReader(map[string]string{
 		"/g/pages/Note.md":  "mentions Alpha here\nlinked [[Alpha]] already\n```\nAlpha in fence\n```\n",
@@ -23,7 +23,7 @@ func TestFilterUnlinked(t *testing.T) {
 	}
 
 	// act
-	got := FilterUnlinked(hits, target, targetPath, read)
+	got := FilterUnlinked(hits, targetPath, read)
 
 	// assert
 	if len(got) != 1 {
@@ -42,10 +42,47 @@ func TestFilterUnlinkedUnreadableFileDropped(t *testing.T) {
 	}
 
 	// act
-	got := FilterUnlinked(hits, "Alpha", "/g/pages/Alpha.md", read)
+	got := FilterUnlinked(hits, "/g/pages/Alpha.md", read)
 
 	// assert
 	if len(got) != 0 {
 		t.Errorf("unreadable file should drop its hits, got %+v", got)
+	}
+}
+
+func TestFirstUnlinkedMatchSkipsInlineCode(t *testing.T) {
+	// arrange — the only match sits inside `alpha deploy`
+	line := "- run `alpha deploy` now"
+	matches := []search.Span{{Start: strings.Index(line, "alpha"), End: strings.Index(line, "alpha") + 5}}
+
+	// act
+	_, ok := firstUnlinkedMatch(line, matches)
+
+	// assert
+	if ok {
+		t.Fatal("match inside inline code offered as unlinked ref")
+	}
+}
+
+func TestInlineCodeSpansUnclosedBacktickRunsToEndOfLine(t *testing.T) {
+	// arrange — a single, unpaired backtick: parse.go's appendWikiLinks and
+	// render's replaceWikiLinksOutsideInlineCode both split on backticks and
+	// treat every odd-indexed segment as inline code, including a trailing
+	// segment with no closing backtick (strings.Split("a `code", "`") ==
+	// ["a ", "code"], and "code" sits at odd index 1). inlineCodeSpans must
+	// mirror that exactly, so an unclosed backtick still hides the rest of
+	// the line from unlinked-ref detection.
+	line := "a `code"
+
+	// act
+	spans := inlineCodeSpans(line)
+
+	// assert
+	if len(spans) != 1 {
+		t.Fatalf("spans = %+v, want exactly one span covering the unclosed code run", spans)
+	}
+	got := line[spans[0].Start:spans[0].End]
+	if want := "`code"; got != want {
+		t.Fatalf("span covers %q, want %q", got, want)
 	}
 }

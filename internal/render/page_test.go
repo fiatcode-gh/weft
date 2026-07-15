@@ -1,11 +1,14 @@
 package render
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
 )
 
 // mustRender renders body at the given width and fails the test on error. It is
@@ -339,6 +342,14 @@ func TestHideMarkdownLinkURLsSkipsFencedCode(t *testing.T) {
 	}
 }
 
+func TestHideMarkdownLinkURLsBalancedParens(t *testing.T) {
+	got := hideMarkdownLinkURLs("see [Go](https://en.wikipedia.org/wiki/Go_(programming_language)) now\n")
+	want := "see [Go](#) now\n"
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
 func TestRenderMarkdownLinkHidesURL(t *testing.T) {
 	// End-to-end: the rendered read view shows the link text but not the URL.
 	out := mustRender(t, "see [PR 17](https://git.fiatcode.dev/fiatcode/weft/pulls/17) done\n", 80)
@@ -460,6 +471,31 @@ func TestRenderNoEmphasisNoFinds(t *testing.T) {
 	}
 }
 
+func TestRenderWithEmphasisNumericTermKeepsSentinels(t *testing.T) {
+	// arrange / act — searching a bare number must not corrupt the
+	// digit-encoded ids inside wiki/task sentinels
+	res, err := RenderWithEmphasis("- TODO check [[Foo]] version 0\n", 80, "0")
+
+	// assert
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Links) != 1 || res.Links[0].Target != "Foo" {
+		t.Fatalf("links = %+v, want [[Foo]] intact", res.Links)
+	}
+	if len(res.Tasks) != 1 {
+		t.Fatalf("tasks = %v, want 1", res.Tasks)
+	}
+	if len(res.Finds) != 1 {
+		t.Fatalf("finds = %v, want exactly the bare 0", res.Finds)
+	}
+	for _, r := range res.Styled {
+		if r >= '' && r <= '' {
+			t.Fatalf("raw PUA rune %U leaked into styled output", r)
+		}
+	}
+}
+
 func TestRenderWithEmphasisSkipsLinkCodeFence(t *testing.T) {
 	// arrange
 	body := "bare Alpha here\n" +
@@ -538,5 +574,44 @@ func TestRenderWithEmphasisRespectsWrapWidth(t *testing.T) {
 	}
 	if maxw > 40 {
 		t.Errorf("emphasis render overflows wrap width: max line %d > 40", maxw)
+	}
+}
+
+func TestRenderSkipsTildeAndBulletFences(t *testing.T) {
+	for name, body := range map[string]string{
+		"tilde":  "~~~\nsee [[Foo]] here\n~~~\n",
+		"bullet": "- ```\n  see [[Foo]] here\n  ```\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			res, err := Render(body, 80)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(res.Links) != 0 {
+				t.Fatalf("fenced [[Foo]] became a link: %+v", res.Links)
+			}
+		})
+	}
+}
+
+// Alignment: the same corpus must be fenced identically for the index
+// (graph.ExtractWikiLinks) and the read view (Render). This is the
+// guard against the two grammars drifting again.
+func TestFenceGrammarAlignsWithGraph(t *testing.T) {
+	corpus := "- ```\n  [[A]]\n  ```\n~~~\n[[B]]\n~~~\n- [[C]] `[[D]]` text\n"
+	res, err := Render(corpus, 80)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rendered []string
+	for _, l := range res.Links {
+		rendered = append(rendered, l.Target)
+	}
+	var indexed []string
+	for _, h := range graph.ExtractWikiLinks(corpus) {
+		indexed = append(indexed, h.Target)
+	}
+	if !reflect.DeepEqual(rendered, indexed) {
+		t.Fatalf("render links %v != graph links %v", rendered, indexed)
 	}
 }

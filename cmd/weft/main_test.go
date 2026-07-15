@@ -2,6 +2,32 @@ package main
 
 import "testing"
 
+func TestDebugLogEnabled(t *testing.T) {
+	// arrange
+	cases := map[string]bool{
+		"":         false,
+		"0":        false,
+		"false":    false,
+		"FALSE":    false,
+		"no":       false,
+		"off":      false,
+		"1":        true,
+		"true":     true,
+		"yes":      true,
+		"weft.log": true,
+	}
+
+	for v, want := range cases {
+		// act
+		got := debugLogEnabled(v)
+
+		// assert
+		if got != want {
+			t.Errorf("debugLogEnabled(%q) = %v, want %v", v, got, want)
+		}
+	}
+}
+
 func TestShortenPseudoVersion(t *testing.T) {
 	cases := []struct {
 		name string

@@ -214,7 +214,7 @@ func TestSearchApplyPopulatesHits(t *testing.T) {
 	s.running = true
 	s.sel = 5
 
-	s.Apply(searchDoneMsg{hits: []search.Hit{
+	s.Apply(searchDoneMsg{view: s, gen: s.gen, hits: []search.Hit{
 		{FilePath: "/p/A.md", Line: 1, Context: "x"},
 		{FilePath: "/p/B.md", Line: 2, Context: "y"},
 	}})
@@ -234,7 +234,7 @@ func TestSearchApplyKeepsValidSel(t *testing.T) {
 	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.sel = 1
-	s.Apply(searchDoneMsg{hits: []search.Hit{
+	s.Apply(searchDoneMsg{view: s, gen: s.gen, hits: []search.Hit{
 		{FilePath: "/p/A.md", Line: 1}, {FilePath: "/p/B.md", Line: 2},
 		{FilePath: "/p/C.md", Line: 3},
 	}})
@@ -247,12 +247,51 @@ func TestSearchApplyRecordsError(t *testing.T) {
 	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.running = true
-	s.Apply(searchDoneMsg{err: errors.New("boom")})
+	s.Apply(searchDoneMsg{view: s, gen: s.gen, err: errors.New("boom")})
 	if s.running {
 		t.Errorf("after Apply: running should clear even on error")
 	}
 	if s.err == nil || s.err.Error() != "boom" {
 		t.Errorf("error: want \"boom\", got %v", s.err)
+	}
+}
+
+func TestApplyDropsResultsForEditedQuery(t *testing.T) {
+	quietTerm(t)
+	// arrange — search "foo" in flight, then the query is edited
+	s := NewSearchView(loadFixture(t), 80, 24)
+	s.SetQuery("foo")
+	cmd := s.SearchCmd("/nonexistent-graph")
+	s.running = true
+	s.Update("x") // query is now "foox"; gen bumped
+
+	// act — the stale "foo" result arrives
+	msg := cmd().(searchDoneMsg)
+	s.Apply(msg)
+
+	// assert
+	if s.searched {
+		t.Fatal("stale result marked the edited query as searched")
+	}
+	if s.hits != nil {
+		t.Fatalf("stale hits installed: %+v", s.hits)
+	}
+}
+
+func TestEnterRetriesAfterSearchError(t *testing.T) {
+	quietTerm(t)
+	// arrange — a failed search must not dead-end the query
+	s := NewSearchView(loadFixture(t), 80, 24)
+	s.SetQuery("foo")
+	s.running = true
+	s.Apply(searchDoneMsg{view: s, gen: s.gen, err: errors.New("rg failed")})
+
+	// act
+	res := s.Update(keyEnter)
+
+	// assert — enter re-runs instead of no-op
+	if res.Cmd == nil {
+		t.Fatal("enter after error did not retry the search")
 	}
 }
 
@@ -482,7 +521,7 @@ func TestSearchZeroResultIsNotNeverSearched(t *testing.T) {
 	s := NewSearchView(idx, 80, 24)
 	s.SetQuery("zzzznomatch")
 
-	s.Apply(searchDoneMsg{hits: nil}) // a completed search with no results
+	s.Apply(searchDoneMsg{view: s, gen: s.gen, hits: nil}) // a completed search with no results
 	if !s.searched {
 		t.Fatalf("a completed search should set searched=true")
 	}
@@ -502,7 +541,7 @@ func TestSearchEditingQueryResetsSearched(t *testing.T) {
 	_, idx := writeGraph(t, map[string]string{"pages/Alpha.md": "# Alpha\n"})
 	s := NewSearchView(idx, 80, 24)
 	s.SetQuery("zzz")
-	s.Apply(searchDoneMsg{hits: nil})
+	s.Apply(searchDoneMsg{view: s, gen: s.gen, hits: nil})
 	if !s.searched {
 		t.Fatalf("precondition: searched should be true after Apply")
 	}

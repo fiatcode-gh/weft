@@ -14,7 +14,7 @@ type Index struct {
 	Pages      []PageMeta
 	ByName     map[string]*PageMeta // case-preserving (filename-derived)
 	ByNameFold map[string]*PageMeta // case-folded (lowercase key) — for [[ALPHA]] → Alpha
-	Backlinks  map[string][]Ref
+	Backlinks  map[string][]Ref     // keyed by strings.ToLower(target) — resolution is case-insensitive
 	Todos      []TodoBullet
 	Journals   []string // journal page names, sorted ascending
 }
@@ -95,7 +95,8 @@ func BuildIndex(graphPath string) (*Index, error) {
 		}
 		lines, links, todos := parseBody(string(body))
 		for _, lh := range links {
-			idx.Backlinks[lh.Target] = append(idx.Backlinks[lh.Target], Ref{
+			key := strings.ToLower(lh.Target)
+			idx.Backlinks[key] = append(idx.Backlinks[key], Ref{
 				FromPage:   p.Name,
 				LineNumber: lh.Line,
 				Context:    lineContext(lines, lh.Line),

@@ -36,7 +36,7 @@ type Backlinks struct {
 // backlinks with the supplied unlinked references (the App computes those via
 // ripgrep on panel-open). Self-references are filtered from the linked list.
 func NewBacklinks(idx *graph.Index, target string, unlinked []graph.UnlinkedRef, width, height int) *Backlinks {
-	src := idx.Backlinks[target]
+	src := idx.Backlinks[strings.ToLower(target)]
 	refs := make([]graph.Ref, 0, len(src))
 	for _, r := range src {
 		if r.FromPage == target {

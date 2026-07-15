@@ -6,17 +6,20 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
 )
 
-// Row-classification patterns for the in-app editor's live tinting. These
-// intentionally mirror (a subset of) internal/render/page.go's patterns rather
-// than importing them: those symbols are unexported, and theme.go documents
-// that mirroring the handful of marker colors across the views/render boundary
-// is preferred over a premature shared package.
+// Row-classification patterns for the in-app editor's live tinting. Most of
+// these intentionally mirror (a subset of) internal/render/page.go's patterns
+// rather than importing them: those symbols are unexported, and theme.go
+// documents that mirroring the handful of marker colors across the
+// views/render boundary is preferred over a premature shared package. Fence
+// delimiters are the exception: lineBaseStyle uses graph.FenceDelimiterRe
+// directly so the editor, index, and read view all agree on what is fenced.
 var (
 	editorHeadingRe = regexp.MustCompile(`^#{1,6}(\s|$)`)
 	editorQuoteRe   = regexp.MustCompile(`^\s*>`)
-	editorFenceRe   = regexp.MustCompile("^\\s*```")
 	editorTaskRe    = regexp.MustCompile(`^(\s*-\s+)(TODO|DOING|LATER|WAITING|DONE|CANCELED|CANCELLED|NOW)\b`)
 	editorLinkRe    = regexp.MustCompile(`\[\[[^\]\n]*\]\]`)
 )
@@ -93,7 +96,7 @@ func lineBaseStyle(line string) (lipgloss.Style, bool) {
 	switch {
 	case editorHeadingRe.MatchString(line):
 		return lipgloss.NewStyle().Bold(true), true
-	case editorFenceRe.MatchString(line):
+	case graph.FenceDelimiterRe.MatchString(line):
 		return lipgloss.NewStyle().Faint(true), true
 	case editorQuoteRe.MatchString(line):
 		return lipgloss.NewStyle().Faint(true), true

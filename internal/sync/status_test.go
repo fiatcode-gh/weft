@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // writeFile creates dir/name with content, failing the test on error.
@@ -82,5 +83,24 @@ func TestStatusNonRepoErrors(t *testing.T) {
 	// Assert
 	if err == nil {
 		t.Fatal("Status on a non-repo should return an error")
+	}
+}
+
+func TestStatusTimesOutOnSlowGit(t *testing.T) {
+	// Arrange: a valid repo, but an effectively-zero deadline so the very
+	// first git call (the preflight) exceeds it deterministically.
+	work := newRepoWithRemote(t)
+	withShortSyncTimeout(t, time.Nanosecond)
+
+	// Act
+	start := time.Now()
+	_, err := Status(work)
+
+	// Assert
+	if err == nil {
+		t.Fatal("want timeout error, got nil")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("Status blocked %v; timeout did not apply", elapsed)
 	}
 }

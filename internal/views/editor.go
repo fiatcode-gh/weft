@@ -203,14 +203,13 @@ func (e *EditorView) layout() {
 	e.completer.maxVisible = clampInt(e.height-6-editorTopMargin, 1, maxCompleterRows)
 	h := e.height - 1 - editorTopMargin - e.completer.rows()
 	e.ta.SetHeight(max(1, h))
-	if e.completer.active {
-		// SetHeight just shrank the textarea to make room for the strip, but it
-		// doesn't reposition the viewport — so the line being edited can sit
-		// below the new bottom edge, hidden behind the strip. Poke Update to
-		// reposition the cursor back into view. Gated on active so the normal
-		// editing/open-a-page viewport behaviour is untouched.
-		e.ta, _ = e.ta.Update(repositionMsg{})
-	}
+	// SetHeight/SetWidth never reposition the textarea viewport (bubbles
+	// quirk: repositioning happens only inside Update), so after ANY resize —
+	// whether or not the completion strip is involved — the cursor line can
+	// sit outside the visible window until the next keystroke. Poke Update
+	// with a content-neutral message to force a reposition; it's a no-op
+	// when the cursor is already visible.
+	e.ta, _ = e.ta.Update(repositionMsg{})
 }
 
 // Content is the buffer normalized to end in exactly one newline.

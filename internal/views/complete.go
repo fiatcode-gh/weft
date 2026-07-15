@@ -196,7 +196,8 @@ func (c *linkCompleter) View(width int) string {
 		if cand.create {
 			label = fmt.Sprintf("＋ Create %q", cand.name)
 		}
-		label = clamp(label, inner)
+		// box content is inner-2 (padding 1,2) and the marker takes 3 cells
+		label = clamp(label, inner-5)
 		marker := "   "
 		if i == c.sel {
 			marker = styleSel.Render(" ▶ ")

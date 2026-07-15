@@ -16,6 +16,7 @@ type SearchView struct {
 	listBox
 	idx        *graph.Index
 	query      string
+	gen        int // bumped on every query mutation; tags in-flight searches
 	hits       []search.Hit
 	running    bool
 	searched   bool // a search has completed for the current query (vs. never run)
@@ -43,28 +44,40 @@ func (s *SearchView) hitLabel(filePath string) string {
 
 func (s *SearchView) Query() string { return s.query }
 
+// SetQuery sets the query directly; test-only — it does not bump gen, so
+// production code must mutate the query through Update to keep the
+// staleness guard correct.
 func (s *SearchView) SetQuery(q string) { s.query = q }
 
-// SearchCmd returns a tea.Cmd that runs rg and returns a searchDoneMsg.
+// SearchCmd returns a tea.Cmd that runs rg and returns a searchDoneMsg tagged
+// with this view instance and the query's generation at launch time, so a
+// result for an edited-away query (or a since-replaced overlay) can be
+// dropped instead of landing under whatever query is current now.
 func (s *SearchView) SearchCmd(graphPath string) tea.Cmd {
 	q := s.query
+	gen := s.gen
 	return func() tea.Msg {
 		hits, err := search.Run(graphPath, q)
-		if err != nil {
-			return searchDoneMsg{err: err}
-		}
-		return searchDoneMsg{hits: hits}
+		return searchDoneMsg{view: s, gen: gen, hits: hits, err: err}
 	}
 }
 
 type searchDoneMsg struct {
+	view *SearchView // which overlay instance ran the search
+	gen  int         // s.gen at launch; stale generations are dropped
 	hits []search.Hit
 	err  error
 }
 
+// Apply installs a finished search's results. Results from an edited-away
+// query (stale gen) are dropped. A failed search leaves searched=false so
+// enter retries instead of dead-ending the query.
 func (s *SearchView) Apply(msg searchDoneMsg) {
+	if msg.gen != s.gen {
+		return
+	}
 	s.running = false
-	s.searched = true
+	s.searched = msg.err == nil
 	s.err = msg.err
 	s.hits = msg.hits
 	if s.sel >= len(s.hits) {
@@ -108,11 +121,15 @@ func (s *SearchView) Update(key string) OverlayResult {
 			s.query = string(r[:len(r)-1])
 			s.hits = nil
 			s.searched = false
+			s.gen++
+			s.running = false
 		}
 	case " ", keySpace:
 		s.query += " "
 		s.hits = nil
 		s.searched = false
+		s.gen++
+		s.running = false
 	default:
 		// A single-rune key string is a printable character (named keys like
 		// "enter"/"ctrl+x" are multi-rune and ignored here).
@@ -120,6 +137,8 @@ func (s *SearchView) Update(key string) OverlayResult {
 			s.query += key
 			s.hits = nil
 			s.searched = false
+			s.gen++
+			s.running = false
 		}
 	}
 	return OverlayResult{}

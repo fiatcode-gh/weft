@@ -52,9 +52,12 @@ func TestParseJSON(t *testing.T) {
 `
 
 	// act
-	hits := parseJSON([]byte(in))
+	hits, err := parseJSON([]byte(in))
 
 	// assert
+	if err != nil {
+		t.Fatalf("parseJSON err: %v", err)
+	}
 	if len(hits) != 2 {
 		t.Fatalf("want 2 hits, got %d: %+v", len(hits), hits)
 	}
@@ -69,6 +72,26 @@ func TestParseJSON(t *testing.T) {
 	}
 	if len(hits[1].Matches) != 0 {
 		t.Errorf("hit[1].Matches: want 0, got %d", len(hits[1].Matches))
+	}
+}
+
+// TestParseJSONSurfacesScannerOverflow guards against silent truncation: a
+// single rg output line longer than the scanner's buffer cap (a pasted log
+// blob inside any note, for instance) must abort with an error, not just
+// stop scanning and quietly drop every hit after it.
+func TestParseJSONSurfacesScannerOverflow(t *testing.T) {
+	// arrange — one line over the 1MB scanner cap, then a valid match
+	huge := `{"type":"match","data":{"path":{"text":"pages/A.md"},"lines":{"text":"` +
+		strings.Repeat("x", 1100*1024) + `"},"line_number":1,"submatches":[]}}`
+	valid := `{"type":"match","data":{"path":{"text":"pages/B.md"},"lines":{"text":"hit"},"line_number":2,"submatches":[{"start":0,"end":3}]}}`
+	input := []byte(huge + "\n" + valid + "\n")
+
+	// act
+	_, err := parseJSON(input)
+
+	// assert — truncation must be an error, not silently missing hits
+	if err == nil {
+		t.Fatal("scanner overflow was swallowed; hits after the long line are silently dropped")
 	}
 }
 

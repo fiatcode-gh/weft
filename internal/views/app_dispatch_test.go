@@ -142,10 +142,16 @@ func TestAppMidSessionReindexFailureKeepsPage(t *testing.T) {
 	a := bootApp(t)
 	bootPage := a.page.Page()
 	// Simulate the R-then-fail path: the keypress schedules a reindex
-	// (cmd is irrelevant — the test synthesises the response below).
+	// (cmd is irrelevant — the test synthesises the response below). gen
+	// must match a.indexGen (R just bumped it) or the generation guard
+	// would drop this synthetic message as stale before it ever reaches
+	// the failure-handling branch under test.
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
-	a.Update(indexLoadedMsg{err: errors.New("disk full")})
+	a.Update(indexLoadedMsg{err: errors.New("disk full"), gen: a.indexGen})
 
+	if !strings.Contains(a.hint, "disk full") {
+		t.Errorf("mid-session reindex failure should surface a hint; got hint %q", a.hint)
+	}
 	view := a.View()
 	if strings.Contains(view, "failed to index") {
 		t.Errorf("replaced the working page with the error splash:\n%s", view)
@@ -531,5 +537,57 @@ func TestEditBootstrapRebuildsPageView(t *testing.T) {
 	}
 	if a.page.Page() != today {
 		t.Errorf("PageView page: want %q, got %q", today, a.page.Page())
+	}
+}
+
+// TestSaveFailureKeepsEditorAndBuffer pins the highest-consequence untested
+// flow in the Ctrl+S handler (app.go's tea.KeyMsg case, res.Save branch):
+// when edit.WriteFile fails, the in-app editor must stay open with the
+// buffer intact and the error surfaced — never torn down and never losing
+// unsaved work. The save is made to fail deterministically by revoking
+// write permission on the page's directory, which makes WriteFile's
+// os.CreateTemp(dir, ...) fail before anything is touched on disk.
+func TestSaveFailureKeepsEditorAndBuffer(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: a 0o555 directory does not block writes")
+	}
+	quietTerm(t)
+	dir, _ := writeGraph(t, map[string]string{"pages/A.md": "- start\n"})
+	a := New(dir, "test")
+	cmd := a.Init()
+	if cmd != nil {
+		a.Update(cmd())
+	}
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	a.navigate("A")
+
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	if a.editor == nil {
+		t.Fatal("precondition: editor did not open")
+	}
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	content := a.editor.Content()
+
+	// Make the save fail: the page directory becomes read-only, so
+	// edit.WriteFile's temp-file creation in that directory fails.
+	pages := filepath.Join(dir, "pages")
+	if err := os.Chmod(pages, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(pages, 0o755) })
+
+	a.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+
+	if a.editor == nil {
+		t.Fatal("failed save tore down the editor (buffer lost)")
+	}
+	if a.editor.Content() != content {
+		t.Fatalf("buffer changed across failed save: got %q, want %q", a.editor.Content(), content)
+	}
+	if a.editor.errMsg == "" {
+		t.Fatal("save error not surfaced on the editor (errMsg empty)")
+	}
+	if a.editor.saved {
+		t.Error("editor reports saved=true after a failed save")
 	}
 }

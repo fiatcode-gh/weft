@@ -38,7 +38,7 @@ func Run(graphPath, query string) ([]Hit, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseJSON(out), nil
+	return parseJSON(out)
 }
 
 // Mentions finds whole-word, case-insensitive, literal occurrences of name
@@ -50,7 +50,7 @@ func Mentions(graphPath, name string) ([]Hit, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseJSON(out), nil
+	return parseJSON(out)
 }
 
 // runRipgrep runs `rg --json <flags...> -- <query> <pages> <journals>` and
@@ -84,7 +84,7 @@ func runRipgrep(graphPath string, flags []string, query string) ([]byte, error) 
 	return stdout.Bytes(), nil
 }
 
-func parseJSON(b []byte) []Hit {
+func parseJSON(b []byte) ([]Hit, error) {
 	var out []Hit
 	sc := bufio.NewScanner(bytes.NewReader(b))
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -137,5 +137,8 @@ func parseJSON(b []byte) []Hit {
 			Matches:  spans,
 		})
 	}
-	return out
+	if err := sc.Err(); err != nil {
+		return out, fmt.Errorf("scan rg output: %w", err)
+	}
+	return out, nil
 }

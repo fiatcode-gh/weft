@@ -19,24 +19,6 @@ func TestPageNameFromFilename(t *testing.T) {
 	}
 }
 
-func TestIsJournalFilename(t *testing.T) {
-	cases := []struct {
-		in   string
-		want bool
-	}{
-		{"2026_05_24.md", true},
-		{"2026_5_24.md", false},
-		{"Alpha.md", false},
-		{"2026_05_24.txt", false},
-	}
-	for _, c := range cases {
-		got := IsJournalFilename(c.in)
-		if got != c.want {
-			t.Errorf("IsJournalFilename(%q) = %v, want %v", c.in, got, c.want)
-		}
-	}
-}
-
 func TestIsJournalPageName(t *testing.T) {
 	cases := []struct {
 		in   string

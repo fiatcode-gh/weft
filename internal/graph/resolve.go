@@ -21,11 +21,6 @@ func PageNameFromFilename(name string) string {
 	return strings.ReplaceAll(strings.TrimSuffix(base, ".md"), "___", "/")
 }
 
-// IsJournalFilename reports whether the filename matches Logseq's journal pattern.
-func IsJournalFilename(name string) bool {
-	return journalRe.MatchString(filepath.Base(name))
-}
-
 // FilenameFromPageName is the inverse of PageNameFromFilename for the
 // cases the App needs to construct a path for: journal page names
 // (YYYY-MM-DD → YYYY_MM_DD.md) and namespace pages (proj/nested →

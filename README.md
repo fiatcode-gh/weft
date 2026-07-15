@@ -78,7 +78,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | `WEFT_GRAPH`   | Default graph path (overridden by `--graph`).                                     |
 | `WEFT_STYLE`   | Force a Glamour markdown style (`dark`, `light`, `ascii`, `notty`). Default `dark`. |
 | `NO_COLOR`      | Honoured: forces `notty` rendering, no ANSI styling anywhere.                     |
-| `WEFT_DEBUG=1` | Mirror Bubble Tea events to `./weft.log`. Useful when reporting bugs.            |
+| `WEFT_DEBUG=1` | Mirror Bubble Tea events to `weft.log` under the user cache dir (`$XDG_CACHE_HOME/weft/weft.log`, or the OS equivalent via `os.UserCacheDir`; falls back to `./weft.log` only if the cache dir is unavailable). Useful when reporting bugs. |
 
 ## Scope
 

@@ -22,7 +22,8 @@ The editor opens with the cursor at the top of the page.
 
 Press `S` to sync the graph to git — commit local changes, `pull --rebase`,
 then push — run asynchronously off the UI thread with the outcome in the status
-bar (`⟳ syncing…` → `✓ synced`, or `✗ <stage> failed — see weft.log`). A `●` in
+bar (`⟳ syncing…` → `✓ synced`, or `✗ <stage> failed — see weft.log`, with the
+status-bar hint showing the resolved absolute path under the user cache dir). A `●` in
 the status bar flags an unsynced graph (uncommitted changes or unpushed
 commits). `internal/sync/` is the project's second deliberate disk-mutating
 surface, alongside `internal/edit/`; it shells out to the system `git` and bails
@@ -60,7 +61,8 @@ an intentional UI change, run with `-update` and visually diff the golden before
 - `internal/sync/` — git orchestration over `os/exec` (no `go-git`); the second
   deliberate disk-mutating surface. `Run` does commit → `pull --rebase` → push
   for the `S` keybind (async, reported via a status-bar hint, failure output
-  appended to `weft.log`); the read-only `Status` reports whether the work tree
+  appended to `weft.log` under the user cache dir, per `internal/views/logpath.go`);
+  the read-only `Status` reports whether the work tree
   is dirty or ahead of upstream, driving the status-bar `●` indicator. Never
   edits a conflicted tree — conflicts bail to the shell.
 - `internal/views/` — Bubble Tea models: `app` (root), `page`, `picker`, `search`,
@@ -86,8 +88,10 @@ an intentional UI change, run with `-update` and visually diff the golden before
 
 ## Debugging the TUI
 
-`WEFT_DEBUG=1 ./weft --graph …` mirrors Bubble Tea events to `./weft.log`.
-The alt-screen swallows panics; tail the log to see what the model received.
+`WEFT_DEBUG=1 ./weft --graph …` mirrors Bubble Tea events to `weft.log` under
+the user cache dir (`internal/views.DebugLogPath()`; falls back to `./weft.log`
+only if the cache dir is unavailable). The alt-screen swallows panics; tail the
+log to see what the model received.
 
 ## Versioning
 

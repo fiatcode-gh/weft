@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"regexp"
 	"runtime/debug"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -19,13 +20,15 @@ import (
 // runtime/debug.BuildInfo and overrides this default.
 var Version = "dev"
 
-// debugLogPath returns the path Bubble Tea should write debug output to, or
-// empty to disable. Enabled by setting WEFT_DEBUG=1 (writes to ./weft.log).
-func debugLogPath() string {
-	if os.Getenv("WEFT_DEBUG") != "" {
-		return "weft.log"
+// debugLogEnabled interprets WEFT_DEBUG: empty and conventional falsy values
+// ("0", "false", "no", "off", case-insensitive) disable logging; anything
+// else — including unrecognized values — enables it.
+func debugLogEnabled(v string) bool {
+	switch strings.ToLower(v) {
+	case "", "0", "false", "no", "off":
+		return false
 	}
-	return ""
+	return true
 }
 
 // resolvedVersion returns the version to print for -version. Prefers an
@@ -94,8 +97,8 @@ func main() {
 		os.Exit(2)
 	}
 
-	if path := debugLogPath(); path != "" {
-		if f, err := tea.LogToFile(path, "weft"); err == nil {
+	if debugLogEnabled(os.Getenv("WEFT_DEBUG")) {
+		if f, err := tea.LogToFile(views.DebugLogPath(), "weft"); err == nil {
 			defer f.Close()
 		}
 	}

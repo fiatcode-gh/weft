@@ -390,6 +390,37 @@ func TestEditorCompletion_CursorStaysVisibleAtBottom(t *testing.T) {
 	}
 }
 
+// Regression: a plain terminal resize (completer never involved) must also
+// reposition the textarea viewport onto the cursor. SetHeight/SetWidth never
+// reposition (bubbles quirk: only Update does), so without an unconditional
+// poke in layout() the cursor line can scroll off-screen after a shrink and
+// stay hidden until the next keystroke.
+func TestEditorResizeKeepsCursorVisible(t *testing.T) {
+	// arrange — a buffer taller than the viewport, cursor moved to the last
+	// line, tall window so the cursor line renders comfortably.
+	quietTerm(t)
+	content := strings.Repeat("filler\n", 59) + "last-line"
+	e := NewEditorView(nil, "Note", "/tmp/n.md", content, false, 80, 40)
+	for {
+		before := e.ta.Line()
+		e.ta.CursorDown()
+		if e.ta.Line() == before {
+			break
+		}
+	}
+	// Mimic the Bubble Tea loop: a render primes the textarea viewport's
+	// content, same technique as TestEditorCompletion_CursorStaysVisibleAtBottom.
+	_ = e.View()
+
+	// act — shrink hard; no keypress afterwards.
+	e.SetSize(80, 8)
+
+	// assert — the cursor's line must be inside the rendered window.
+	if !strings.Contains(e.View(), "last-line") {
+		t.Fatal("cursor line scrolled out of view after resize")
+	}
+}
+
 // --- Regression: the completion strip is a typing affordance, not a
 // cursor-navigation one. Moving the caret onto an unclosed [[, opening a file
 // that ends in one, or paging should never spontaneously pop the strip.
@@ -647,10 +678,10 @@ func TestEditorShiftTabNoOpAtZeroIndent(t *testing.T) {
 func TestEditorUpdate_FailedSaveExitShowsErrorNotConfirmPrompt(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 6)
-	e.ta.SetValue("x\nmore\n")               // make it dirty
+	e.ta.SetValue("x\nmore\n") // make it dirty
 
-	e.Update(tea.KeyMsg{Type: tea.KeyEsc})   // -> confirmingExit
-	res, _ := e.Update(key("s"))             // request save+exit
+	e.Update(tea.KeyMsg{Type: tea.KeyEsc}) // -> confirmingExit
+	res, _ := e.Update(key("s"))           // request save+exit
 	if !res.Save || !res.Exit {
 		t.Fatalf("s should request save and exit; got %+v", res)
 	}
@@ -677,13 +708,13 @@ func TestEditorUpdate_FailedSaveExitShowsErrorNotConfirmPrompt(t *testing.T) {
 func TestEditorCompletion_AcceptAfterLeftMoveRelocatesTail(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "", true, 80, 24)
-	typeRunes(e, "[[Alph")                      // buffer "[[Alph", cursor at end
-	e.Update(tea.KeyMsg{Type: tea.KeyLeft})     // cursor after "Alp"
-	e.Update(tea.KeyMsg{Type: tea.KeyLeft})     // cursor after "Al"
+	typeRunes(e, "[[Alph")                  // buffer "[[Alph", cursor at end
+	e.Update(tea.KeyMsg{Type: tea.KeyLeft}) // cursor after "Alp"
+	e.Update(tea.KeyMsg{Type: tea.KeyLeft}) // cursor after "Al"
 	if !e.completer.active {
 		t.Fatalf("completer should still be active after left moves; partial=%q", e.completer.partial)
 	}
-	e.Update(tea.KeyMsg{Type: tea.KeyEnter})    // accept "Alpha"
+	e.Update(tea.KeyMsg{Type: tea.KeyEnter}) // accept "Alpha"
 	if got := e.ta.Value(); got != "[[Alpha]]ph" {
 		t.Errorf("documented current behavior: got %q, want %q", got, "[[Alpha]]ph")
 	}
@@ -700,4 +731,3 @@ func BenchmarkEditorViewLargePage(b *testing.B) {
 		_ = e.View()
 	}
 }
-

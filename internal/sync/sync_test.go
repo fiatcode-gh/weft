@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -148,6 +149,37 @@ func TestRunConflictHaltsAtPull(t *testing.T) {
 	}
 }
 
+func TestRunPushRejectionReportsPushStage(t *testing.T) {
+	// arrange: a local change to commit, and a bare remote whose pre-receive
+	// hook refuses every push outright — the simplest deterministic
+	// rejection, needing no sibling clone or non-fast-forward race.
+	work := newRepoWithRemote(t)
+	writeFile(t, work, "new.md", "hi\n")
+
+	remote := strings.TrimSpace(git(t, work, "remote", "get-url", "origin"))
+	hook := filepath.Join(remote, "hooks", "pre-receive")
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\necho rejected\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// act
+	res := Run(work, testClock)
+
+	// assert
+	if res.Err == nil || res.Stage != "push" {
+		t.Fatalf("Stage = %q, Err = %v; want push failure", res.Stage, res.Err)
+	}
+	if !res.Committed {
+		t.Fatal("local commit must be recorded even when push fails")
+	}
+	if res.Pushed {
+		t.Fatal("Pushed must be false on rejection")
+	}
+	if !strings.Contains(res.Output, "rejected") {
+		t.Errorf("expected captured push output to include the hook's rejection message, got %q", res.Output)
+	}
+}
+
 func TestRunNonRepoIsPreflightFailure(t *testing.T) {
 	// arrange: a plain directory that is not a git work tree.
 	dir := t.TempDir()
@@ -161,13 +193,22 @@ func TestRunNonRepoIsPreflightFailure(t *testing.T) {
 	}
 }
 
+// withShortSyncTimeout forces syncTimeout to d for the duration of the test,
+// restoring the original value on cleanup. Shared by tests that need every
+// git call bound by an effectively-zero deadline (see Run and Status, which
+// both build their runner from this package var).
+func withShortSyncTimeout(t *testing.T, d time.Duration) {
+	t.Helper()
+	orig := syncTimeout
+	syncTimeout = d
+	t.Cleanup(func() { syncTimeout = orig })
+}
+
 func TestRunTimesOutOnSlowGit(t *testing.T) {
 	// arrange: a valid repo, but an effectively-zero deadline so the very first
 	// git call (the preflight) exceeds it deterministically.
 	work := newRepoWithRemote(t)
-	orig := syncTimeout
-	syncTimeout = time.Nanosecond
-	defer func() { syncTimeout = orig }()
+	withShortSyncTimeout(t, time.Nanosecond)
 
 	// act
 	res := Run(work, testClock)

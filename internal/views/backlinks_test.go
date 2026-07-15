@@ -40,7 +40,7 @@ func TestNewBacklinksFiltersSelfRefs(t *testing.T) {
 	idx := loadFixture(t)
 
 	// The underlying index records the self-reference; the view filters it.
-	raw := idx.Backlinks["Hub"]
+	raw := idx.Backlinks[strings.ToLower("Hub")]
 	var hasSelf bool
 	for _, r := range raw {
 		if r.FromPage == "Hub" {
@@ -173,7 +173,7 @@ func TestBacklinksScrollWindowBoundsSelection(t *testing.T) {
 	quietTerm(t)
 	idx := loadFixture(t)
 	for i := 0; i < 50; i++ {
-		idx.Backlinks["Alpha"] = append(idx.Backlinks["Alpha"], graph.Ref{
+		idx.Backlinks[strings.ToLower("Alpha")] = append(idx.Backlinks[strings.ToLower("Alpha")], graph.Ref{
 			FromPage:   fmt.Sprintf("Page-%02d", i),
 			LineNumber: i + 1,
 			Context:    fmt.Sprintf("- ref %d to [[Alpha]]", i),
@@ -201,7 +201,7 @@ func TestBacklinksScrollHintsAppear(t *testing.T) {
 	quietTerm(t)
 	idx := loadFixture(t)
 	for i := 0; i < 30; i++ {
-		idx.Backlinks["Alpha"] = append(idx.Backlinks["Alpha"], graph.Ref{
+		idx.Backlinks[strings.ToLower("Alpha")] = append(idx.Backlinks[strings.ToLower("Alpha")], graph.Ref{
 			FromPage:   fmt.Sprintf("Page-%02d", i),
 			LineNumber: i + 1,
 			Context:    "- ref",

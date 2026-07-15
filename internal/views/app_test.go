@@ -257,3 +257,26 @@ func TestAppLinkifyMentionGoneShowsError(t *testing.T) {
 		t.Errorf("file must be untouched when the mention is gone; got %q", string(got))
 	}
 }
+
+// TestStaleIndexLoadedMsgIsDropped pins the fix for a real race: a sync-pull
+// reindex and an R-triggered reindex can be in flight together, and the
+// OLDER disk walk can deliver LAST. Without a generation tag, that stale
+// result would silently overwrite the newer index.
+func TestStaleIndexLoadedMsgIsDropped(t *testing.T) {
+	// arrange — two reindexes in flight; the OLDER walk delivers LAST
+	a := bootApp(t)
+	oldCmd := a.buildIndexCmd()
+	oldMsg := oldCmd().(indexLoadedMsg)
+	newCmd := a.buildIndexCmd()
+	newMsg := newCmd().(indexLoadedMsg)
+
+	// act
+	a.Update(newMsg)
+	current := a.idx
+	a.Update(oldMsg) // stale delivery
+
+	// assert
+	if a.idx != current {
+		t.Fatal("stale indexLoadedMsg replaced the newer index")
+	}
+}

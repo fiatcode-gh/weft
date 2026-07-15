@@ -18,10 +18,14 @@ import (
 	syncpkg "git.fiatcode.dev/fiatcode/weft/v2/internal/sync"
 )
 
-// indexLoadedMsg carries the result of an asynchronous graph.BuildIndex run.
+// indexLoadedMsg carries the result of an asynchronous graph.BuildIndex
+// run. gen identifies which buildIndexCmd produced it; the handler drops
+// results from any generation but the latest, so a slow walk delivered
+// late can't overwrite a newer index.
 type indexLoadedMsg struct {
 	idx *graph.Index
 	err error
+	gen int
 }
 
 // syncRunner runs a git sync against repoDir. Injected on App so view tests
@@ -105,6 +109,13 @@ type App struct {
 	// version is the binary version string shown in the help overlay
 	// footer. Empty hides the version segment.
 	version string
+
+	// indexGen counts buildIndexCmd invocations. Bumped synchronously at
+	// call time (not inside the returned closure) so two concurrent
+	// reindexes always get distinct generations even if their disk walks
+	// finish out of order. The indexLoadedMsg handler drops any result
+	// whose gen doesn't match the current indexGen.
+	indexGen int
 }
 
 type historyEntry struct {
@@ -151,10 +162,15 @@ func (a *App) setHint(s string) tea.Cmd {
 func (a *App) Init() tea.Cmd { return a.buildIndexCmd() }
 
 func (a *App) buildIndexCmd() tea.Cmd {
+	// Stamp the generation now, synchronously, not inside the closure
+	// below — two overlapping calls must get distinct gens regardless of
+	// which of their disk walks finishes first.
+	a.indexGen++
+	gen := a.indexGen
 	path := a.graphPath
 	return func() tea.Msg {
 		idx, err := graph.BuildIndex(path)
-		return indexLoadedMsg{idx: idx, err: err}
+		return indexLoadedMsg{idx: idx, err: err, gen: gen}
 	}
 }
 
@@ -447,7 +463,7 @@ func (a *App) unlinkedRefs(name string) []graph.UnlinkedRef {
 	if meta, ok := a.idx.ByName[name]; ok {
 		targetPath = meta.Path
 	}
-	return graph.FilterUnlinked(hits, name, targetPath, func(p string) (string, error) {
+	return graph.FilterUnlinked(hits, targetPath, func(p string) (string, error) {
 		b, err := os.ReadFile(p)
 		return string(b), err
 	})
@@ -494,6 +510,9 @@ func (a *App) linkify(ref *graph.UnlinkedRef, target string) tea.Cmd {
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m := msg.(type) {
 	case indexLoadedMsg:
+		if m.gen != a.indexGen {
+			return a, nil // a newer reindex is in flight; drop the stale walk
+		}
 		if m.err != nil {
 			if a.page != nil {
 				// Mid-session reindex failed — keep the old index and
@@ -524,7 +543,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// A failed sync may still have changed state (e.g. committed
 			// then failed to push), so re-probe.
 			return a, tea.Batch(
-				a.setHint("✗ "+m.res.Stage+" failed — see weft.log"),
+				a.setHint("✗ "+m.res.Stage+" failed — see "+DebugLogPath()),
 				a.statusProbeCmd(),
 			)
 		}
@@ -538,7 +557,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.unsynced = m.err == nil && m.st.Unsynced()
 		return a, nil
 	case searchDoneMsg:
-		if s, ok := a.active.(*SearchView); ok {
+		if s, ok := a.active.(*SearchView); ok && s == m.view {
 			s.Apply(m)
 		}
 		return a, nil
@@ -632,6 +651,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, res.Cmd
 			}
 			if res.Linkify != nil {
+				if cmd := a.syncBusyHint(); cmd != nil {
+					return a, cmd
+				}
 				return a, a.linkify(res.Linkify, res.LinkifyTarget)
 			}
 			if res.Accept {
@@ -674,6 +696,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "]":
 			a.historyForward()
 		case ".":
+			if cmd := a.syncBusyHint(); cmd != nil {
+				return a, cmd
+			}
 			today := a.todayJournalName()
 			var probe tea.Cmd
 			if _, ok := a.idx.ByName[today]; !ok {
@@ -718,12 +743,20 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			)
 		case "R":
 			// Async reindex — the response lands as indexLoadedMsg and
-			// rebuilds PageView for the current page. Errors surface in
-			// loadErr which the splash overlay renders.
-			return a, a.buildIndexCmd()
+			// rebuilds PageView for the current page. The hint makes a
+			// swallowed or racing R visible instead of looking like a
+			// silent no-op. Errors surface in loadErr which the splash
+			// overlay renders.
+			return a, tea.Batch(a.setHint("⟳ reindexing…"), a.buildIndexCmd())
 		case keyE:
+			if cmd := a.syncBusyHint(); cmd != nil {
+				return a, cmd
+			}
 			return a, a.enterEditor()
 		case keyShiftE:
+			if cmd := a.syncBusyHint(); cmd != nil {
+				return a, cmd
+			}
 			return a, a.editCurrent()
 		case "n":
 			a.page.CycleLink(+1)
@@ -819,12 +852,24 @@ func (a *App) statusBar() string {
 	return rule + "\n" + left + strings.Repeat(" ", gap) + right
 }
 
-// logSyncFailure appends a failing sync's captured git output to weft.log,
-// the same path WEFT_DEBUG mirrors to — written here regardless of the flag
-// so the hint's "see weft.log" pointer is always valid. Best-effort: a log
-// write error is itself ignored (the hint already told the user it failed).
+// syncBusyHint gates the graph-mutating entry points while the async git
+// sync goroutine is rewriting the worktree: a save landing mid
+// `pull --rebase` is overwritten by the rebase checkout and silently lost,
+// and `add -A` can stage editor temp files. Non-nil means "blocked".
+func (a *App) syncBusyHint() tea.Cmd {
+	if !a.syncing {
+		return nil
+	}
+	return a.setHint("⟳ sync in progress — retry when it finishes")
+}
+
+// logSyncFailure appends a failing sync's captured git output to
+// DebugLogPath(), the same cache-dir path WEFT_DEBUG mirrors to — written
+// here regardless of the flag so the hint's "see <path>" pointer is always
+// valid. Best-effort: a log write error is itself ignored (the hint already
+// told the user it failed).
 func (a *App) logSyncFailure(res syncpkg.Result) {
-	f, err := os.OpenFile("weft.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	f, err := os.OpenFile(DebugLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return
 	}

@@ -103,3 +103,28 @@ func TestLinkifyMentionRegexMetaTarget(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
+
+func TestLinkifyMentionSkipsInlineCode(t *testing.T) {
+	// arrange — first occurrence is in code, second is bare
+	body := "- run `alpha deploy` then alpha again\n"
+
+	// act
+	got, span, err := LinkifyMention(body, 1, "alpha")
+
+	// assert — the BARE mention gets wrapped, the code span is untouched
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "- run `alpha deploy` then [[alpha]] again\n"
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	_ = span
+}
+
+func TestLinkifyMentionOnlyCodeOccurrenceIsNotFound(t *testing.T) {
+	_, _, err := LinkifyMention("- run `alpha deploy` now\n", 1, "alpha")
+	if !errors.Is(err, ErrMentionNotFound) {
+		t.Fatalf("err = %v, want ErrMentionNotFound", err)
+	}
+}

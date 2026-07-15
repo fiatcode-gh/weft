@@ -394,6 +394,31 @@ func TestPickerCreate_EnterReturnsCreateResult(t *testing.T) {
 	}
 }
 
+// TestPickerRowsNeverWrap asserts that a row with a full-budget name and a
+// long relative-time hint ("11 months ago") never wraps inside the border.
+// nameBudget must leave room for the 3-cell selection marker every row
+// carries ("marker(3) + name + gap(2) + hint"); if it doesn't, the padded
+// name plus hint overflows the inner width and lipgloss wraps the row,
+// growing the panel by a line.
+func TestPickerRowsNeverWrap(t *testing.T) {
+	// arrange — a 70-char page name so it fills the whole name budget, plus
+	// a pinned clock/mtime that renders a long "11 months ago" hint.
+	quietTerm(t)
+	longName := strings.Repeat("n", 70)
+	_, longIdx := writeGraph(t, map[string]string{"pages/" + longName + ".md": "# x\n"})
+	p := NewPicker(longIdx, 80, 30)
+	p.now = time.Date(2026, time.April, 1, 12, 0, 0, 0, time.UTC)
+	p.choices[0].mtime = p.now.AddDate(0, 0, -330) // -> "11 months ago"
+
+	_, shortIdx := writeGraph(t, map[string]string{"pages/tiny.md": "# x\n"})
+	short := NewPicker(shortIdx, 80, 30)
+
+	// act / assert — panel height must not depend on name length or hint.
+	if got, want := lipgloss.Height(p.View()), lipgloss.Height(short.View()); got != want {
+		t.Fatalf("long name+hint row wrapped and grew the picker: got height %d, want %d", got, want)
+	}
+}
+
 func TestPickerCreate_OfferedWhenNameFuzzyMatchesButDoesNotResolve(t *testing.T) {
 	quietTerm(t)
 	_, idx := writeGraph(t, map[string]string{"pages/Nested Notes Archive.md": "# x\n"})

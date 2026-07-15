@@ -22,7 +22,6 @@ type TodoHit struct {
 var (
 	wikiLinkRe = regexp.MustCompile(`\[\[([^\]\|]+)(?:\|[^\]]*)?\]\]`)
 	todoRe     = regexp.MustCompile(`^\s*-\s+(TODO|LATER|DOING|WAITING)(?:\s+\[#([ABC])\])?\s+(.*\S)\s*$`)
-	fenceRe    = regexp.MustCompile("^\\s*```")
 )
 
 // parseBody walks body's lines once, tracking fenced-code state, and returns
@@ -34,13 +33,9 @@ var (
 // a markdown renderer would treat the rest of the page as code.
 func parseBody(body string) (lines []string, links []LinkHit, todos []TodoHit) {
 	lines = strings.Split(body, "\n")
-	inFence := false
+	var fence FenceState
 	for i, line := range lines {
-		if fenceRe.MatchString(line) {
-			inFence = !inFence
-			continue
-		}
-		if inFence {
+		if fence.Step(line) {
 			continue
 		}
 		links = appendWikiLinks(links, line, i+1)

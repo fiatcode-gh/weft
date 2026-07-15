@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"context"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -23,7 +24,9 @@ func (s WorktreeStatus) Unsynced() bool { return s.Dirty || s.Ahead > 0 }
 // Ahead is simply left 0, since there's nothing local to measure against.
 func Status(repoDir string) (WorktreeStatus, error) {
 	run := func(args ...string) (string, error) {
-		cmd := exec.Command("git", args...)
+		ctx, cancel := context.WithTimeout(context.Background(), syncTimeout)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "git", args...)
 		cmd.Dir = repoDir
 		out, err := cmd.CombinedOutput()
 		return string(out), err

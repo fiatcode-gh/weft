@@ -190,8 +190,8 @@ func (p *Picker) visibleRows() int {
 
 func (p *Picker) View() string {
 	inner := p.innerWidth()
-	const hintCol = 14 // right-aligned mtime hint column width
-	nameBudget := inner - hintCol - 2
+	const hintCol = 14                    // right-aligned mtime hint column width
+	nameBudget := inner - hintCol - 2 - 3 // -3 = the " ▶ "/"   " marker cells every row carries
 
 	var b strings.Builder
 	b.WriteString(styleTitle.Render("Find a page"))

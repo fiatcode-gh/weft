@@ -40,6 +40,7 @@ type PageView struct {
 type cachedPage struct {
 	result  render.Result
 	modTime time.Time
+	width   int
 }
 
 func NewPageView(idx *graph.Index, page string, width, height int) *PageView {
@@ -59,12 +60,16 @@ func NewPageView(idx *graph.Index, page string, width, height int) *PageView {
 // Page returns the currently displayed page name.
 func (p *PageView) Page() string { return p.page }
 
-// SetPage switches to a different page in the same index.
+// SetPage switches to a different page in the same index. The viewport
+// starts at the top — a fresh navigation must not inherit the previous
+// page's scroll position (history Restore sets an explicit offset after
+// this when walking [ / ]).
 func (p *PageView) SetPage(name string) {
 	p.page = name
 	p.cursor = -1
 	p.emphasis = ""
 	p.load()
+	p.vp.GotoTop()
 }
 
 // SetPageEmphasizing switches to name and highlights whole-word occurrences of
@@ -75,6 +80,7 @@ func (p *PageView) SetPageEmphasizing(name, term string) {
 	p.cursor = -1
 	p.emphasis = term
 	p.load()
+	p.vp.GotoTop()
 	p.scrollToFirstFind()
 }
 
@@ -267,7 +273,7 @@ func (p *PageView) load() {
 	// emphasis term is set the render is transient — never read or write the
 	// cache, so a later plain navigation can't be served a highlighted version.
 	if p.emphasis == "" {
-		if c, hit := p.cache[meta.Name]; hit && c.modTime.Equal(meta.ModTime) {
+		if c, hit := p.cache[meta.Name]; hit && c.modTime.Equal(meta.ModTime) && c.width == p.width {
 			p.result = c.result
 			p.vp.SetContent(p.result.Styled)
 			return
@@ -292,7 +298,7 @@ func (p *PageView) load() {
 	}
 	p.result = res
 	if p.emphasis == "" {
-		p.cache[meta.Name] = cachedPage{result: res, modTime: meta.ModTime}
+		p.cache[meta.Name] = cachedPage{result: res, modTime: meta.ModTime, width: p.width}
 	}
 	p.vp.SetContent(p.result.Styled)
 }

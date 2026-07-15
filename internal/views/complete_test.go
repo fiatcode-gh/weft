@@ -1,6 +1,11 @@
 package views
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 func TestExtractPartial(t *testing.T) {
 	cases := []struct {
@@ -130,6 +135,42 @@ func TestLinkCompleterAllowOpenGate(t *testing.T) {
 	c.refresh("no bracket here", "", false)
 	if c.active {
 		t.Errorf("moving the caret out of the link should close the strip")
+	}
+}
+
+// TestStripHeightMatchesRowsBudget guards the invariant EditorView relies on:
+// the strip must render exactly as many rows as rows() reserved, for any
+// label length. A label too long for the box's wrap width would spill onto a
+// second line, growing the strip past the height EditorView shrank the
+// textarea by.
+func TestStripHeightMatchesRowsBudget(t *testing.T) {
+	quietTerm(t)
+	cases := []struct {
+		name  string
+		cands []linkCandidate
+	}{
+		{
+			name:  "long candidate name",
+			cands: []linkCandidate{{name: strings.Repeat("x", 34)}},
+		},
+		{
+			// The "＋ Create %q" row adds ~11 cells of decoration around the
+			// name, so it must clamp through the same path as a plain row.
+			name:  "create row for long partial",
+			cands: []linkCandidate{{name: strings.Repeat("y", 34), create: true}},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// arrange
+			c := &linkCompleter{active: true, maxVisible: maxCompleterRows, cands: tc.cands}
+			// act
+			got, want := lipgloss.Height(c.View(40)), c.rows()
+			// assert
+			if got != want {
+				t.Fatalf("strip renders %d rows but rows() reserved %d", got, want)
+			}
+		})
 	}
 }
 
