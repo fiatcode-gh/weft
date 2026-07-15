@@ -4,6 +4,24 @@ All notable changes to weft are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-07-15
+
+### Added
+
+- Markdown links now render as clean styled text, with the inline URL hidden in the read view. The full URL stays in the source file (visible when you edit); images and links inside code stay literal.
+
+### Fixed
+
+- Case-variant wiki-links now resolve: `[[alpha]]` pointing at a page named `Alpha` shows up in backlinks and unlinked references.
+- `~~~` (tilde) fences and Logseq bullet-prefixed fences are recognized as code fences everywhere — parsing, backlinks, render, and editor tint — matching triple-backtick behavior.
+- Inline-code spans are excluded from unlinked-ref detection and one-key linkify, so weft no longer writes a dead link into a code span.
+- A save made while a background sync is mid-`pull --rebase` is no longer silently lost — graph-mutating actions wait for the sync to finish.
+- Creating today's journal stub is now exclusive, so a file materialized by a concurrent `git pull` can't be truncated to empty.
+- `ctrl+c` quits weft even while an overlay is open.
+- Scroll and cursor position are preserved across a reindex and across exiting the editor; navigating to a page resets scroll to the top.
+- Search keeps `#` in wiki-link targets, strips a trailing carriage return from CRLF match context, and surfaces scanner errors instead of silently truncating results.
+- The debug log is written to the user cache directory instead of the working directory (where a sync could commit it into your graph), and `WEFT_DEBUG=0` now means off.
+
 ## [2.2.3] - 2026-06-18
 
 ### Fixed
