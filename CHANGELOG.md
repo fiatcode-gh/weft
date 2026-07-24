@@ -4,6 +4,12 @@ All notable changes to weft are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-07-24
+
+### Added
+
+- The markdown page body now renders using your terminal's own color palette instead of a fixed built-in theme. Headings, links, inline code, blockquotes, and syntax-highlighted code fences all follow your terminal's 16 colors, so the read view matches the rest of your terminal. Set `WEFT_STYLE=<name>` to force a specific built-in Glamour theme (for example `dark` or `dracula`), or `NO_COLOR` to disable color entirely.
+
 ## [2.3.0] - 2026-07-15
 
 ### Added
