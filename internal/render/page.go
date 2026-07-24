@@ -150,20 +150,45 @@ var (
 	rendererCache = map[int]*glamour.TermRenderer{}
 )
 
-// styleName picks the Glamour style without doing any terminal IO. This is
+// styleSelection is which Glamour style weft should render with. selectStyle
+// derives it from env vars only — never querying the terminal.
+type styleSelection struct {
+	terminal bool   // use terminalStyleConfig (weft's default; honors the terminal palette)
+	name     string // standard style name, meaningful only when !terminal
+}
+
+// selectStyle chooses the render style without any terminal IO. This is
 // deliberate: Glamour's WithAutoStyle issues OSC 11 background-colour queries
 // over stdin, which can leave stray reply bytes in the terminal's input
 // buffer. When weft is quit and immediately re-opened, the next session's
 // termenv reads those stale bytes, fails to parse them, and blocks for
 // seconds before timing out. Reading env vars sidesteps the problem.
-func styleName() string {
+//
+// NO_COLOR wins over WEFT_STYLE.
+func selectStyle() styleSelection {
 	if os.Getenv("NO_COLOR") != "" {
-		return "notty"
+		return styleSelection{name: "notty"}
 	}
 	if s := os.Getenv("WEFT_STYLE"); s != "" {
-		return s
+		return styleSelection{name: s}
 	}
-	return "dark"
+	return styleSelection{terminal: true}
+}
+
+// styleOptions turns the selection into Glamour renderer options. The default
+// (terminal-palette) path also pins chroma's terminal16 formatter, which
+// downsamples the Chroma block's hex anchors to the terminal's 16-color
+// palette. A named WEFT_STYLE keeps chroma's default formatter so that theme
+// renders at full fidelity.
+func styleOptions() []glamour.TermRendererOption {
+	sel := selectStyle()
+	if sel.terminal {
+		return []glamour.TermRendererOption{
+			glamour.WithStyles(terminalStyleConfig),
+			glamour.WithChromaFormatter("terminal16"),
+		}
+	}
+	return []glamour.TermRendererOption{glamour.WithStandardStyle(sel.name)}
 }
 
 // Warmup pre-builds the renderer cache so the first page render inside the
@@ -182,10 +207,8 @@ func rendererFor(width int) (*glamour.TermRenderer, error) {
 	if r, ok := rendererCache[width]; ok {
 		return r, nil
 	}
-	r, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle(styleName()),
-		glamour.WithWordWrap(width),
-	)
+	opts := append(styleOptions(), glamour.WithWordWrap(width))
+	r, err := glamour.NewTermRenderer(opts...)
 	if err != nil {
 		return nil, err
 	}
