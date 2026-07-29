@@ -239,7 +239,7 @@ func runewidthLen(s string) int {
 }
 
 func TestPeriodJumpsToTodayJournal(t *testing.T) {
-	a := bootAppAt(t, time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC))
+	a := bootApp(t, bootConfig{now: time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)})
 	// Boot lands on today's journal (2026-05-23) per tryInitPage seeding.
 	// Navigate elsewhere first so we can verify . actually moves us.
 	a.navigate("Alpha")
@@ -261,7 +261,7 @@ func TestPeriodJumpsToTodayJournal(t *testing.T) {
 func TestPeriodOnAbsentTodayCreatesAndNavigates(t *testing.T) {
 	// 2026-06-15 has no journal in the fixture; `.` must create the file
 	// and navigate to it.
-	a := bootAppAt(t, time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC))
+	a := bootApp(t, bootConfig{now: time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)})
 	a.navigate("Alpha")
 
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(".")})
@@ -283,7 +283,7 @@ func TestPeriodOnAbsentTodayCreatesAndNavigates(t *testing.T) {
 func TestHintClearsOnNextKey(t *testing.T) {
 	// `.` on a missing journal creates+navigates rather than hinting, so
 	// trigger a hint via `<` at the oldest journal ("no earlier journal").
-	a := bootAppAt(t, time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC))
+	a := bootApp(t, bootConfig{now: time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)})
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
 	if a.hint == "" {
 		t.Fatal("setup: expected hint to be set by < at oldest")
@@ -296,7 +296,7 @@ func TestHintClearsOnNextKey(t *testing.T) {
 }
 
 func TestHintExpiresOnTick(t *testing.T) {
-	a := bootAppAt(t, time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC))
+	a := bootApp(t, bootConfig{now: time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)})
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
 	if a.hint == "" {
 		t.Fatal("setup: expected < to set a hint")
@@ -309,7 +309,7 @@ func TestHintExpiresOnTick(t *testing.T) {
 }
 
 func TestStaleHintTickIgnored(t *testing.T) {
-	a := bootAppAt(t, time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC))
+	a := bootApp(t, bootConfig{now: time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)})
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
 	staleGen := a.hintGen
 	// Second < clears the hint via the top-of-KeyMsg sweep, then re-sets it
@@ -326,7 +326,7 @@ func TestStaleHintTickIgnored(t *testing.T) {
 }
 
 func TestPeriodIdempotentOnTodayJournal(t *testing.T) {
-	a := bootAppAt(t, time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC))
+	a := bootApp(t, bootConfig{now: time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)})
 	// Boot already lands on today's journal.
 	if got := a.page.Page(); got != "2026-05-23" {
 		t.Fatalf("setup: want boot page 2026-05-23, got %q", got)
@@ -342,7 +342,7 @@ func TestPeriodIdempotentOnTodayJournal(t *testing.T) {
 }
 
 func TestPrevJournalWalksBackwards(t *testing.T) {
-	a := bootAppAt(t, time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC))
+	a := bootApp(t, bootConfig{now: time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC)})
 	// Boot lands on 2026-05-24.
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
 	if got := a.page.Page(); got != "2026-05-23" {
@@ -354,7 +354,7 @@ func TestPrevJournalWalksBackwards(t *testing.T) {
 }
 
 func TestNextJournalWalksForward(t *testing.T) {
-	a := bootAppAt(t, time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC))
+	a := bootApp(t, bootConfig{now: time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)})
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(">")})
 	if got := a.page.Page(); got != "2026-05-24" {
 		t.Errorf("after >: want 2026-05-24, got %q", got)
@@ -364,7 +364,7 @@ func TestNextJournalWalksForward(t *testing.T) {
 func TestPrevJournalSkipsGapDays(t *testing.T) {
 	// Fixture has 2026-04-20 then 2026-03-15 — large gap. < from 04-20 lands
 	// on 03-15, skipping the missing calendar days in between.
-	a := bootAppAt(t, time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC))
+	a := bootApp(t, bootConfig{now: time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)})
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
 	if got := a.page.Page(); got != "2026-03-15" {
 		t.Errorf("after < across gap: want 2026-03-15, got %q", got)
@@ -372,7 +372,7 @@ func TestPrevJournalSkipsGapDays(t *testing.T) {
 }
 
 func TestPrevJournalAtOldestShowsHint(t *testing.T) {
-	a := bootAppAt(t, time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC))
+	a := bootApp(t, bootConfig{now: time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)})
 	startPage := a.page.Page()
 	startHistLen := len(a.hist)
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
@@ -388,7 +388,7 @@ func TestPrevJournalAtOldestShowsHint(t *testing.T) {
 }
 
 func TestNextJournalAtNewestShowsHint(t *testing.T) {
-	a := bootAppAt(t, time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC))
+	a := bootApp(t, bootConfig{now: time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC)})
 	startPage := a.page.Page()
 	startHistLen := len(a.hist)
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(">")})
@@ -406,7 +406,7 @@ func TestNextJournalAtNewestShowsHint(t *testing.T) {
 func TestPrevJournalFromPhantomToday(t *testing.T) {
 	// 2026-06-15 has no fixture journal; it's phantom-today. < should walk
 	// to the newest existing fixture journal (2026-05-25).
-	a := bootAppAt(t, time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC))
+	a := bootApp(t, bootConfig{now: time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)})
 	if got := a.page.Page(); got != "2026-06-15" {
 		t.Fatalf("setup: want boot page 2026-06-15, got %q", got)
 	}
@@ -422,7 +422,7 @@ func TestPrevJournalFromPhantomToday(t *testing.T) {
 func TestNextJournalFromPhantomTodayShowsHint(t *testing.T) {
 	// 2026-06-15 is phantom-today; no fixture journal is later. > should
 	// surface "no later journal" without navigating.
-	a := bootAppAt(t, time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC))
+	a := bootApp(t, bootConfig{now: time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)})
 	startPage := a.page.Page()
 	startHistLen := len(a.hist)
 	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(">")})
@@ -438,7 +438,7 @@ func TestNextJournalFromPhantomTodayShowsHint(t *testing.T) {
 }
 
 func TestPrevNextInertOutsideJournalContext(t *testing.T) {
-	a := bootAppAt(t, time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC))
+	a := bootApp(t, bootConfig{now: time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)})
 	a.navigate("Alpha")
 	startPage := a.page.Page()
 	startHistLen := len(a.hist)
@@ -462,7 +462,7 @@ func TestPrevNextInertOutsideJournalContext(t *testing.T) {
 // fresh index — not just a.idx. Regression guard for the stale-a.page bug.
 //
 // Uses a t.TempDir-based graph (mirroring TestEditKey_ColdStartCreatesTodayJournal)
-// rather than bootAppAt/fixture-graph so creating a file is safe and idempotent.
+// rather than the shared fixture so creating a file is safe and idempotent.
 func TestEditBootstrapRebuildsPageView(t *testing.T) {
 	quietTerm(t)
 	t.Setenv("EDITOR", "true") // no-op editor that exits 0 immediately

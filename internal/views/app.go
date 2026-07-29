@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -73,7 +72,7 @@ type App struct {
 	editor *EditorView
 
 	// active is the overlay layered over the page, or nil when the page has
-	// focus. Set when an open-overlay key is pressed; cleared on Accept/Cancel.
+	// focus. Set when an open-overlay key is pressed; cleared by terminal outcomes.
 	active Overlay
 
 	width  int
@@ -440,37 +439,6 @@ func (a *App) enterEditor() tea.Cmd {
 	return a.editor.Focus()
 }
 
-// journalNeighbor returns the closest existing journal in a.idx.Journals in
-// direction dir (-1 prev, +1 next) given that current is a journal-shaped
-// name (YYYY-MM-DD).
-//
-// When current is in idx.Journals the neighbour is the immediate sibling.
-// When current is journal-shaped but absent (e.g. phantom-today: weft
-// opens on today's date but the file isn't on disk yet), the insertion
-// point in the sorted slice is used — dir=-1 returns the closest earlier
-// existing journal, dir=+1 the closest later one. Returns ok=false when
-// current isn't a journal-shaped name or when the chosen direction would
-// fall off the ends of the list.
-func (a *App) journalNeighbor(current string, dir int) (string, bool) {
-	if !graph.IsJournalPageName(current) {
-		return "", false
-	}
-	js := a.idx.Journals
-	i := sort.SearchStrings(js, current)
-	var j int
-	if i < len(js) && js[i] == current {
-		j = i + dir
-	} else if dir < 0 {
-		j = i - 1
-	} else {
-		j = i
-	}
-	if j < 0 || j >= len(js) {
-		return "", false
-	}
-	return js[j], true
-}
-
 // unlinkedRefs finds bare-text mentions of `name` elsewhere in the graph that
 // aren't already links. Best-effort: a ripgrep failure yields no unlinked refs
 // rather than breaking the backlinks panel — and an error hint would be
@@ -685,39 +653,39 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, tea.Quit
 			}
 			res := a.active.Update(key)
-			if res.Cancel {
+			switch res.kind {
+			case overlayResultCancel:
 				a.active = nil
-				return a, res.Cmd
-			}
-			if res.Linkify != nil {
+			case overlayResultCommand:
+				return a, res.cmd
+			case overlayResultLinkify:
 				if cmd, blocked := a.blockIfSyncing(); blocked {
 					return a, cmd
 				}
-				return a, a.linkify(res.Linkify, res.LinkifyTarget)
-			}
-			if res.Accept {
-				if res.Create {
-					if cmd, blocked := a.blockIfSyncing(); blocked {
-						return a, cmd
-					}
-					a.navigate(res.Selected)
-					a.active = nil
-					return a, a.enterEditor()
+				return a, a.linkify(res.ref, res.target)
+			case overlayResultCreate:
+				if cmd, blocked := a.blockIfSyncing(); blocked {
+					return a, cmd
 				}
-				if res.Selected != "" {
-					if res.FocusLinkTo != "" {
-						a.navigateFocusingLink(res.Selected, res.FocusLinkTo)
-					} else if res.HighlightText != "" {
-						a.navigateHighlighting(res.Selected, res.HighlightText)
-					} else if res.DeepLink {
-						a.navigateToTask(res.Selected, res.TaskOrdinal)
-					} else {
-						a.navigate(res.Selected)
-					}
+				a.navigate(res.page)
+				a.active = nil
+				return a, a.enterEditor()
+			case overlayResultOpen:
+				if res.page != "" {
+					a.navigate(res.page)
 				}
 				a.active = nil
+			case overlayResultOpenTask:
+				a.navigateToTask(res.page, res.taskOrdinal)
+				a.active = nil
+			case overlayResultFocusLink:
+				a.navigateFocusingLink(res.page, res.target)
+				a.active = nil
+			case overlayResultHighlight:
+				a.navigateHighlighting(res.page, res.target)
+				a.active = nil
 			}
-			return a, res.Cmd
+			return a, nil
 		}
 		switch key {
 		case keyQ, "ctrl+c":
@@ -756,14 +724,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, probe
 		case "<":
 			page := a.page.Page()
-			if name, ok := a.journalNeighbor(page, -1); ok {
+			if name, ok := a.idx.JournalNeighbor(page, -1); ok {
 				a.navigate(name)
 			} else if graph.IsJournalPageName(page) {
 				return a, a.setHint("no earlier journal")
 			}
 		case ">":
 			page := a.page.Page()
-			if name, ok := a.journalNeighbor(page, +1); ok {
+			if name, ok := a.idx.JournalNeighbor(page, +1); ok {
 				a.navigate(name)
 			} else if graph.IsJournalPageName(page) {
 				return a, a.setHint("no later journal")

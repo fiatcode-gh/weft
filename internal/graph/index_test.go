@@ -29,7 +29,7 @@ func TestBuildIndex(t *testing.T) {
 	}
 
 	// Backlinks: Alpha is linked from Beta, Hub, 2026-05-15, and 2026-05-24
-	gotAlpha := pageNamesOfRefs(idx.Backlinks[strings.ToLower("Alpha")])
+	gotAlpha := pageNamesOfRefs(idx.BacklinksTo("Alpha"))
 	sort.Strings(gotAlpha)
 	wantAlpha := []string{"2026-05-15", "2026-05-24", "Beta", "Hub"}
 	if !equalSlices(gotAlpha, wantAlpha) {
@@ -37,14 +37,16 @@ func TestBuildIndex(t *testing.T) {
 	}
 
 	// Lock down Ref.Context (the source line for the backlink).
-	var betaRef *Ref
-	for i, r := range idx.Backlinks[strings.ToLower("Alpha")] {
+	var betaRef Ref
+	var foundBetaRef bool
+	for _, r := range idx.BacklinksTo("Alpha") {
 		if r.FromPage == "Beta" {
-			betaRef = &idx.Backlinks[strings.ToLower("Alpha")][i]
+			betaRef = r
+			foundBetaRef = true
 			break
 		}
 	}
-	if betaRef == nil {
+	if !foundBetaRef {
 		t.Fatalf("no Beta→Alpha backlink found")
 	}
 	wantCtx := "- Beta links back to [[Alpha]]."
@@ -56,8 +58,8 @@ func TestBuildIndex(t *testing.T) {
 	}
 
 	// Dangling refs still recorded
-	if len(idx.Backlinks[strings.ToLower("DoesNotExist")]) != 1 {
-		t.Errorf("dangling backlink to DoesNotExist not recorded: %v", idx.Backlinks[strings.ToLower("DoesNotExist")])
+	if len(idx.BacklinksTo("DoesNotExist")) != 1 {
+		t.Errorf("dangling backlink to DoesNotExist not recorded: %v", idx.BacklinksTo("DoesNotExist"))
 	}
 
 	// Fence-internal wiki-links must NOT be extracted. Alpha has
@@ -65,7 +67,7 @@ func TestBuildIndex(t *testing.T) {
 	// If either name surfaces in Backlinks, ExtractWikiLinks lost fence
 	// awareness.
 	for _, name := range []string{"ShouldNotMatch", "NotALink"} {
-		if refs := idx.Backlinks[strings.ToLower(name)]; len(refs) != 0 {
+		if refs := idx.BacklinksTo(name); len(refs) != 0 {
 			t.Errorf("%s should not be in Backlinks (fenced); got %v", name, refs)
 		}
 	}
@@ -103,12 +105,12 @@ func TestBuildIndexJournalsSorted(t *testing.T) {
 		"2026-01-10", "2026-03-15", "2026-04-20", "2026-05-01",
 		"2026-05-15", "2026-05-22", "2026-05-23", "2026-05-24", "2026-05-25",
 	}
-	if !equalSlices(idx.Journals, want) {
-		t.Errorf("Journals: want %v, got %v", want, idx.Journals)
+	if !equalSlices(idx.journals, want) {
+		t.Errorf("journals: want %v, got %v", want, idx.journals)
 	}
 
 	// Every entry must correspond to a PageMeta with IsJournal == true.
-	for _, name := range idx.Journals {
+	for _, name := range idx.journals {
 		meta, ok := idx.ByName[name]
 		if !ok {
 			t.Errorf("Journals contains %q but ByName doesn't", name)
@@ -147,12 +149,6 @@ func TestBuildIndexResolvesCaseInsensitively(t *testing.T) {
 
 	// Numeric journal names are unaffected by case-folding.
 	journalPage := "2026-05-24"
-	if _, ok := idx.ByName[journalPage]; !ok {
-		if len(idx.Journals) == 0 {
-			t.Skip("no journals in fixture; skipping numeric-name assertion")
-		}
-		journalPage = idx.Journals[0]
-	}
 	got, ok := idx.Resolve(journalPage)
 	if !ok {
 		t.Errorf("Resolve(%q) = (_, false), want (_, true)", journalPage)
@@ -166,8 +162,8 @@ func TestBuildIndexJournalsEmptyWhenNoJournals(t *testing.T) {
 	idx := buildTempIndex(t, map[string]string{"Lonely.md": "- hi\n"})
 
 	// assert
-	if len(idx.Journals) != 0 {
-		t.Errorf("Journals: want empty slice, got %v", idx.Journals)
+	if got, ok := idx.JournalNeighbor("2026-01-10", 1); ok || got != "" {
+		t.Errorf("JournalNeighbor on empty index = (%q, %v), want (\"\", false)", got, ok)
 	}
 }
 
@@ -274,7 +270,7 @@ func TestBacklinkContextIsTheSourceLine(t *testing.T) {
 	idx := buildTempIndex(t, map[string]string{"Src.md": body})
 
 	// act
-	refs := idx.Backlinks[strings.ToLower("Alpha")]
+	refs := idx.BacklinksTo("Alpha")
 
 	// assert
 	if len(refs) != 1 {
@@ -285,6 +281,24 @@ func TestBacklinkContextIsTheSourceLine(t *testing.T) {
 	}
 	if refs[0].LineNumber != 2 {
 		t.Errorf("line number: want 2, got %d", refs[0].LineNumber)
+	}
+}
+
+func TestBacklinksToReturnsSnapshot(t *testing.T) {
+	// arrange
+	idx := buildTempIndex(t, map[string]string{"Source.md": "- [[Target]]\n"})
+
+	// act
+	refs := idx.BacklinksTo("Target")
+	if len(refs) != 1 {
+		t.Fatalf("BacklinksTo(Target) returned %d refs, want 1", len(refs))
+	}
+	refs[0].FromPage = "mutated"
+	got := idx.BacklinksTo("Target")
+
+	// assert
+	if got[0].FromPage != "Source" {
+		t.Errorf("BacklinksTo(Target) stored ref was mutated: got %q, want %q", got[0].FromPage, "Source")
 	}
 }
 
@@ -361,11 +375,44 @@ func TestBacklinksAreCaseInsensitive(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// assert — lookup by the canonical on-disk name must find the
-	// case-variant link
-	refs := idx.Backlinks[strings.ToLower("Alpha")]
-	if len(refs) != 1 || refs[0].FromPage != "Note" {
-		t.Fatalf("Backlinks[alpha] = %+v, want one ref from Note", refs)
+	// assert — every case variant must find the case-variant link.
+	for _, name := range []string{"Alpha", "alpha", "ALPHA"} {
+		refs := idx.BacklinksTo(name)
+		if len(refs) != 1 || refs[0].FromPage != "Note" {
+			t.Fatalf("BacklinksTo(%q) = %+v, want one ref from Note", name, refs)
+		}
+	}
+}
+
+func TestJournalNeighbor(t *testing.T) {
+	// arrange
+	idx := buildFixtureIndex(t)
+	tests := []struct {
+		name    string
+		current string
+		dir     int
+		want    string
+		ok      bool
+	}{
+		{name: "previous existing", current: "2026-05-24", dir: -1, want: "2026-05-23", ok: true},
+		{name: "next existing", current: "2026-05-24", dir: 1, want: "2026-05-25", ok: true},
+		{name: "previous phantom", current: "2026-05-26", dir: -1, want: "2026-05-25", ok: true},
+		{name: "next phantom gap", current: "2026-05-02", dir: 1, want: "2026-05-15", ok: true},
+		{name: "before oldest", current: "2026-01-10", dir: -1, ok: false},
+		{name: "after newest", current: "2026-05-25", dir: 1, ok: false},
+		{name: "not a journal", current: "Alpha", dir: -1, ok: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// act
+			got, ok := idx.JournalNeighbor(tt.current, tt.dir)
+
+			// assert
+			if got != tt.want || ok != tt.ok {
+				t.Errorf("JournalNeighbor(%q, %d) = (%q, %v), want (%q, %v)", tt.current, tt.dir, got, ok, tt.want, tt.ok)
+			}
+		})
 	}
 }
 

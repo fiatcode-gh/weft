@@ -40,7 +40,7 @@ func TestNewBacklinksFiltersSelfRefs(t *testing.T) {
 	idx := loadFixture(t)
 
 	// The underlying index records the self-reference; the view filters it.
-	raw := idx.Backlinks[strings.ToLower("Hub")]
+	raw := idx.BacklinksTo("Hub")
 	var hasSelf bool
 	for _, r := range raw {
 		if r.FromPage == "Hub" {
@@ -105,11 +105,8 @@ func TestBacklinksEnterReturnsFromPage(t *testing.T) {
 	}
 	b.sel = 0
 	res := b.Update("enter")
-	if !res.Accept || res.Cancel {
-		t.Errorf("enter: want accept=true cancel=false, got %v/%v", res.Accept, res.Cancel)
-	}
-	if res.Selected != b.refs[0].FromPage {
-		t.Errorf("returned page: want %q, got %q", b.refs[0].FromPage, res.Selected)
+	if res.kind != overlayResultFocusLink || res.page != b.refs[0].FromPage || res.target != "Hub" {
+		t.Errorf("enter result: want focus link %q → Hub, got %+v", b.refs[0].FromPage, res)
 	}
 }
 
@@ -118,8 +115,8 @@ func TestBacklinksEscAndBCancel(t *testing.T) {
 	b := NewBacklinks(loadFixture(t), "Hub", nil, 80, 30)
 	for _, k := range []string{"esc", "b"} {
 		res := b.Update(k)
-		if res.Selected != "" || res.Accept || !res.Cancel {
-			t.Errorf("%s: want cancel only, got (%q,%v,%v)", k, res.Selected, res.Accept, res.Cancel)
+		if res.kind != overlayResultCancel {
+			t.Errorf("%s: want cancel, got %+v", k, res)
 		}
 	}
 }
@@ -131,9 +128,8 @@ func TestBacklinksNoRefsEnterNoop(t *testing.T) {
 		t.Fatalf("Orphan should have 0 backlinks, got %d", len(b.refs))
 	}
 	res := b.Update("enter")
-	if res.Selected != "" || res.Accept || res.Cancel {
-		t.Errorf("enter on empty refs: want zero-valued return, got (%q,%v,%v)",
-			res.Selected, res.Accept, res.Cancel)
+	if res.kind != overlayResultNone {
+		t.Errorf("enter on empty refs: want zero-valued return, got %+v", res)
 	}
 }
 
@@ -171,16 +167,15 @@ func TestBacklinksViewNoRefsGolden(t *testing.T) {
 // has 54 inbound references.
 func TestBacklinksScrollWindowBoundsSelection(t *testing.T) {
 	quietTerm(t)
-	idx := loadFixture(t)
+	b := NewBacklinks(loadFixture(t), "Alpha", nil, 80, 24)
 	for i := 0; i < 50; i++ {
-		idx.Backlinks[strings.ToLower("Alpha")] = append(idx.Backlinks[strings.ToLower("Alpha")], graph.Ref{
+		b.refs = append(b.refs, graph.Ref{
 			FromPage:   fmt.Sprintf("Page-%02d", i),
 			LineNumber: i + 1,
 			Context:    fmt.Sprintf("- ref %d to [[Alpha]]", i),
 		})
 	}
-
-	b := NewBacklinks(idx, "Alpha", nil, 80, 24)
+	b.rows = b.buildRows()
 
 	for _, sel := range []int{0, 25, len(b.refs) - 1} {
 		b.sel = sel
@@ -199,15 +194,15 @@ func TestBacklinksScrollWindowBoundsSelection(t *testing.T) {
 // the scroll window.
 func TestBacklinksScrollHintsAppear(t *testing.T) {
 	quietTerm(t)
-	idx := loadFixture(t)
+	b := NewBacklinks(loadFixture(t), "Alpha", nil, 80, 24)
 	for i := 0; i < 30; i++ {
-		idx.Backlinks[strings.ToLower("Alpha")] = append(idx.Backlinks[strings.ToLower("Alpha")], graph.Ref{
+		b.refs = append(b.refs, graph.Ref{
 			FromPage:   fmt.Sprintf("Page-%02d", i),
 			LineNumber: i + 1,
 			Context:    "- ref",
 		})
 	}
-	b := NewBacklinks(idx, "Alpha", nil, 80, 24)
+	b.rows = b.buildRows()
 
 	b.sel = len(b.refs) / 2
 	mid := b.View()
@@ -242,8 +237,8 @@ func TestBacklinksUnlinkedNavigation(t *testing.T) {
 		b.Update(keyDown)
 	}
 	res := b.Update(keyEnter)
-	if !res.Accept || res.Selected != "2026-05-24" {
-		t.Errorf("enter on last unlinked row should open its page; got %+v", res)
+	if res.kind != overlayResultHighlight || res.page != "2026-05-24" || res.target != "Hub" {
+		t.Errorf("enter on last unlinked row should highlight Hub on its page; got %+v", res)
 	}
 }
 
@@ -271,11 +266,8 @@ func TestBacklinksUnlinkedRefHighlights(t *testing.T) {
 		b.Update(keyDown) // reach the last (unlinked) row
 	}
 	res := b.Update(keyEnter)
-	if !res.Accept || res.HighlightText != "Hub" {
-		t.Errorf("unlinked-ref enter should set HighlightText=Hub; got %+v", res)
-	}
-	if res.FocusLinkTo != "" {
-		t.Errorf("unlinked-ref enter must not set FocusLinkTo; got %q", res.FocusLinkTo)
+	if res.kind != overlayResultHighlight || res.page != "2026-05-24" || res.target != "Hub" {
+		t.Errorf("unlinked-ref enter should highlight Hub on its page; got %+v", res)
 	}
 }
 
@@ -283,15 +275,15 @@ func TestBacklinksLinkedRefFocusesBacklink(t *testing.T) {
 	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 80, 30)
 	res := b.Update(keyEnter) // first selectable row is a linked backlink
-	if !res.Accept || res.FocusLinkTo != "Hub" {
-		t.Errorf("linked-ref enter should set FocusLinkTo=Hub; got %+v", res)
+	if res.kind != overlayResultFocusLink || res.target != "Hub" {
+		t.Errorf("linked-ref enter should focus Hub backlink; got %+v", res)
 	}
 	for i := 0; i < 50; i++ {
 		b.Update(keyDown) // move to an unlinked row
 	}
 	res = b.Update(keyEnter)
-	if !res.Accept || res.FocusLinkTo != "" {
-		t.Errorf("unlinked-ref enter must NOT set FocusLinkTo; got %+v", res)
+	if res.kind != overlayResultHighlight || res.target != "Hub" {
+		t.Errorf("unlinked-ref enter should highlight Hub, got %+v", res)
 	}
 }
 
@@ -314,7 +306,7 @@ func TestBacklinksLOnUnlinkedEntersConfirm(t *testing.T) {
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 80, 30)
 	// Move to the first unlinked row (past the linked refs + the section header).
 	selectFirstUnlinked(t, b)
-	if res := b.Update("l"); res.Linkify != nil {
+	if res := b.Update("l"); res.kind != overlayResultNone {
 		t.Fatalf("first l should only open the confirm, not request linkify: %+v", res)
 	}
 	if !b.confirming {
@@ -341,11 +333,8 @@ func TestBacklinksConfirmYesReturnsLinkify(t *testing.T) {
 	selectFirstUnlinked(t, b)
 	b.Update("l")
 	res := b.Update("y")
-	if res.Linkify == nil {
-		t.Fatal("y in confirm should return a Linkify request")
-	}
-	if res.LinkifyTarget != "Hub" {
-		t.Errorf("LinkifyTarget = %q, want \"Hub\"", res.LinkifyTarget)
+	if res.kind != overlayResultLinkify || res.ref == nil || res.target != "Hub" {
+		t.Fatalf("y in confirm should return linkify to Hub, got %+v", res)
 	}
 	if b.confirming {
 		t.Error("confirming should be cleared after y")
@@ -358,11 +347,8 @@ func TestBacklinksConfirmEscCancels(t *testing.T) {
 	selectFirstUnlinked(t, b)
 	b.Update("l")
 	res := b.Update(keyEsc)
-	if res.Cancel {
-		t.Error("esc in confirm should cancel the confirm, not the whole panel")
-	}
-	if res.Linkify != nil {
-		t.Error("esc in confirm must not request linkify")
+	if res.kind != overlayResultNone {
+		t.Errorf("esc in confirm should cancel only the confirm, got %+v", res)
 	}
 	if b.confirming {
 		t.Error("esc in confirm should clear confirming")

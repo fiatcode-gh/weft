@@ -24,6 +24,18 @@ var (
 	todoRe     = regexp.MustCompile(`^\s*-\s+(TODO|LATER|DOING|WAITING)(?:\s+\[#([ABC])\])?\s+(.*\S)\s*$`)
 )
 
+// openTaskMatch returns the TODO/LATER/DOING/WAITING captures for line.
+func openTaskMatch(line string) []string {
+	return todoRe.FindStringSubmatch(line)
+}
+
+// IsOpenTask reports whether line is an open TODO/LATER/DOING/WAITING bullet.
+// It classifies one line only and is fence-context-free; callers scanning
+// documents must track and exclude fenced lines.
+func IsOpenTask(line string) bool {
+	return openTaskMatch(line) != nil
+}
+
 // parseBody walks body's lines once, tracking fenced-code state, and returns
 // the split lines (callers reuse them for context lookup) alongside every
 // wiki-link and open todo. A single pass over a single line-split avoids
@@ -39,7 +51,7 @@ func parseBody(body string) (lines []string, links []LinkHit, todos []TodoHit) {
 			continue
 		}
 		links = appendWikiLinks(links, line, i+1)
-		if m := todoRe.FindStringSubmatch(line); m != nil {
+		if m := openTaskMatch(line); m != nil {
 			todos = append(todos, TodoHit{
 				Marker:   m[1],
 				Priority: m[2],

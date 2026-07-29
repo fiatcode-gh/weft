@@ -548,6 +548,32 @@ func TestRenderMarkdownLinkHidesURL(t *testing.T) {
 	}
 }
 
+func TestPreprocessTaskMarkersUsesGraphOpenTaskPredicate(t *testing.T) {
+	// arrange
+	lines := []string{
+		"- TODO buy milk",
+		"  - WAITING [#B] vendor",
+		"- DONE shipped",
+		"- TODO: not a task",
+		"- LATER   ",
+	}
+
+	for _, line := range lines {
+		t.Run(line, func(t *testing.T) {
+			// act
+			_, markers := preprocessTaskMarkers(line)
+
+			// assert
+			if len(markers) != 1 {
+				t.Fatalf("marker count = %d, want 1", len(markers))
+			}
+			if got, want := markers[0].open, graph.IsOpenTask(line); got != want {
+				t.Errorf("render open = %v, graph open = %v", got, want)
+			}
+		})
+	}
+}
+
 func TestRenderRecordsOpenTaskPositions(t *testing.T) {
 	// arrange
 	body := strings.Join([]string{
@@ -729,6 +755,19 @@ func TestRenderWithEmphasisUnicodeAndPunctuationBoundaries(t *testing.T) {
 				t.Errorf("term %q should highlight once (matching ripgrep -w); got %d finds", tc.term, len(out.Finds))
 			}
 		})
+	}
+}
+
+func TestRenderWithEmphasisRejectsMissingLeftWordBoundary(t *testing.T) {
+	// arrange
+	body := "xAlpha Alpha\n"
+
+	// act
+	out := mustRenderEmphasis(t, body, 80, "Alpha")
+
+	// assert
+	if len(out.Finds) != 1 {
+		t.Fatalf("want only the standalone Alpha emphasized, got %d finds", len(out.Finds))
 	}
 }
 

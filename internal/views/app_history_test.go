@@ -214,7 +214,7 @@ func TestHistoryRestoresScrollAndCursor(t *testing.T) {
 // app navigates to the bullet's page and records the bullet's open-todo
 // ordinal in the new history entry (which is what PageView.ScrollToTask reads).
 func TestAppTodosDeepLinkScrollsToBullet(t *testing.T) {
-	a := bootAppAt(t, time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC))
+	a := bootApp(t, bootConfig{now: time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC)})
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	// Open todos.

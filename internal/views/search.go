@@ -97,7 +97,7 @@ func (s *SearchView) pageName(filePath string) string {
 func (s *SearchView) Update(key string) OverlayResult {
 	switch key {
 	case keyEsc:
-		return OverlayResult{Cancel: true}
+		return overlayCancel()
 	case keyEnter:
 		if s.running || s.input.Value() == "" {
 			return OverlayResult{}
@@ -107,10 +107,10 @@ func (s *SearchView) Update(key string) OverlayResult {
 				return OverlayResult{} // already searched, no matches — don't re-run
 			}
 			s.running = true
-			return OverlayResult{Cmd: s.SearchCmd(s.idx.GraphPath)}
+			return overlayCommand(s.SearchCmd(s.idx.GraphPath))
 		}
 		if s.sel >= 0 && s.sel < len(s.hits) {
-			return OverlayResult{Selected: s.pageName(s.hits[s.sel].FilePath), Accept: true}
+			return overlayOpen(s.pageName(s.hits[s.sel].FilePath))
 		}
 		return OverlayResult{}
 	case keyUp, keyCtrlK:

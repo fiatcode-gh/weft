@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -14,9 +15,10 @@ type Index struct {
 	Pages      []PageMeta
 	ByName     map[string]*PageMeta // case-preserving (filename-derived)
 	ByNameFold map[string]*PageMeta // case-folded (lowercase key) — for [[ALPHA]] → Alpha
-	Backlinks  map[string][]Ref     // keyed by strings.ToLower(target) — resolution is case-insensitive
 	Todos      []TodoBullet
-	Journals   []string // journal page names, sorted ascending
+
+	backlinks map[string][]Ref // keyed by strings.ToLower(target) — resolution is case-insensitive
+	journals  []string         // journal page names, sorted ascending
 
 	// Warnings collects non-fatal problems found during the walk (skipped
 	// subdirectories, case-fold collisions, unreadable pages, stat
@@ -39,7 +41,7 @@ func BuildIndex(graphPath string) (*Index, error) {
 		GraphPath:  graphPath,
 		ByName:     make(map[string]*PageMeta),
 		ByNameFold: make(map[string]*PageMeta),
-		Backlinks:  make(map[string][]Ref),
+		backlinks:  make(map[string][]Ref),
 	}
 
 	for _, sub := range []string{"pages", "journals"} {
@@ -101,10 +103,10 @@ func BuildIndex(graphPath string) (*Index, error) {
 	// lexical order matches chronological order.
 	for _, p := range idx.Pages {
 		if p.IsJournal {
-			idx.Journals = append(idx.Journals, p.Name)
+			idx.journals = append(idx.journals, p.Name)
 		}
 	}
-	sort.Strings(idx.Journals)
+	sort.Strings(idx.journals)
 
 	// Second pass: parse bodies for links + todos.
 	for _, p := range idx.Pages {
@@ -116,7 +118,7 @@ func BuildIndex(graphPath string) (*Index, error) {
 		lines, links, todos := parseBody(string(body))
 		for _, lh := range links {
 			key := strings.ToLower(lh.Target)
-			idx.Backlinks[key] = append(idx.Backlinks[key], Ref{
+			idx.backlinks[key] = append(idx.backlinks[key], Ref{
 				FromPage:   p.Name,
 				LineNumber: lh.Line,
 				Context:    lineContext(lines, lh.Line),
@@ -134,6 +136,30 @@ func BuildIndex(graphPath string) (*Index, error) {
 		}
 	}
 	return idx, nil
+}
+
+// BacklinksTo returns a snapshot of references to name using the index's case-insensitive key.
+func (idx *Index) BacklinksTo(name string) []Ref {
+	return slices.Clone(idx.backlinks[strings.ToLower(name)])
+}
+
+// JournalNeighbor returns the nearest indexed journal in dir (-1 or +1).
+// Phantom journal-shaped dates use their insertion point in the sorted index.
+func (idx *Index) JournalNeighbor(current string, dir int) (string, bool) {
+	if !IsJournalPageName(current) {
+		return "", false
+	}
+	i := sort.SearchStrings(idx.journals, current)
+	j := i
+	if i < len(idx.journals) && idx.journals[i] == current {
+		j = i + dir
+	} else if dir < 0 {
+		j = i - 1
+	}
+	if j < 0 || j >= len(idx.journals) {
+		return "", false
+	}
+	return idx.journals[j], true
 }
 
 // lineContext returns the n-th 1-based line from a pre-split body with any

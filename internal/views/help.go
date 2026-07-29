@@ -30,7 +30,7 @@ func (h *Help) SetSize(w, ht int) { h.width, h.height = w, ht }
 func (h *Help) Update(key string) OverlayResult {
 	switch key {
 	case keyEsc, "?", keyQ:
-		return OverlayResult{Cancel: true}
+		return overlayCancel()
 	}
 	return OverlayResult{}
 }

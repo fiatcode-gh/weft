@@ -146,11 +146,8 @@ func TestPickerEnterReturnsSelected(t *testing.T) {
 	}
 	want := p.matches[0].Str
 	res := p.Update("enter")
-	if !res.Accept || res.Cancel {
-		t.Errorf("enter: want accept=true cancel=false, got %v/%v", res.Accept, res.Cancel)
-	}
-	if res.Selected != want {
-		t.Errorf("returned name: want %q, got %q", want, res.Selected)
+	if res.kind != overlayResultOpen || res.page != want {
+		t.Errorf("enter result: want open %q, got %+v", want, res)
 	}
 }
 
@@ -167,9 +164,33 @@ func TestPickerCreate_EnterOnIsolatedRow(t *testing.T) {
 		t.Fatalf("setup: query should yield no matches, got %d", len(p.matches))
 	}
 	res := p.Update("enter")
-	if !res.Accept || !res.Create || res.Selected != "zzzzzzzzznotapage" {
-		t.Errorf("enter with create row: want Accept+Create+Selected, got (%q,%v,%v,%v)",
-			res.Selected, res.Accept, res.Cancel, res.Create)
+	if res.kind != overlayResultCreate || res.page != "zzzzzzzzznotapage" {
+		t.Errorf("enter with create row: want create %q, got %+v", "zzzzzzzzznotapage", res)
+	}
+}
+
+func TestPickerCreate_RowReachedByDownPastFuzzyMatches(t *testing.T) {
+	// arrange
+	quietTerm(t)
+	_, idx := writeGraph(t, map[string]string{"pages/Nested Notes Archive.md": "# x\n"})
+	p := NewPicker(idx, 80, 30)
+	typeQuery(p, "Notes")
+	if len(p.matches) == 0 || p.createName != "Notes" {
+		t.Fatalf("setup: matches=%d createName=%q", len(p.matches), p.createName)
+	}
+
+	// act
+	for range p.matches {
+		p.Update(keyDown)
+	}
+	res := p.Update(keyEnter)
+
+	// assert
+	if p.sel != len(p.matches) {
+		t.Fatalf("selection = %d, want create row %d", p.sel, len(p.matches))
+	}
+	if res.kind != overlayResultCreate || res.page != "Notes" {
+		t.Fatalf("enter on create row = %+v", res)
 	}
 }
 
@@ -177,8 +198,8 @@ func TestPickerEscCancels(t *testing.T) {
 	quietTerm(t)
 	p := NewPicker(loadFixture(t), 80, 30)
 	res := p.Update("esc")
-	if res.Selected != "" || res.Accept || !res.Cancel {
-		t.Errorf("esc: want cancel only, got (%q,%v,%v)", res.Selected, res.Accept, res.Cancel)
+	if res.kind != overlayResultCancel {
+		t.Errorf("esc: want cancel, got %+v", res)
 	}
 }
 
@@ -387,8 +408,8 @@ func TestPickerCreate_EnterReturnsCreateResult(t *testing.T) {
 	p := NewPicker(loadFixture(t), 80, 30)
 	typeQuery(p, "Zzz New") // no fuzzy matches in fixture
 	res := p.Update(keyEnter)
-	if !res.Accept || !res.Create || res.Selected != "Zzz New" {
-		t.Errorf("enter on create row: got %+v, want {Accept, Create, Selected:\"Zzz New\"}", res)
+	if res.kind != overlayResultCreate || res.page != "Zzz New" {
+		t.Errorf("enter on create row: got %+v, want create \"Zzz New\"", res)
 	}
 }
 

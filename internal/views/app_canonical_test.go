@@ -4,34 +4,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	tea "github.com/charmbracelet/bubbletea"
 )
-
-// bootAppWithGraph boots an App against a throwaway graph built from
-// name→content entries, mirroring bootApp's production boot sequence.
-func bootAppWithGraph(t *testing.T, files map[string]string) *App {
-	t.Helper()
-	quietTerm(t)
-	dir, _ := writeGraph(t, files)
-	a := New(dir, "test")
-	cmd := a.Init()
-	if cmd == nil {
-		t.Fatal("Init returned nil cmd")
-	}
-	a.Update(cmd())
-	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-	if a.page == nil {
-		t.Fatal("PageView not constructed after boot")
-	}
-	return a
-}
 
 func TestNavigateCanonicalizesCaseMismatchedTarget(t *testing.T) {
 	// arrange: the file is Weft.md; a link elsewhere says [[weft]].
-	a := bootAppWithGraph(t, map[string]string{
+	a := bootApp(t, bootConfig{files: map[string]string{
 		"pages/Weft.md": "- the real page\n",
-	})
+	}})
 
 	// act
 	a.navigate("weft")
@@ -49,9 +28,9 @@ func TestNavigateCanonicalizesCaseMismatchedTarget(t *testing.T) {
 
 func TestEnterEditorOnCaseMismatchedTargetOpensExistingFile(t *testing.T) {
 	// arrange
-	a := bootAppWithGraph(t, map[string]string{
+	a := bootApp(t, bootConfig{files: map[string]string{
 		"pages/Weft.md": "- existing content\n",
-	})
+	}})
 	a.navigate("weft")
 
 	// act
@@ -75,9 +54,9 @@ func TestEnterEditorOnCaseMismatchedTargetOpensExistingFile(t *testing.T) {
 
 func TestEnterEditorRefusesFileTheTextareaWouldAlter(t *testing.T) {
 	// arrange: a CRLF file — the sanitizer would double every line break.
-	a := bootAppWithGraph(t, map[string]string{
+	a := bootApp(t, bootConfig{files: map[string]string{
 		"pages/Crlf.md": "a\r\nb\r\n",
-	})
+	}})
 	a.navigate("Crlf")
 
 	// act

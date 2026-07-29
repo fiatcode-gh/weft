@@ -63,10 +63,6 @@ var linkStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Underline(t
 // video stands out from linkStyle and degrades to plain text under NO_COLOR.
 var emphasisStyle = lipgloss.NewStyle().Reverse(true)
 
-// openTaskMarkers mirrors graph.ExtractTodos: only these markers (with
-// non-empty text) are "open" and get a recorded position for deep-linking.
-var openTaskMarkers = map[string]bool{"TODO": true, "LATER": true, "DOING": true, "WAITING": true}
-
 type taskInfo struct {
 	marker string
 	open   bool
@@ -268,9 +264,8 @@ func stripLogbookBlocks(body string) string {
 }
 
 // stripQueryAndEmbedBlocks drops Logseq {{query …}} and {{embed …}}
-// blocks. Each block is delimited by an opening `{{query` / `{{embed`
-// at the start of a line and a closing `}}` on its own line. Fence-aware
-// so a code block containing the literal markers stays intact.
+// blocks. A block closes with `}}` on its own line, or on the opening line
+// for the self-closing form. Fence-aware so fenced literals remain intact.
 func stripQueryAndEmbedBlocks(body string) string {
 	var out strings.Builder
 	out.Grow(len(body))
@@ -466,13 +461,9 @@ func preprocessTaskMarkers(body string) (string, []taskInfo) {
 		marker := m[2]
 		id := len(markers)
 		rest := line[len(prefix)+len(marker):]
-		// "open" mirrors graph.ExtractTodos: an open marker followed by
-		// whitespace and then non-empty text. The leading-whitespace
-		// check matters because taskMarkerRe ends the marker at a \b
-		// boundary (so it also matches "- TODO: x"), whereas graph
-		// requires "\s+" after the marker — without this guard the two
-		// disagree and the deep-link ordinal misaligns.
-		open := openTaskMarkers[marker] && len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t') && strings.TrimSpace(rest) != ""
+		// Graph owns open-task classification so dashboard ordinals and
+		// rendered task offsets stay aligned.
+		open := graph.IsOpenTask(line)
 		markers = append(markers, taskInfo{marker: marker, open: open})
 		sentinel := taskSentinelStart + encodeSentinelID(id) + taskSentinelEnd
 		// Pad to the marker's display width so Glamour's word-wrap reserves

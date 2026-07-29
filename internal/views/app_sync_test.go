@@ -145,7 +145,7 @@ func TestWriteKeysBlockedWhileSyncing(t *testing.T) {
 	}
 }
 
-// TestLinkifyBlockedWhileSyncing covers the res.Linkify dispatch branch in
+// TestLinkifyBlockedWhileSyncing covers the linkify outcome dispatch branch in
 // App.Update (the "y confirm" step of the Backlinks overlay), the
 // highest-risk of the sync-busy-gated entry points because it writes
 // straight to a source file on disk rather than through the editor's own
@@ -159,7 +159,7 @@ func TestWriteKeysBlockedWhileSyncing(t *testing.T) {
 // pointing at a real file, drives it into the confirm sub-state with its
 // own real Update("l"), and only then hands the "y" tea.KeyMsg to a.Update.
 // That still exercises the actual guarded branch (a.active.Update(key)
-// producing OverlayResult.Linkify, gated by blockIfSyncing) rather than
+// producing an overlayLinkify result, gated by blockIfSyncing) rather than
 // calling a.linkify directly, which would bypass the guard entirely.
 func TestLinkifyBlockedWhileSyncing(t *testing.T) {
 	// arrange
@@ -264,7 +264,7 @@ func TestPickerCreateBlockedWhileSyncing(t *testing.T) {
 	// arrange: a sync in flight and a picker about to create a page.
 	a := bootApp(t)
 	a.syncing = true
-	a.active = stubOverlay{res: OverlayResult{Accept: true, Create: true, Selected: "Brand New"}}
+	a.active = stubOverlay{res: overlayCreate("Brand New")}
 
 	// act
 	model, _ := a.Update(tea.KeyMsg{Type: tea.KeyEnter})

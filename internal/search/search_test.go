@@ -151,6 +151,21 @@ func TestRunNoMatchReturnsEmpty(t *testing.T) {
 	}
 }
 
+func TestRunMalformedRegexSurfacesRipgrepFailure(t *testing.T) {
+	skipIfNoRipgrep(t)
+
+	// arrange
+	graph := fixtureGraph(t)
+
+	// act
+	_, err := Run(graph, "[")
+
+	// assert
+	if err == nil || !strings.Contains(err.Error(), "rg failed") {
+		t.Fatalf("Run malformed regex error = %v, want rg failed", err)
+	}
+}
+
 func TestRunMissingDirsReturnsNil(t *testing.T) {
 	// arrange — an empty temp dir has neither pages/ nor journals/.
 	tmp := t.TempDir()

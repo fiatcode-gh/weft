@@ -36,7 +36,7 @@ type Backlinks struct {
 // backlinks with the supplied unlinked references (the App computes those via
 // ripgrep on panel-open). Self-references are filtered from the linked list.
 func NewBacklinks(idx *graph.Index, target string, unlinked []graph.UnlinkedRef, width, height int) *Backlinks {
-	src := idx.Backlinks[strings.ToLower(target)]
+	src := idx.BacklinksTo(target)
 	refs := make([]graph.Ref, 0, len(src))
 	for _, r := range src {
 		if r.FromPage == target {
@@ -100,7 +100,7 @@ func (b *Backlinks) Update(key string) OverlayResult {
 		case keyEnter, "y":
 			r := b.rows[b.sel]
 			b.confirming = false
-			return OverlayResult{Linkify: r.unl, LinkifyTarget: b.target}
+			return overlayLinkify(r.unl, b.target)
 		case keyEsc, "n":
 			b.confirming = false
 		}
@@ -108,7 +108,7 @@ func (b *Backlinks) Update(key string) OverlayResult {
 	}
 	switch key {
 	case keyEsc, "b":
-		return OverlayResult{Cancel: true}
+		return overlayCancel()
 	case keyUp, keyK, keyCtrlK:
 		b.errMsg = ""
 		b.moveSel(-1)
@@ -124,10 +124,10 @@ func (b *Backlinks) Update(key string) OverlayResult {
 		if b.sel >= 0 && b.sel < len(b.rows) {
 			r := b.rows[b.sel]
 			if r.ref != nil {
-				return OverlayResult{Selected: r.ref.FromPage, Accept: true, FocusLinkTo: b.target}
+				return overlayFocusLink(r.ref.FromPage, b.target)
 			}
 			if r.unl != nil {
-				return OverlayResult{Selected: r.unl.PageName, Accept: true, HighlightText: b.target}
+				return overlayHighlight(r.unl.PageName, b.target)
 			}
 		}
 	}

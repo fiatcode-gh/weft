@@ -19,45 +19,40 @@ func TestTodayJournalNameUsesNowFunc(t *testing.T) {
 	}
 }
 
-// bootAppAt is like bootApp but pins App.nowFunc before the WindowSizeMsg so
-// tryInitPage seeds history with a deterministic page name. Use for tests
-// that exercise the . / < / > keys against the fixture.
-func bootAppAt(t *testing.T, now time.Time) *App {
-	t.Helper()
-	quietTerm(t)
-	abs := cloneFixtureGraph(t)
-	a := New(abs, "test")
-	a.nowFunc = func() time.Time { return now }
-	cmd := a.Init()
-	if cmd == nil {
-		t.Fatal("Init returned nil cmd")
-	}
-	msg := cmd()
-	a.Update(msg)
-	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-	if a.page == nil {
-		t.Fatal("PageView not constructed after boot")
-	}
-	return a
+type bootConfig struct {
+	files map[string]string
+	now   time.Time
 }
 
-// bootApp returns an App that has loaded the fixture index and initialised
-// its PageView at a known size. Exposed for history-related tests; mirrors
-// the production boot sequence (index load -> WindowSizeMsg -> tryInitPage)
-// minus the async hop.
-func bootApp(t *testing.T) *App {
+// bootApp loads a test graph and initializes PageView through the production
+// boot order. With no config it clones the shared fixture.
+func bootApp(t *testing.T, configs ...bootConfig) *App {
 	t.Helper()
 	quietTerm(t)
-	abs := cloneFixtureGraph(t)
-	a := New(abs, "test")
-	// Drive the deferred index build synchronously.
+	if len(configs) > 1 {
+		t.Fatalf("bootApp accepts at most one config, got %d", len(configs))
+	}
+	cfg := bootConfig{}
+	if len(configs) == 1 {
+		cfg = configs[0]
+	}
+
+	var graphPath string
+	if cfg.files != nil {
+		graphPath, _ = writeGraph(t, cfg.files)
+	} else {
+		graphPath = cloneFixtureGraph(t)
+	}
+	a := New(graphPath, "test")
+	if !cfg.now.IsZero() {
+		now := cfg.now
+		a.nowFunc = func() time.Time { return now }
+	}
 	cmd := a.Init()
 	if cmd == nil {
 		t.Fatal("Init returned nil cmd")
 	}
-	msg := cmd()
-	a.Update(msg)
-	// Provide a real terminal size so tryInitPage can construct PageView.
+	a.Update(cmd())
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	if a.page == nil {
 		t.Fatal("PageView not constructed after boot")
@@ -342,9 +337,9 @@ func TestEditorDiscardExitPreservesScrollPosition(t *testing.T) {
 func TestSyncReindexPreservesScrollPosition(t *testing.T) {
 	// arrange
 	quietTerm(t)
-	a := bootAppWithGraph(t, map[string]string{
+	a := bootApp(t, bootConfig{files: map[string]string{
 		"pages/Long.md": strings.Repeat("- line\n", 80),
-	})
+	}})
 	a.navigate("Long")
 	for i := 0; i < 30; i++ {
 		a.page.LineDown()
@@ -395,12 +390,12 @@ func TestIndexWarningsSurfaceAsHintAndLog(t *testing.T) {
 	quietTerm(t)
 	cache := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", cache)
-	a := bootAppWithGraph(t, map[string]string{
+	a := bootApp(t, bootConfig{files: map[string]string{
 		"pages/Home.md":       "- hello\n",
 		"pages/sub/Nested.md": "- nested\n", // pages/sub/ → one subdir warning
-	})
+	}})
 
-	// assert — boot indexing already ran inside bootAppWithGraph
+	// assert — boot indexing already ran inside bootApp
 	if !strings.Contains(a.hint, "indexed with 1 warning — see ") {
 		t.Fatalf("hint = %q, want indexed-with-warnings hint", a.hint)
 	}
@@ -423,10 +418,10 @@ func TestStandingIndexWarningsDoNotRenag(t *testing.T) {
 	quietTerm(t)
 	cache := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", cache)
-	a := bootAppWithGraph(t, map[string]string{
+	a := bootApp(t, bootConfig{files: map[string]string{
 		"pages/Home.md":       "- hello\n",
 		"pages/sub/Nested.md": "- nested\n", // pages/sub/ → one subdir warning
-	})
+	}})
 	if !strings.Contains(a.hint, "indexed with 1 warning — see ") {
 		t.Fatalf("precondition: hint = %q, want indexed-with-warnings hint", a.hint)
 	}

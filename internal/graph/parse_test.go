@@ -75,6 +75,34 @@ func TestExtractWikiLinksInlineCodeMidDocument(t *testing.T) {
 	}
 }
 
+func TestIsOpenTask(t *testing.T) {
+	// arrange
+	tests := []struct {
+		name string
+		line string
+		want bool
+	}{
+		{name: "todo", line: "- TODO buy milk", want: true},
+		{name: "indented priority", line: "  - WAITING [#B] vendor", want: true},
+		{name: "done", line: "- DONE shipped", want: false},
+		{name: "punctuation adjacent", line: "- TODO: not a task", want: false},
+		{name: "empty text", line: "- LATER   ", want: false},
+		{name: "not a bullet", line: "TODO buy milk", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// act
+			got := IsOpenTask(tt.line)
+
+			// assert
+			if got != tt.want {
+				t.Errorf("IsOpenTask(%q) = %v, want %v", tt.line, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestExtractTodos(t *testing.T) {
 	// arrange
 	body := "- TODO Buy milk\n" +

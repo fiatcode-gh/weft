@@ -55,7 +55,7 @@ func TestSearchUpdateTypesIntoQuery(t *testing.T) {
 	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
 	for _, k := range []string{"a", "l", "p"} {
-		if res := s.Update(k); res.Accept || res.Cancel || res.Selected != "" || res.Cmd != nil {
+		if res := s.Update(k); res.kind != overlayResultNone {
 			t.Errorf("typing %q: want zero result, got %+v", k, res)
 		}
 	}
@@ -136,7 +136,7 @@ func TestSearchSelectionBounds(t *testing.T) {
 func TestSearchEnterEmptyQueryNoop(t *testing.T) {
 	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
-	if res := s.Update("enter"); res.Accept || res.Cancel || res.Selected != "" || res.Cmd != nil {
+	if res := s.Update("enter"); res.kind != overlayResultNone {
 		t.Errorf("enter on empty query: want zero result, got %+v", res)
 	}
 }
@@ -147,11 +147,8 @@ func TestSearchEnterFirstTimeRunsCmd(t *testing.T) {
 	s.SetQuery("Beta")
 
 	res := s.Update("enter")
-	if res.Accept || res.Cancel || res.Selected != "" {
-		t.Errorf("enter to launch: want a Cmd only, got %+v", res)
-	}
-	if res.Cmd == nil {
-		t.Errorf("enter to launch: want non-nil Cmd, got nil")
+	if res.kind != overlayResultCommand || res.cmd == nil {
+		t.Errorf("enter to launch: want command result, got %+v", res)
 	}
 	if !s.running {
 		t.Errorf("enter to launch: running flag should be set")
@@ -164,7 +161,7 @@ func TestSearchEnterWhileRunningIsNoop(t *testing.T) {
 	s.SetQuery("Beta")
 	s.running = true
 
-	if res := s.Update("enter"); res.Accept || res.Cancel || res.Selected != "" || res.Cmd != nil {
+	if res := s.Update("enter"); res.kind != overlayResultNone {
 		t.Errorf("enter while running: want zero result, got %+v", res)
 	}
 }
@@ -180,22 +177,16 @@ func TestSearchEnterResolvesHitToPageName(t *testing.T) {
 	s.hits = []search.Hit{{FilePath: want.Path, Line: 1, Context: "x"}}
 	s.sel = 0
 	res := s.Update("enter")
-	if !res.Accept || res.Cancel {
-		t.Errorf("enter with indexed hit: want Accept, got %+v", res)
-	}
-	if res.Selected != want.Name {
-		t.Errorf("resolved page: want %q, got %q", want.Name, res.Selected)
+	if res.kind != overlayResultOpen || res.page != want.Name {
+		t.Errorf("enter with indexed hit: want open %q, got %+v", want.Name, res)
 	}
 
 	// A hit whose path is NOT in the index accepts but selects nothing.
 	s.hits = []search.Hit{{FilePath: "/totally/unknown/file.md", Line: 1, Context: "x"}}
 	s.sel = 0
 	res = s.Update("enter")
-	if !res.Accept {
-		t.Errorf("enter with unknown hit: want Accept, got %+v", res)
-	}
-	if res.Selected != "" {
-		t.Errorf("unknown hit should resolve to empty page, got %q", res.Selected)
+	if res.kind != overlayResultOpen || res.page != "" {
+		t.Errorf("unknown hit should resolve to empty open, got %+v", res)
 	}
 }
 
@@ -203,8 +194,8 @@ func TestSearchEscCancels(t *testing.T) {
 	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
 	res := s.Update("esc")
-	if !res.Cancel || res.Accept || res.Cmd != nil {
-		t.Errorf("esc: want Cancel only, got %+v", res)
+	if res.kind != overlayResultCancel {
+		t.Errorf("esc: want cancel, got %+v", res)
 	}
 }
 
@@ -290,8 +281,8 @@ func TestEnterRetriesAfterSearchError(t *testing.T) {
 	res := s.Update(keyEnter)
 
 	// assert — enter re-runs instead of no-op
-	if res.Cmd == nil {
-		t.Fatal("enter after error did not retry the search")
+	if res.kind != overlayResultCommand || res.cmd == nil {
+		t.Fatalf("enter after error did not retry the search: %+v", res)
 	}
 }
 
@@ -533,8 +524,8 @@ func TestSearchZeroResultIsNotNeverSearched(t *testing.T) {
 
 	// Enter must NOT re-run the same query once we know it returned nothing.
 	res := s.Update(keyEnter)
-	if res.Cmd != nil {
-		t.Errorf("enter after a zero-result search must not re-run the query")
+	if res.kind != overlayResultNone {
+		t.Errorf("enter after a zero-result search must not re-run the query: %+v", res)
 	}
 }
 

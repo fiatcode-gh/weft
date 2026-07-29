@@ -57,7 +57,7 @@ func (t *Todos) recompute() {
 func (t *Todos) Update(key string) OverlayResult {
 	switch key {
 	case keyEsc, keyQ:
-		return OverlayResult{Cancel: true}
+		return overlayCancel()
 	case "t":
 		t.cycleFilter()
 	case keyUp, keyK:
@@ -66,12 +66,7 @@ func (t *Todos) Update(key string) OverlayResult {
 		t.moveDown(len(t.visible))
 	case keyEnter:
 		if t.sel >= 0 && t.sel < len(t.visible) {
-			return OverlayResult{
-				Selected:    t.visible[t.sel].Page,
-				TaskOrdinal: t.visible[t.sel].Ordinal,
-				DeepLink:    true,
-				Accept:      true,
-			}
+			return overlayOpenTask(t.visible[t.sel].Page, t.visible[t.sel].Ordinal)
 		}
 	}
 	return OverlayResult{}

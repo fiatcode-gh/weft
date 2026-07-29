@@ -138,13 +138,13 @@ func (p *Picker) Update(key string) OverlayResult {
 	p.errMsg = ""
 	switch key {
 	case keyEsc:
-		return OverlayResult{Cancel: true}
+		return overlayCancel()
 	case keyEnter:
 		if p.createName != "" && p.sel == len(p.matches) {
-			return OverlayResult{Selected: p.createName, Accept: true, Create: true}
+			return overlayCreate(p.createName)
 		}
 		if p.sel >= 0 && p.sel < len(p.matches) {
-			return OverlayResult{Selected: p.matches[p.sel].Str, Accept: true}
+			return overlayOpen(p.matches[p.sel].Str)
 		}
 		return OverlayResult{}
 	case keyUp, keyCtrlK:

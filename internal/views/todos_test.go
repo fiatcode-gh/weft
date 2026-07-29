@@ -57,11 +57,8 @@ func TestTodosEnterReturnsPage(t *testing.T) {
 	}
 	want := td.visible[0].Page
 	res := td.Update("enter")
-	if !res.Accept || res.Cancel {
-		t.Errorf("enter: want accept=true cancel=false, got %v/%v", res.Accept, res.Cancel)
-	}
-	if res.Selected != want {
-		t.Errorf("returned page: want %q, got %q", want, res.Selected)
+	if res.kind != overlayResultOpenTask || res.page != want || res.taskOrdinal != td.visible[0].Ordinal {
+		t.Errorf("enter result: want open task %q/%d, got %+v", want, td.visible[0].Ordinal, res)
 	}
 }
 
@@ -85,8 +82,8 @@ func TestTodosEscAndQCancel(t *testing.T) {
 	for _, k := range []string{"esc", "q"} {
 		td := NewTodos(loadFixture(t), 100, 30)
 		res := td.Update(k)
-		if res.Selected != "" || res.Accept || !res.Cancel {
-			t.Errorf("%s: want cancel only, got (%q,%v,%v)", k, res.Selected, res.Accept, res.Cancel)
+		if res.kind != overlayResultCancel {
+			t.Errorf("%s: want cancel, got %+v", k, res)
 		}
 	}
 }

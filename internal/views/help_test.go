@@ -105,14 +105,14 @@ func TestHelpHeightGuardClipsToTerminal(t *testing.T) {
 
 func TestHelpQClosesOverlay(t *testing.T) {
 	h := NewHelp("v1.0.0", 80, 0)
-	if res := h.Update("q"); !res.Cancel {
+	if res := h.Update("q"); res.kind != overlayResultCancel {
 		t.Errorf("q should close the help overlay; got %+v", res)
 	}
 }
 
 func TestHelpUnboundKeyIsNoop(t *testing.T) {
 	h := NewHelp("v1.0.0", 80, 0)
-	if res := h.Update("x"); res.Accept || res.Cancel {
+	if res := h.Update("x"); res.kind != overlayResultNone {
 		t.Errorf("unbound key should be a no-op; got %+v", res)
 	}
 }
