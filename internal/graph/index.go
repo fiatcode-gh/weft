@@ -17,10 +17,23 @@ type Index struct {
 	Backlinks  map[string][]Ref     // keyed by strings.ToLower(target) — resolution is case-insensitive
 	Todos      []TodoBullet
 	Journals   []string // journal page names, sorted ascending
+
+	// Warnings collects non-fatal problems found during the walk (skipped
+	// subdirectories, case-fold collisions, unreadable pages, stat
+	// failures). The TUI logs and hints them; BuildIndex never writes to
+	// stderr — under the alt-screen nobody would see it.
+	Warnings []string
+}
+
+// warnf records a formatted, non-fatal problem found during the walk onto
+// Warnings. See the Warnings field doc for what the TUI does with these.
+func (idx *Index) warnf(format string, args ...any) {
+	idx.Warnings = append(idx.Warnings, fmt.Sprintf(format, args...))
 }
 
 // BuildIndex walks <graphPath>/pages and <graphPath>/journals once and returns
-// the populated Index. Unreadable files are logged to stderr and skipped.
+// the populated Index. Unreadable files are skipped and recorded in
+// Index.Warnings.
 func BuildIndex(graphPath string) (*Index, error) {
 	idx := &Index{
 		GraphPath:  graphPath,
@@ -40,7 +53,7 @@ func BuildIndex(graphPath string) (*Index, error) {
 		}
 		for _, e := range entries {
 			if e.IsDir() {
-				fmt.Fprintf(os.Stderr, "weft: skipping subdirectory %s (weft does not recurse — use the ___ namespace convention instead)\n", filepath.Join(dir, e.Name()))
+				idx.warnf("skipping subdirectory %s (weft does not recurse — use the ___ namespace convention instead)", filepath.Join(dir, e.Name()))
 				continue
 			}
 			if filepath.Ext(e.Name()) != ".md" {
@@ -54,6 +67,8 @@ func BuildIndex(graphPath string) (*Index, error) {
 			}
 			if info, err := e.Info(); err == nil {
 				meta.ModTime = info.ModTime()
+			} else {
+				idx.warnf("cannot stat %s: %v — page will sort last in the picker", path, err)
 			}
 			idx.Pages = append(idx.Pages, meta)
 		}
@@ -68,7 +83,7 @@ func BuildIndex(graphPath string) (*Index, error) {
 		fold := strings.ToLower(name)
 		if existing, ok := idx.ByNameFold[fold]; ok {
 			if existing.Name != name {
-				fmt.Fprintf(os.Stderr, "weft: ambiguous page name %q vs %q (case-insensitive); [[%s]] resolves to %q\n",
+				idx.warnf("ambiguous page name %q vs %q (case-insensitive); [[%s]] resolves to %q",
 					name, existing.Name, fold, existing.Name)
 				// The folded key stays first-wins, but an exact-name lookup
 				// has no ambiguity — it must still find this page.
@@ -95,7 +110,7 @@ func BuildIndex(graphPath string) (*Index, error) {
 	for _, p := range idx.Pages {
 		body, err := os.ReadFile(p.Path)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "weft: skipping %s: %v\n", p.Path, err)
+			idx.warnf("skipping %s: %v", p.Path, err)
 			continue
 		}
 		lines, links, todos := parseBody(string(body))

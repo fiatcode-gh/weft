@@ -28,6 +28,15 @@ type Picker struct {
 	matches    []fuzzy.Match
 	now        time.Time // captured at construction for stable relative-time hints
 	createName string    // non-empty when a "＋ Create" row should be offered
+	errMsg     string    // feedback line rendered inside the panel; see SetError
+}
+
+// SetError records a message to show inside the panel, above the footer.
+// Feedback for a blocked action must render inside the overlay — a
+// status-bar hint would be invisible behind it (same rationale as
+// Backlinks.SetError). Cleared on the next key.
+func (p *Picker) SetError(msg string) {
+	p.errMsg = msg
 }
 
 func NewPicker(idx *graph.Index, width, height int) *Picker {
@@ -126,6 +135,7 @@ func (p *Picker) search(q string) {
 
 // Update handles a key and reports the result to the App.
 func (p *Picker) Update(key string) OverlayResult {
+	p.errMsg = ""
 	switch key {
 	case keyEsc:
 		return OverlayResult{Cancel: true}
@@ -203,8 +213,7 @@ func (p *Picker) View() string {
 	if len(p.matches) == 0 && p.createName == "" {
 		b.WriteString(styleFaint.Render("  no matches"))
 		b.WriteString("\n")
-		b.WriteString("\n")
-		b.WriteString(styleFaint.Render(clamp("↑/↓ select · enter open · esc cancel", inner)))
+		p.writeFooter(&b, inner)
 		return styleBorder.Width(inner + 4).Render(b.String())
 	}
 	if len(p.matches) == 0 {
@@ -255,11 +264,22 @@ func (p *Picker) View() string {
 		b.WriteString(clamp(label, inner))
 		b.WriteString("\n")
 	}
-	b.WriteString("\n")
-	b.WriteString(styleFaint.Render(clamp("↑/↓ select · enter open · esc cancel", inner)))
+	p.writeFooter(&b, inner)
 	// Width(inner) locks the panel so the rounded border doesn't resize when
 	// a longer match scrolls into view.
 	return styleBorder.Width(inner + 4).Render(b.String())
+}
+
+// writeFooter renders the blank spacer, the optional in-panel message, and
+// the key legend. The message line grows the panel by one row, matching how
+// Backlinks renders errMsg.
+func (p *Picker) writeFooter(b *strings.Builder, inner int) {
+	b.WriteString("\n")
+	if p.errMsg != "" {
+		b.WriteString(styleTitle.Render(clamp(p.errMsg, inner)))
+		b.WriteString("\n")
+	}
+	b.WriteString(styleFaint.Render(clamp("↑/↓ select · enter open · esc cancel", inner)))
 }
 
 // layoutPickerRow returns the plain (unstyled) row layout used for the

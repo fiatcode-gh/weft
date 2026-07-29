@@ -369,17 +369,17 @@ func TestBacklinksConfirmEscCancels(t *testing.T) {
 	}
 }
 
-func TestBacklinksSetLinkifyErrorClearsConfirm(t *testing.T) {
+func TestBacklinksSetErrorClearsConfirm(t *testing.T) {
 	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 80, 30)
 	selectFirstUnlinked(t, b)
 	b.Update("l")
-	b.SetLinkifyError("mention no longer found in Beta")
+	b.SetError("mention no longer found in Beta")
 	if b.confirming {
-		t.Error("SetLinkifyError should drop the confirm sub-state")
+		t.Error("SetError should drop the confirm sub-state")
 	}
 	if b.errMsg == "" {
-		t.Error("SetLinkifyError should record the message")
+		t.Error("SetError should record the message")
 	}
 }
 
@@ -411,9 +411,17 @@ func TestBacklinksConfirmViewShowsBeforeAfter(t *testing.T) {
 func TestBacklinksErrorLineRendered(t *testing.T) {
 	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 100, 30)
-	b.SetLinkifyError("mention no longer found in Beta")
-	if !strings.Contains(b.View(), "mention no longer found in Beta") {
-		t.Errorf("error message should render in the panel:\n%s", b.View())
+	b.SetError("mention no longer found in Beta")
+	out := b.View()
+	if !strings.Contains(out, "mention no longer found in Beta") {
+		t.Errorf("error message should render in the panel:\n%s", out)
+	}
+	// The panel renders errMsg verbatim now — the "linkify failed: " prefix
+	// moved to the producer (App.linkify's fail closure), so a message that
+	// never had that framing (e.g. the sync-busy message) doesn't get it
+	// stuck on by the panel.
+	if strings.Contains(out, "linkify failed") {
+		t.Errorf("panel should not add its own prefix:\n%s", out)
 	}
 }
 

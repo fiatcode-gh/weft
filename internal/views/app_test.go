@@ -246,6 +246,12 @@ func TestAppLinkifyMentionGoneShowsError(t *testing.T) {
 	if bl.errMsg == "" {
 		t.Error("a vanished mention should set an in-panel error message")
 	}
+	// App.linkify's fail closure supplies the "linkify failed: " framing —
+	// the panel itself renders errMsg verbatim (see Finding 2: the busy
+	// message from blockIfSyncing must NOT get this framing).
+	if !strings.Contains(bl.errMsg, "linkify failed") {
+		t.Errorf("errMsg = %q, want the linkify-failed prefix from App.linkify's fail closure", bl.errMsg)
+	}
 	got, _ := os.ReadFile(notePath)
 	if string(got) != "- nothing here now\n" {
 		t.Errorf("file must be untouched when the mention is gone; got %q", string(got))
@@ -329,6 +335,36 @@ func TestEditorDiscardExitPreservesScrollPosition(t *testing.T) {
 	}
 }
 
+// reindex() — the synchronous path used by linkify and journal-create —
+// rebuilt the PageView from scratch, discarding scroll offset and link
+// cursor: after y+Esc the page jumped to the top. Sync twin of
+// TestReindexPreservesScrollPosition, which pins the async path.
+func TestSyncReindexPreservesScrollPosition(t *testing.T) {
+	// arrange
+	quietTerm(t)
+	a := bootAppWithGraph(t, map[string]string{
+		"pages/Long.md": strings.Repeat("- line\n", 80),
+	})
+	a.navigate("Long")
+	for i := 0; i < 30; i++ {
+		a.page.LineDown()
+	}
+	want := a.page.Offset()
+	if want == 0 {
+		t.Fatal("arrange failed: page did not scroll")
+	}
+
+	// act
+	if err := a.reindex(); err != nil {
+		t.Fatal(err)
+	}
+
+	// assert
+	if got := a.page.Offset(); got != want {
+		t.Fatalf("offset after sync reindex = %d, want %d", got, want)
+	}
+}
+
 // TestStaleIndexLoadedMsgIsDropped pins the fix for a real race: a sync-pull
 // reindex and an R-triggered reindex can be in flight together, and the
 // OLDER disk walk can deliver LAST. Without a generation tag, that stale
@@ -349,5 +385,67 @@ func TestStaleIndexLoadedMsgIsDropped(t *testing.T) {
 	// assert
 	if a.idx != current {
 		t.Fatal("stale indexLoadedMsg replaced the newer index")
+	}
+}
+
+// Index warnings must reach the user: hinted in the status bar and
+// appended to the debug log (stderr is invisible under the alt-screen).
+func TestIndexWarningsSurfaceAsHintAndLog(t *testing.T) {
+	// arrange
+	quietTerm(t)
+	cache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	a := bootAppWithGraph(t, map[string]string{
+		"pages/Home.md":       "- hello\n",
+		"pages/sub/Nested.md": "- nested\n", // pages/sub/ → one subdir warning
+	})
+
+	// assert — boot indexing already ran inside bootAppWithGraph
+	if !strings.Contains(a.hint, "indexed with 1 warning — see ") {
+		t.Fatalf("hint = %q, want indexed-with-warnings hint", a.hint)
+	}
+	logBytes, err := os.ReadFile(filepath.Join(cache, "weft", "weft.log"))
+	if err != nil {
+		t.Fatalf("expected warnings appended to the debug log: %v", err)
+	}
+	if !strings.Contains(string(logBytes), "skipping subdirectory") {
+		t.Fatalf("log missing warning detail, got:\n%s", logBytes)
+	}
+}
+
+// TestStandingIndexWarningsDoNotRenag pins the fix for a standing warning
+// (an intentional pages/sub/, a long-lived case collision) re-nagging on
+// every reindex: boot already logged and hinted the one warning above; a
+// second reindex (R) that turns up the identical warning set must not hint
+// "indexed with" again or append a second log line.
+func TestStandingIndexWarningsDoNotRenag(t *testing.T) {
+	// arrange — reuse the boot state above: one warning already surfaced
+	quietTerm(t)
+	cache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	a := bootAppWithGraph(t, map[string]string{
+		"pages/Home.md":       "- hello\n",
+		"pages/sub/Nested.md": "- nested\n", // pages/sub/ → one subdir warning
+	})
+	if !strings.Contains(a.hint, "indexed with 1 warning — see ") {
+		t.Fatalf("precondition: hint = %q, want indexed-with-warnings hint", a.hint)
+	}
+	a.hint = ""
+
+	// act — R reindexes; the warning set is unchanged (still just pages/sub/)
+	_, cmd := a.Update(key("R"))
+	drainCmds(t, a, cmd)
+
+	// assert — no re-nag: the hint is whatever R sets ("⟳ reindexing…" then
+	// cleared/replaced), never the indexed-with-warnings hint again
+	if strings.Contains(a.hint, "indexed with") {
+		t.Fatalf("hint after standing-warning reindex = %q, want no re-nag", a.hint)
+	}
+	logBytes, err := os.ReadFile(filepath.Join(cache, "weft", "weft.log"))
+	if err != nil {
+		t.Fatalf("expected warnings appended to the debug log: %v", err)
+	}
+	if got := strings.Count(string(logBytes), "skipping subdirectory"); got != 1 {
+		t.Fatalf("log has %d 'skipping subdirectory' lines, want exactly 1:\n%s", got, logBytes)
 	}
 }

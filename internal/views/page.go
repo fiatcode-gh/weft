@@ -14,7 +14,7 @@ import (
 	"git.fiatcode.dev/fiatcode/weft/v2/internal/render"
 )
 
-// renderCount is incremented on every render.Render call inside
+// renderCount is incremented on every renderPage call inside
 // PageView. Tests assert that the per-page cache keeps it from
 // growing when re-rendering unchanged pages.
 var renderCount int64
@@ -22,6 +22,10 @@ var renderCount int64
 // RenderCount returns the current value of the per-page render
 // counter. Used by tests.
 func RenderCount() int64 { return renderCount }
+
+// renderPage is the single entry into the render package — a var so tests
+// can inject render results. RenderWithEmphasis("") is identical to Render.
+var renderPage = render.RenderWithEmphasis
 
 // PageView renders a single page with a wiki-link cursor.
 type PageView struct {
@@ -286,21 +290,34 @@ func (p *PageView) load() {
 	}
 	atomic.AddInt64(&renderCount, 1)
 	body := strings.TrimSpace(string(b)) + "\n"
-	var res render.Result
-	if p.emphasis != "" {
-		res, err = render.RenderWithEmphasis(body, p.width, p.emphasis)
-	} else {
-		res, err = render.Render(body, p.width)
-	}
+	res, err := renderPage(body, p.width, p.emphasis)
 	if err != nil {
 		p.err = err
 		return
 	}
+	if res.FallbackErr != nil {
+		// Un-styled fallback: log the cause; the cache skip below keeps a
+		// transient Glamour failure from sticking until the mtime changes.
+		logRenderFallback(p.page, res.FallbackErr)
+	}
 	p.result = res
-	if p.emphasis == "" {
+	if p.emphasis == "" && res.FallbackErr == nil {
 		p.cache[meta.Name] = cachedPage{result: res, modTime: meta.ModTime, width: p.width}
 	}
 	p.vp.SetContent(p.result.Styled)
+}
+
+// logRenderFallback best-effort appends a Glamour-fallback notice to
+// DebugLogPath(). A write failure is dropped: the page already shows its
+// readable raw-text fallback, and there is no status-bar in this layer to
+// degrade to.
+func logRenderFallback(page string, cause error) {
+	f, err := os.OpenFile(DebugLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "render fallback for %q at %s: %v\n", page, time.Now().Format(time.RFC3339), cause)
 }
 
 // scrollToFirstFind centres the viewport on the first highlighted emphasis

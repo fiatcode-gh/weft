@@ -1,6 +1,11 @@
 package main
 
-import "testing"
+import (
+	"log"
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestDebugLogEnabled(t *testing.T) {
 	// arrange
@@ -25,6 +30,51 @@ func TestDebugLogEnabled(t *testing.T) {
 		if got != want {
 			t.Errorf("debugLogEnabled(%q) = %v, want %v", v, got, want)
 		}
+	}
+}
+
+func TestInitDebugLogDisabledIsNoOp(t *testing.T) {
+	f, err := initDebugLog("")
+	if err != nil || f != nil {
+		t.Fatalf("disabled flag must be a no-op, got f=%v err=%v", f, err)
+	}
+}
+
+func TestInitDebugLogOpensFile(t *testing.T) {
+	// arrange
+	cache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) }) // tea.LogToFile redirects the stdlib logger
+
+	// act
+	f, err := initDebugLog("1")
+
+	// assert
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f == nil {
+		t.Fatal("expected an open log file")
+	}
+	f.Close()
+	if _, err := os.Stat(filepath.Join(cache, "weft", "weft.log")); err != nil {
+		t.Fatalf("log file should exist: %v", err)
+	}
+}
+
+// The user explicitly asked for logging; a swallowed open error means the
+// request silently no-ops and the alt-screen hides that anything is wrong.
+func TestInitDebugLogFailsWhenLogUnopenable(t *testing.T) {
+	// arrange — a directory where the log file should be forces the open error
+	cache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	if err := os.MkdirAll(filepath.Join(cache, "weft", "weft.log"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// act + assert
+	if _, err := initDebugLog("1"); err == nil {
+		t.Fatal("expected an error when the debug log cannot be opened")
 	}
 }
 

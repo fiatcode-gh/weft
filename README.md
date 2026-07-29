@@ -96,11 +96,11 @@ crash weft — they degrade to plain text or a silent no-op.
 - **`alias::` / `title::` / `tags::` properties** are not extracted — they
   appear as plain text in the page body.
 - **Case-insensitive page-name uniqueness** is not enforced — `Alpha.md` and
-  `alpha.md` can coexist (weft warns on stderr and resolves links
-  deterministically to the first). Link resolution itself is case-insensitive:
-  `[[alpha]]` finds `Alpha`.
-- **`pages/` or `journals/` subdirectories** are skipped with a stderr
-  warning. Namespace pages must use the `___` filename convention.
+  `alpha.md` can coexist (weft records a warning — status bar points at
+  `weft.log` — and resolves links deterministically to the first). Link
+  resolution itself is case-insensitive: `[[alpha]]` finds `Alpha`.
+- **`pages/` or `journals/` subdirectories** are skipped with a warning
+  surfaced in-app. Namespace pages must use the `___` filename convention.
 - **The TODO dashboard shows only open markers** (`TODO` / `LATER` /
   `DOING` / `WAITING`). `DONE` / `CANCELED` / `NOW` bullets are styled on
   the page but never appear in the dashboard.

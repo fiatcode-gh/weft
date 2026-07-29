@@ -1,7 +1,6 @@
 package graph
 
 import (
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -185,19 +184,8 @@ func TestBuildIndexWarnsOnSubdirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	oldStderr := os.Stderr
-	os.Stderr = w
-	defer func() { os.Stderr = oldStderr }()
-
 	// act
 	idx, err := BuildIndex(dir)
-	w.Close()
-	out, _ := io.ReadAll(r)
-	os.Stderr = oldStderr
 
 	// assert
 	if err != nil {
@@ -206,8 +194,58 @@ func TestBuildIndexWarnsOnSubdirectory(t *testing.T) {
 	if len(idx.Pages) != 1 {
 		t.Errorf("want 1 page (the subdir file is skipped), got %d", len(idx.Pages))
 	}
-	if !strings.Contains(string(out), "skipping subdirectory") {
-		t.Errorf("expected subdirectory warning on stderr, got:\n%s", out)
+	// assert — in TestBuildIndexWarnsOnSubdirectory
+	found := false
+	for _, w := range idx.Warnings {
+		if strings.Contains(w, "skipping subdirectory") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected subdirectory warning in idx.Warnings, got %v", idx.Warnings)
+	}
+}
+
+// An unreadable page must not abort boot: it stays in the picker (first
+// pass) but its body parse is skipped with a warning (second pass).
+func TestBuildIndexCollectsUnreadablePageWarning(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores file modes")
+	}
+	// arrange
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "pages"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"Good.md", "Bad.md"} {
+		if err := os.WriteFile(filepath.Join(dir, "pages", name), []byte("- TODO x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	bad := filepath.Join(dir, "pages", "Bad.md")
+	if err := os.Chmod(bad, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(bad, 0o644) }) // so TempDir removal works
+
+	// act
+	idx, err := BuildIndex(dir)
+
+	// assert
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := idx.Resolve("Bad"); !ok {
+		t.Error("unreadable page should stay in the index")
+	}
+	found := false
+	for _, w := range idx.Warnings {
+		if strings.Contains(w, "skipping") && strings.Contains(w, "Bad.md") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected unreadable-page warning, got %v", idx.Warnings)
 	}
 }
 
@@ -345,19 +383,8 @@ func TestBuildIndexFoldCollisionIsDeterministicAndWarns(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	oldStderr := os.Stderr
-	os.Stderr = w
-	defer func() { os.Stderr = oldStderr }()
-
 	// act
 	idx, err := BuildIndex(dir)
-	w.Close()
-	out, _ := io.ReadAll(r)
-	os.Stderr = oldStderr
 
 	// assert
 	if err != nil {
@@ -375,8 +402,14 @@ func TestBuildIndexFoldCollisionIsDeterministicAndWarns(t *testing.T) {
 			t.Errorf("Resolve(%q).Name = %q, want %q", q, got.Name, want)
 		}
 	}
-	if !strings.Contains(string(out), "ambiguous page name") {
-		t.Errorf("expected an ambiguous-page-name warning on stderr, got:\n%s", out)
+	found := false
+	for _, w := range idx.Warnings {
+		if strings.Contains(w, "ambiguous page name") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected an ambiguous-page-name warning in idx.Warnings, got %v", idx.Warnings)
 	}
 }
 

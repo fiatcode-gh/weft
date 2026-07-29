@@ -4,6 +4,17 @@ All notable changes to weft are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Creating a page or linkifying a mention while a sync is running now says "sync in progress" inside the open panel, instead of an invisible status-bar hint that made the keypress look dead.
+- Index warnings (skipped subdirectories, ambiguous page names, unreadable pages) now surface as a status-bar hint pointing at `weft.log`, instead of going to stderr where the alt-screen hides them. A page whose modification time can't be read is reported too, instead of silently sinking to the bottom of the picker. An unchanged warning set no longer re-nags (hint and log entry) on every later reindex — only a new or newly-cleared set does.
+- A markdown render that falls back to plain text (Glamour failure) is no longer cached, so a transient failure can't stick as an unstyled page; the cause is logged to weft.log.
+- WEFT_DEBUG=1 now exits with a clear error when the debug log can't be opened, instead of silently running without the logging you asked for.
+- Bullets with long task markers (WAITING, CANCELLED) no longer overflow the wrap width by a few columns, which caused stray soft-wrapped lines and slightly-off dashboard deep-link centering.
+- Linkifying a mention (and creating today's journal) no longer resets the page to the top — scroll position and link cursor survive the rebuild.
+
 ## [2.4.0] - 2026-07-24
 
 ### Added

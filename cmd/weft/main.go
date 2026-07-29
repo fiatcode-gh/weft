@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"regexp"
@@ -69,6 +70,22 @@ func shortenPseudoVersion(v string) string {
 	return m[1] + "+" + m[3][:7] + m[4]
 }
 
+// initDebugLog wires the stdlib logger (Bubble Tea's debug mirror) to the
+// weft debug log when the WEFT_DEBUG value enables it. Returns the file to
+// close on exit. An open failure is returned, not swallowed: the user
+// explicitly asked for logging, and pre-alt-screen is the one moment stderr
+// can still tell them it isn't happening.
+func initDebugLog(val string) (io.Closer, error) {
+	if !debugLogEnabled(val) {
+		return nil, nil
+	}
+	f, err := tea.LogToFile(views.DebugLogPath(), "weft")
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
 func main() {
 	graphFlag := flag.String("graph", "", "path to Logseq graph (overrides $WEFT_GRAPH)")
 	versionFlag := flag.Bool("version", false, "print version and exit")
@@ -97,10 +114,13 @@ func main() {
 		os.Exit(2)
 	}
 
-	if debugLogEnabled(os.Getenv("WEFT_DEBUG")) {
-		if f, err := tea.LogToFile(views.DebugLogPath(), "weft"); err == nil {
-			defer f.Close()
-		}
+	debugLog, err := initDebugLog(os.Getenv("WEFT_DEBUG"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "weft: WEFT_DEBUG is set but the debug log can't be opened: %v\n", err)
+		os.Exit(2)
+	}
+	if debugLog != nil {
+		defer debugLog.Close()
 	}
 
 	// Pre-build the Glamour renderer cache so chroma's syntax-highlighter

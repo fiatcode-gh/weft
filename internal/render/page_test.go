@@ -1,10 +1,12 @@
 package render
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
@@ -164,6 +166,23 @@ func TestRenderWikiLinkWrapsAtRightMargin(t *testing.T) {
 	}
 	if maxLine > 40 {
 		t.Errorf("rendered line wider than wrap width 40: max=%d, output=%q", maxLine, plain)
+	}
+}
+
+// A task marker renders as its literal text (WAITING = 7 cells, CANCELLED
+// = 9) but its sentinel is ~3 cells, so Glamour under-reserves and the
+// restored line can overflow the wrap width — spurious soft-wraps and
+// ScrollToTask row drift. The sentinel must pad to the marker's width like
+// the wiki-link and emphasis sentinels do.
+func TestRenderTaskMarkerWrapsAtRightMargin(t *testing.T) {
+	for _, marker := range []string{"WAITING", "CANCELLED"} {
+		body := "- " + marker + " alpha beta gamma delta epsilon zeta eta theta iota\n"
+		res := mustRender(t, body, 40)
+		for _, line := range strings.Split(res.Styled, "\n") {
+			if w := lipgloss.Width(line); w > 40 {
+				t.Errorf("%s: line is %d cells wide, want <= 40: %q", marker, w, line)
+			}
+		}
 	}
 }
 
@@ -779,5 +798,31 @@ func TestFenceGrammarAlignsWithGraph(t *testing.T) {
 	}
 	if !reflect.DeepEqual(rendered, indexed) {
 		t.Fatalf("render links %v != graph links %v", rendered, indexed)
+	}
+}
+
+// A Glamour failure falls back to un-styled text — that must be visible to
+// the caller (FallbackErr) so it can skip its cache: a transient failure
+// cached by mtime becomes a sticky unstyled page.
+func TestRenderReportsGlamourFallback(t *testing.T) {
+	// arrange — no input reliably makes Glamour fail, so swap the seam
+	orig := glamourRender
+	t.Cleanup(func() { glamourRender = orig })
+	glamourRender = func(*glamour.TermRenderer, string) (string, error) {
+		return "", errors.New("boom")
+	}
+
+	// act
+	res, err := Render("- TODO hello [[Alpha]]\n", 40)
+
+	// assert
+	if err != nil {
+		t.Fatalf("fallback must not be an error: %v", err)
+	}
+	if res.FallbackErr == nil {
+		t.Fatal("expected FallbackErr to record the Glamour failure")
+	}
+	if !strings.Contains(res.Styled, "hello") {
+		t.Fatalf("fallback should still carry the page text, got:\n%s", res.Styled)
 	}
 }

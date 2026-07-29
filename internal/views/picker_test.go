@@ -417,6 +417,26 @@ func TestPickerRowsNeverWrap(t *testing.T) {
 	}
 }
 
+// Feedback for a blocked action must render inside the overlay — the status
+// bar is hidden behind it (see Backlinks.SetError for the precedent).
+func TestPickerSetErrorRendersInPanel(t *testing.T) {
+	// arrange
+	quietTerm(t)
+	p := NewPicker(loadFixture(t), 80, 30)
+
+	// act
+	p.SetError("sync in progress — retry when it finishes")
+
+	// assert
+	if !strings.Contains(p.View(), "sync in progress — retry when it finishes") {
+		t.Fatalf("expected in-panel message, got:\n%s", p.View())
+	}
+	p.Update("a") // any subsequent key clears it
+	if strings.Contains(p.View(), "sync in progress") {
+		t.Fatalf("expected message cleared on next key, got:\n%s", p.View())
+	}
+}
+
 func TestPickerCreate_OfferedWhenNameFuzzyMatchesButDoesNotResolve(t *testing.T) {
 	quietTerm(t)
 	_, idx := writeGraph(t, map[string]string{"pages/Nested Notes Archive.md": "# x\n"})

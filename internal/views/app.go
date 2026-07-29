@@ -90,6 +90,11 @@ type App struct {
 	hint    string
 	hintGen int
 
+	// lastIndexWarnings remembers the most recently seen index-warning set
+	// (joined by newlines) so newIndexWarnings can tell a standing warning
+	// from a new one.
+	lastIndexWarnings string
+
 	// syncFunc runs the git sync; defaults to sync.Run with App's clock.
 	// syncing is the single-flight guard: a second `s` mid-sync is a no-op.
 	syncFunc syncRunner
@@ -326,7 +331,17 @@ func (a *App) reindex() error {
 	}
 	a.idx = idx
 	if a.page != nil {
+		// Same-page rebuild: keep the reader's place, exactly like the
+		// async indexLoadedMsg path. Restore clamps if the page shrank.
+		off, cur := a.page.Offset(), a.page.Cursor()
 		a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
+		a.page.Restore(off, cur)
+	}
+	if fresh := a.newIndexWarnings(idx.Warnings); fresh && len(idx.Warnings) > 0 {
+		// Best-effort: nothing to degrade to here — an overlay usually
+		// covers the status bar when this path runs (linkify, journal
+		// create), so persist the details and move on.
+		_ = a.logIndexWarnings(idx.Warnings)
 	}
 	return nil
 }
@@ -479,14 +494,14 @@ func (a *App) unlinkedRefs(name string) []graph.UnlinkedRef {
 // file, then reindexes and rebuilds the backlinks overlay so the reference
 // moves from Unlinked to Linked. The file is re-read and re-matched here (not
 // trusting the offset captured at panel-open) so a file that changed since
-// detection fails safely. Failures render inside the panel via SetLinkifyError;
-// a status-bar hint would be invisible behind the overlay. Returns nil — the
+// detection fails safely. Failures render inside the panel via SetError; a
+// status-bar hint would be invisible behind the overlay. Returns nil — the
 // reindex is synchronous, so there is no command to run.
 func (a *App) linkify(ref *graph.UnlinkedRef, target string) tea.Cmd {
 	bl, _ := a.active.(*Backlinks)
 	fail := func(msg string) tea.Cmd {
 		if bl != nil {
-			bl.SetLinkifyError(msg)
+			bl.SetError("linkify failed: " + msg)
 		}
 		return nil
 	}
@@ -544,7 +559,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Every reindex (boot, R, post-edit, post-$EDITOR) is a natural
 		// moment to refresh the sync indicator.
-		return a, a.statusProbeCmd()
+		return a, tea.Batch(a.statusProbeCmd(), a.indexWarningsHint(m.idx.Warnings))
 	case syncDoneMsg:
 		a.syncing = false
 		if m.res.Err != nil {
@@ -675,14 +690,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, res.Cmd
 			}
 			if res.Linkify != nil {
-				if cmd := a.syncBusyHint(); cmd != nil {
+				if cmd, blocked := a.blockIfSyncing(); blocked {
 					return a, cmd
 				}
 				return a, a.linkify(res.Linkify, res.LinkifyTarget)
 			}
 			if res.Accept {
 				if res.Create {
-					if cmd := a.syncBusyHint(); cmd != nil {
+					if cmd, blocked := a.blockIfSyncing(); blocked {
 						return a, cmd
 					}
 					a.navigate(res.Selected)
@@ -723,7 +738,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "]":
 			a.historyForward()
 		case ".":
-			if cmd := a.syncBusyHint(); cmd != nil {
+			if cmd, blocked := a.blockIfSyncing(); blocked {
 				return a, cmd
 			}
 			today := a.todayJournalName()
@@ -776,12 +791,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// overlay renders.
 			return a, tea.Batch(a.setHint("⟳ reindexing…"), a.buildIndexCmd())
 		case keyE:
-			if cmd := a.syncBusyHint(); cmd != nil {
+			if cmd, blocked := a.blockIfSyncing(); blocked {
 				return a, cmd
 			}
 			return a, a.enterEditor()
 		case keyShiftE:
-			if cmd := a.syncBusyHint(); cmd != nil {
+			if cmd, blocked := a.blockIfSyncing(); blocked {
 				return a, cmd
 			}
 			return a, a.editCurrent()
@@ -879,15 +894,28 @@ func (a *App) statusBar() string {
 	return rule + "\n" + left + strings.Repeat(" ", gap) + right
 }
 
-// syncBusyHint gates the graph-mutating entry points while the async git
+// blockIfSyncing gates the graph-mutating entry points while the async git
 // sync goroutine is rewriting the worktree: a save landing mid
 // `pull --rebase` is overwritten by the rebase checkout and silently lost,
-// and `add -A` can stage editor temp files. Non-nil means "blocked".
-func (a *App) syncBusyHint() tea.Cmd {
+// and `add -A` can stage editor temp files. Reports blocked=true while a
+// sync runs. Feedback goes into the open overlay when it has an in-panel
+// channel — the status bar is hidden behind an overlay — falling back to a
+// status-bar hint; cmd is non-nil only for that fallback.
+func (a *App) blockIfSyncing() (cmd tea.Cmd, blocked bool) {
 	if !a.syncing {
-		return nil
+		return nil, false
 	}
-	return a.setHint("⟳ sync in progress — retry when it finishes")
+	const msg = "sync in progress — retry when it finishes"
+	switch o := a.active.(type) {
+	case *Backlinks:
+		o.SetError(msg)
+		return nil, true
+	case *Picker:
+		o.SetError(msg)
+		return nil, true
+	default:
+		return a.setHint("⟳ " + msg), true
+	}
 }
 
 // logSyncFailure appends a failing sync's stage, error, and captured git
@@ -906,4 +934,58 @@ func (a *App) logSyncFailure(res syncpkg.Result) error {
 	_, err = fmt.Fprintf(f, "sync %s failed at %s: %v\n%s\n",
 		res.Stage, a.nowFunc().Format(time.RFC3339), res.Err, res.Output)
 	return err
+}
+
+// logIndexWarnings appends index-build warnings to DebugLogPath() — written
+// regardless of WEFT_DEBUG so the hint's "see <path>" pointer is valid
+// (mirrors logSyncFailure). Returns the write error so the caller can
+// degrade the hint instead of pointing at a log that was never written.
+func (a *App) logIndexWarnings(warnings []string) error {
+	f, err := os.OpenFile(DebugLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	for _, w := range warnings {
+		if _, err := fmt.Fprintf(f, "index warning at %s: %s\n", a.nowFunc().Format(time.RFC3339), w); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// newIndexWarnings reports whether the warning set differs from the last
+// set it saw, remembering the new one either way (so a set that clears and
+// later returns re-notifies). Standing graph warnings — a permanent
+// subdirectory, a long-lived case collision — would otherwise re-log and
+// re-hint on every reindex: boot, R, save-exit, sync-pull.
+func (a *App) newIndexWarnings(warnings []string) bool {
+	key := strings.Join(warnings, "\n")
+	if key == a.lastIndexWarnings {
+		return false
+	}
+	a.lastIndexWarnings = key
+	return true
+}
+
+// indexWarningsHint logs warnings and returns the status-bar hint command,
+// or nil when there are none, or when this is the same warning set already
+// surfaced by a prior reindex (see newIndexWarnings).
+func (a *App) indexWarningsHint(warnings []string) tea.Cmd {
+	if !a.newIndexWarnings(warnings) {
+		return nil
+	}
+	n := len(warnings)
+	if n == 0 {
+		return nil
+	}
+	noun := "warnings"
+	if n == 1 {
+		noun = "warning"
+	}
+	hint := fmt.Sprintf("indexed with %d %s — see %s", n, noun, DebugLogPath())
+	if err := a.logIndexWarnings(warnings); err != nil {
+		hint = fmt.Sprintf("indexed with %d %s: %s", n, noun, warnings[0])
+	}
+	return a.setHint(hint)
 }

@@ -42,6 +42,10 @@ type Result struct {
 	// Finds holds the byte offset in Styled of each highlighted emphasis-term
 	// occurrence, in document order. Empty unless rendered with an emphasis term.
 	Finds []int
+	// FallbackErr is non-nil when Glamour failed and Styled carries the
+	// un-styled source (sentinels still substituted). Callers must not
+	// cache the result — the failure may be transient.
+	FallbackErr error
 }
 
 var (
@@ -96,6 +100,7 @@ const (
 	emphSentinelStart = "\ue005" // emphasis sentinel — distinct PUA range from wiki (E000–E001) and task (E002–E003)
 	emphSentinelEnd   = "\ue006"
 	emphSentinelPad   = "\ue007" // width-padding for the emphasis sentinel (see wikiSentinelPad)
+	taskSentinelPad   = "\ue008" // width-padding for the task sentinel (see wikiSentinelPad)
 )
 
 // sentinelRe matches a wiki-link, task-marker, or emphasis sentinel.
@@ -110,7 +115,7 @@ const (
 // encodeSentinelID/decodeSentinelID.
 var sentinelRe = regexp.MustCompile(
 	wikiSentinelStart + `([\x{E010}-\x{E019}]+)` + wikiSentinelEnd + `(?:` + wikiSentinelPad + `)*` +
-		`|` + taskSentinelStart + `([\x{E010}-\x{E019}]+)` + taskSentinelEnd +
+		`|` + taskSentinelStart + `([\x{E010}-\x{E019}]+)` + taskSentinelEnd + `(?:` + taskSentinelPad + `)*` +
 		`|` + emphSentinelStart + `([\x{E010}-\x{E019}]+)` + emphSentinelEnd + `(?:` + emphSentinelPad + `)*`,
 )
 
@@ -149,6 +154,12 @@ var (
 	rendererMu    sync.Mutex
 	rendererCache = map[int]*glamour.TermRenderer{}
 )
+
+// glamourRender invokes the width-cached renderer. A var so tests can
+// simulate a Glamour failure — no markdown input reliably triggers one.
+var glamourRender = func(r *glamour.TermRenderer, in string) (string, error) {
+	return r.Render(in)
+}
 
 // styleSelection is which Glamour style weft should render with. selectStyle
 // derives it from env vars only — never querying the terminal.
@@ -464,6 +475,12 @@ func preprocessTaskMarkers(body string) (string, []taskInfo) {
 		open := openTaskMarkers[marker] && len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t') && strings.TrimSpace(rest) != ""
 		markers = append(markers, taskInfo{marker: marker, open: open})
 		sentinel := taskSentinelStart + encodeSentinelID(id) + taskSentinelEnd
+		// Pad to the marker's display width so Glamour's word-wrap reserves
+		// the columns the restored marker text will occupy (same trick as
+		// the wiki-link and emphasis sentinels, see preprocessWikiLinks).
+		if pad := lipgloss.Width(marker) - lipgloss.Width(sentinel); pad > 0 {
+			sentinel += strings.Repeat(taskSentinelPad, pad)
+		}
 		return prefix + sentinel + rest
 	})
 	return body, markers
@@ -623,9 +640,10 @@ func RenderWithEmphasis(body string, width int, emphasis string) (Result, error)
 	if err != nil {
 		return Result{}, err
 	}
-	styled, err := r.Render(pre)
-	if err != nil {
-		// Fallback: plain text if Glamour chokes.
+	styled, fallbackErr := glamourRender(r, pre)
+	if fallbackErr != nil {
+		// Fallback: plain text if Glamour chokes. Recorded on the Result so
+		// the caller can skip its cache and log the cause.
 		styled = pre
 	}
 
@@ -680,5 +698,5 @@ func RenderWithEmphasis(body string, width int, emphasis string) (Result, error)
 	}
 	out.WriteString(styled[last:])
 
-	return Result{Styled: out.String(), Links: links, Tasks: tasks, Finds: finds}, nil
+	return Result{Styled: out.String(), Links: links, Tasks: tasks, Finds: finds, FallbackErr: fallbackErr}, nil
 }

@@ -159,10 +159,11 @@ func TestWriteKeysBlockedWhileSyncing(t *testing.T) {
 // pointing at a real file, drives it into the confirm sub-state with its
 // own real Update("l"), and only then hands the "y" tea.KeyMsg to a.Update.
 // That still exercises the actual guarded branch (a.active.Update(key)
-// producing OverlayResult.Linkify, gated by syncBusyHint) rather than
+// producing OverlayResult.Linkify, gated by blockIfSyncing) rather than
 // calling a.linkify directly, which would bypass the guard entirely.
 func TestLinkifyBlockedWhileSyncing(t *testing.T) {
 	// arrange
+	quietTerm(t)
 	dir, _ := writeGraph(t, map[string]string{
 		"pages/Hub.md":  "# Hub\n",
 		"pages/Beta.md": "intro\na bare Hub mention\n",
@@ -198,8 +199,7 @@ func TestLinkifyBlockedWhileSyncing(t *testing.T) {
 	a.syncing = true
 
 	// act
-	model, _ := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
-	a = model.(*App)
+	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
 
 	// assert
 	after, err := os.ReadFile(betaPath)
@@ -209,8 +209,14 @@ func TestLinkifyBlockedWhileSyncing(t *testing.T) {
 	if string(after) != string(before) {
 		t.Fatalf("Beta.md mutated while syncing: before=%q after=%q", before, after)
 	}
-	if !strings.Contains(a.hint, "sync in progress") {
-		t.Fatalf("hint = %q, want sync-in-progress hint", a.hint)
+	out := b.View()
+	if !strings.Contains(out, "sync in progress") {
+		t.Fatalf("expected in-panel busy message, got:\n%s", out)
+	}
+	// The busy message renders verbatim (matching the picker) — it must not
+	// read as a self-contradictory "linkify failed: sync in progress".
+	if strings.Contains(out, "linkify failed") {
+		t.Fatalf("busy message should not be framed as a failure, got:\n%s", out)
 	}
 }
 
@@ -221,6 +227,38 @@ type stubOverlay struct{ res OverlayResult }
 func (s stubOverlay) Update(string) OverlayResult { return s.res }
 func (s stubOverlay) View() string                { return "" }
 func (s stubOverlay) SetSize(int, int)            {}
+
+// A blocked create must say so inside the picker: the status bar is hidden
+// behind the overlay, so a hint there reads as a dead keypress.
+func TestPickerCreateBlockedWhileSyncingShowsInPanelMessage(t *testing.T) {
+	// arrange
+	quietTerm(t)
+	a := bootApp(t)
+	a.syncing = true
+	p := NewPicker(a.idx, 80, 24)
+	typeQuery(p, "Brand New Page")
+	if p.createName == "" {
+		t.Fatal("arrange failed: expected a create row")
+	}
+	for p.sel < len(p.matches) { // move selection onto the create row
+		p.moveDown(p.rowCount())
+	}
+	a.active = p
+
+	// act
+	a.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	// assert
+	if a.active == nil {
+		t.Fatal("picker should stay open when create is blocked")
+	}
+	if a.editor != nil {
+		t.Fatal("editor must not open while syncing")
+	}
+	if !strings.Contains(p.View(), "sync in progress") {
+		t.Fatalf("expected in-panel busy message, got:\n%s", p.View())
+	}
+}
 
 func TestPickerCreateBlockedWhileSyncing(t *testing.T) {
 	// arrange: a sync in flight and a picker about to create a page.

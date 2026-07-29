@@ -134,11 +134,14 @@ func (b *Backlinks) Update(key string) OverlayResult {
 	return OverlayResult{}
 }
 
-// SetLinkifyError records a failure to show in the panel and drops the confirm
+// SetError records a message to show in the panel and drops the confirm
 // sub-state, so the user returns to the list rather than being stuck confirming
-// a mention that is gone. Errors must render inside the overlay — a status-bar
-// hint would be invisible behind it.
-func (b *Backlinks) SetLinkifyError(msg string) {
+// a mention that is gone. The message renders verbatim inside the panel (see
+// View) — callers own their own framing (e.g. App.linkify prepends "linkify
+// failed: " to its own failures; blockIfSyncing's busy message passes through
+// unprefixed). Errors must render inside the overlay — a status-bar hint
+// would be invisible behind it.
+func (b *Backlinks) SetError(msg string) {
 	b.errMsg = msg
 	b.confirming = false
 }
@@ -211,7 +214,7 @@ func (b *Backlinks) View() string {
 	case b.confirming:
 		b.writeConfirm(&sb, inner)
 	case b.errMsg != "":
-		sb.WriteString(styleTitle.Render(clamp("linkify failed: "+b.errMsg, inner)))
+		sb.WriteString(styleTitle.Render(clamp(b.errMsg, inner)))
 		sb.WriteString("\n")
 		sb.WriteString(styleFaint.Render(clamp(b.hintText(), inner)))
 	default:

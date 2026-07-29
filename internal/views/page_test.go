@@ -1,7 +1,10 @@
 package views
 
 import (
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -10,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/exp/teatest"
 
 	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
+	"git.fiatcode.dev/fiatcode/weft/v2/internal/render"
 )
 
 func loadFixture(t *testing.T) *graph.Index {
@@ -357,5 +361,38 @@ func TestPageViewEmphasizeScrollsThenClears(t *testing.T) {
 	}
 	if len(pv.result.Finds) != 0 {
 		t.Errorf("plain render must have no finds; got %d", len(pv.result.Finds))
+	}
+}
+
+// A fallback render must not enter the mtime-keyed cache (a transient
+// Glamour failure would stick as an unstyled page until the file changes),
+// and its cause must land in the debug log.
+func TestPageViewSkipsCacheAndLogsOnRenderFallback(t *testing.T) {
+	// arrange
+	quietTerm(t)
+	cache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	orig := renderPage
+	t.Cleanup(func() { renderPage = orig })
+	renderPage = func(body string, width int, emphasis string) (render.Result, error) {
+		return render.Result{Styled: body, FallbackErr: errors.New("boom")}, nil
+	}
+	_, idx := writeGraph(t, map[string]string{"pages/Alpha.md": "- hi\n"})
+	p := NewPageView(idx, "Alpha", 80, 24)
+	before := RenderCount()
+
+	// act — a revisit would be served from the cache if the fallback were cached
+	p.SetPage("Alpha")
+
+	// assert
+	if got := RenderCount() - before; got != 1 {
+		t.Fatalf("expected a fresh render on revisit (cache skipped), got %d new renders", got)
+	}
+	logBytes, err := os.ReadFile(filepath.Join(cache, "weft", "weft.log"))
+	if err != nil {
+		t.Fatalf("expected fallback logged: %v", err)
+	}
+	if !strings.Contains(string(logBytes), "render fallback") {
+		t.Fatalf("log missing fallback entry:\n%s", logBytes)
 	}
 }
