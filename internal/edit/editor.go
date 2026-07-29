@@ -138,7 +138,7 @@ func WriteFile(path string, data []byte) error {
 // load-bearing: t0.IsZero() means the file was absent at snapshot
 // time, which tells the caller (the App's editCurrent) that it
 // should create the file before handing it to the editor. A non-zero
-// t0 means the file was on disk before the user pressed e.
+// t0 means the file was on disk before the user pressed E.
 func SnapshotMtime(path string) (time.Time, error) {
 	info, err := os.Stat(path)
 	if err != nil {

@@ -279,8 +279,20 @@ func stripQueryAndEmbedBlocks(body string) string {
 		case fence.Step(line):
 			out.WriteString(line)
 		case queryOrEmbedRe.MatchString(line):
-			inBlock = true
-			continue // drop the opening line
+			// A same-line `}}` closes the block immediately — `{{embed [[X]]}}`
+			// is single-line in practice. The closer is looked for anywhere
+			// after the opener match (not just as the line's trailing
+			// suffix) so trailing prose after `}}` (e.g. "{{embed [[X]]}}
+			// notes") doesn't get mistaken for an unclosed block, which
+			// would swallow the rest of the page waiting for a bare `}}`
+			// line that never comes. Such lines are metadata either way, so
+			// the whole line is still dropped rather than keeping the
+			// trailing prose.
+			loc := queryOrEmbedRe.FindStringIndex(line)
+			if !strings.Contains(line[loc[1]:], "}}") {
+				inBlock = true
+			}
+			continue // drop the opening line either way
 		default:
 			out.WriteString(line)
 		}

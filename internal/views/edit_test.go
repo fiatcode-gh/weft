@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -278,5 +279,32 @@ func TestShiftE_EnsureFileStillUsed(t *testing.T) {
 	// `E` on an existing Alpha.md should return a non-nil cmd.
 	if cmd := pressShiftE(t, a); cmd == nil {
 		t.Errorf("E on existing Alpha.md should return a non-nil cmd; got nil")
+	}
+}
+
+func TestNewEditorViewFlagsSanitizerDivergence(t *testing.T) {
+	// arrange
+	cases := []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{"clean", "- a\n- b\n", false},
+		{"no trailing newline", "- a", false},
+		{"empty new page", "", false},
+		{"crlf", "a\r\nb\r\n", true},
+		{"tab indent", "code:\n\tindented\n", true},
+		{"over textarea line cap", strings.Repeat("x\n", 10001), true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// act
+			e := NewEditorView(nil, "P", "unused.md", tc.content, false, 80, 24)
+
+			// assert
+			if got := e.LoadDiverged(); got != tc.want {
+				t.Errorf("LoadDiverged = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

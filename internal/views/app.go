@@ -42,8 +42,8 @@ type statusProbedMsg struct {
 }
 
 // editorExitedMsg is delivered when the child editor process returns. Only
-// the E ($EDITOR) handoff produces this; the in-app editor (e) reindexes
-// inline in the res.Exit branch and never goes through here.
+// the E ($EDITOR) handoff produces this; the in-app editor (e) schedules an
+// async reindex in the res.Exit branch and never goes through here.
 // path is the file we handed to the editor; t0 is the pre-edit mtime
 // snapshot (zero if the file did not exist before EnsureFile ran).
 // err is non-nil when the editor exited non-zero or failed to launch.
@@ -96,8 +96,8 @@ type App struct {
 	syncing  bool
 
 	// statusProbe reads the graph repo's sync state; injected so view tests
-	// stub it instead of shelling out to git. unsynced caches the last probe's
-	// verdict and drives the status-bar indicator.
+	// stub it instead of shelling out to git. unsynced caches the last
+	// successful probe's verdict and drives the status-bar indicator.
 	statusProbe func(repoDir string) (syncpkg.WorktreeStatus, error)
 	unsynced    bool
 
@@ -206,6 +206,17 @@ func (a *App) navigate(name string) {
 	a.navigateToTask(name, -1)
 }
 
+// canonicalName maps a raw wiki-link target to the indexed page's exact
+// (filename-derived) name, so downstream exact-match lookups agree with
+// the case-insensitive Resolve the read view uses. Unindexed names pass
+// through unchanged — they name pages that don't exist yet.
+func (a *App) canonicalName(name string) string {
+	if meta, ok := a.idx.Resolve(name); ok {
+		return meta.Name
+	}
+	return name
+}
+
 // pushHistory captures the departing page's position into the current
 // history entry, truncates any forward history, and pushes a fresh
 // entry for name (which becomes current). The invariant every navigation
@@ -228,6 +239,7 @@ func (a *App) pushHistory(name string, taskOrdinal int) {
 // ordinal >= 0 the new history entry stores it and the page is scrolled to
 // that todo on first display. Restore ignores it — it stays a one-shot jump.
 func (a *App) navigateToTask(name string, ordinal int) {
+	name = a.canonicalName(name)
 	a.pushHistory(name, ordinal)
 	a.page.SetPage(name)
 	if ordinal >= 0 {
@@ -240,6 +252,7 @@ func (a *App) navigateToTask(name string, ordinal int) {
 // on (and highlights) the referencing link. The resulting cursor is stored in
 // the new history entry so it survives [ / ] history navigation.
 func (a *App) navigateFocusingLink(name, backTarget string) {
+	name = a.canonicalName(name)
 	a.pushHistory(name, -1)
 	a.page.SetPage(name)
 	a.page.FocusLinkTo(backTarget)
@@ -251,6 +264,7 @@ func (a *App) navigateFocusingLink(name, backTarget string) {
 // unlinked references, which have no link to focus a cursor on. One-shot: the
 // new history entry stores no emphasis, so [ / ] restore lands without it.
 func (a *App) navigateHighlighting(name, term string) {
+	name = a.canonicalName(name)
 	a.pushHistory(name, -1)
 	a.page.SetPageEmphasizing(name, term)
 }
@@ -325,7 +339,7 @@ func (a *App) reindex() error {
 // reindex.
 func (a *App) editCurrent() tea.Cmd {
 	page := a.page.Page()
-	meta, ok := a.idx.ByName[page]
+	meta, ok := a.idx.Resolve(page)
 	if !ok {
 		// Page is not in the index. The realistic case is a cold
 		// start landing on today's journal whose file doesn't exist
@@ -344,7 +358,7 @@ func (a *App) editCurrent() tea.Cmd {
 		if err := a.createJournalAndReindex(page); err != nil {
 			return a.setHint(err.Error())
 		}
-		newMeta, ok := a.idx.ByName[page]
+		newMeta, ok := a.idx.Resolve(page)
 		if !ok {
 			return a.setHint("reindex dropped page: " + page)
 		}
@@ -388,7 +402,7 @@ func (a *App) editCurrent() tea.Cmd {
 func (a *App) enterEditor() tea.Cmd {
 	name := a.page.Page()
 	var path string
-	if meta, ok := a.idx.ByName[name]; ok {
+	if meta, ok := a.idx.Resolve(name); ok {
 		path = meta.Path
 	} else {
 		sub := "pages"
@@ -403,7 +417,11 @@ func (a *App) enterEditor() tea.Cmd {
 	} else if !os.IsNotExist(err) {
 		return a.setHint("cannot read: " + err.Error())
 	}
-	a.editor = NewEditorView(a.idx, name, path, content, isNew, a.width, a.height)
+	e := NewEditorView(a.idx, name, path, content, isNew, a.width, a.height)
+	if e.LoadDiverged() {
+		return a.setHint("in-app editor would alter this file (CRLF, tabs, or >10000 lines) — press E to edit externally")
+	}
+	a.editor = e
 	return a.editor.Focus()
 }
 
@@ -530,13 +548,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case syncDoneMsg:
 		a.syncing = false
 		if m.res.Err != nil {
-			a.logSyncFailure(m.res)
+			hint := "✗ " + m.res.Stage + " failed — see " + DebugLogPath()
+			if err := a.logSyncFailure(m.res); err != nil {
+				hint = "✗ " + m.res.Stage + " failed: " + m.res.Err.Error()
+			}
 			// A failed sync may still have changed state (e.g. committed
 			// then failed to push), so re-probe.
-			return a, tea.Batch(
-				a.setHint("✗ "+m.res.Stage+" failed — see "+DebugLogPath()),
-				a.statusProbeCmd(),
-			)
+			return a, tea.Batch(a.setHint(hint), a.statusProbeCmd())
 		}
 		cmds := []tea.Cmd{a.setHint("✓ synced"), a.statusProbeCmd()}
 		if m.res.Pulled {
@@ -545,7 +563,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, tea.Batch(cmds...)
 
 	case statusProbedMsg:
-		a.unsynced = m.err == nil && m.st.Unsynced()
+		// A failed probe says nothing about sync state; keep the last
+		// known value rather than clearing the ● to a false all-clear.
+		if m.err == nil {
+			a.unsynced = m.st.Unsynced()
+		}
 		return a, nil
 	case searchDoneMsg:
 		if s, ok := a.active.(*SearchView); ok && s == m.view {
@@ -553,23 +575,27 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 	case editorExitedMsg:
+		// A non-zero exit (vim :cq, a crashed wrapper) does not mean nothing
+		// was written — surface it, but still run the mtime-gated refresh
+		// below so a real save isn't left rendering stale.
+		var exitHint tea.Cmd
 		if m.err != nil {
-			return a, a.setHint("editor exited: " + m.err.Error())
+			exitHint = a.setHint("editor exited: " + m.err.Error())
 		}
 		info, err := os.Stat(m.path)
 		if err != nil {
 			if os.IsNotExist(err) {
-				return a, a.statusProbeCmd()
+				return a, tea.Batch(exitHint, a.statusProbeCmd())
 			}
-			return a, a.setHint("cannot stat: " + err.Error())
+			return a, tea.Batch(exitHint, a.setHint("cannot stat: "+err.Error()))
 		}
 		if info.ModTime().Equal(m.t0) {
 			// Unchanged by the editor — but editCurrent may have just
 			// created a journal stub, so still refresh the indicator.
-			return a, a.statusProbeCmd()
+			return a, tea.Batch(exitHint, a.statusProbeCmd())
 		}
 		// Changed: the reindex's indexLoadedMsg refreshes the indicator.
-		return a, a.buildIndexCmd()
+		return a, tea.Batch(exitHint, a.buildIndexCmd())
 	case hintExpireMsg:
 		if m.gen == a.hintGen {
 			a.hint = ""
@@ -656,6 +682,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if res.Accept {
 				if res.Create {
+					if cmd := a.syncBusyHint(); cmd != nil {
+						return a, cmd
+					}
 					a.navigate(res.Selected)
 					a.active = nil
 					return a, a.enterEditor()
@@ -861,16 +890,20 @@ func (a *App) syncBusyHint() tea.Cmd {
 	return a.setHint("⟳ sync in progress — retry when it finishes")
 }
 
-// logSyncFailure appends a failing sync's captured git output to
-// DebugLogPath(), the same cache-dir path WEFT_DEBUG mirrors to — written
-// here regardless of the flag so the hint's "see <path>" pointer is always
-// valid. Best-effort: a log write error is itself ignored (the hint already
-// told the user it failed).
-func (a *App) logSyncFailure(res syncpkg.Result) {
+// logSyncFailure appends a failing sync's stage, error, and captured git
+// output to DebugLogPath(), the same cache-dir path WEFT_DEBUG mirrors to —
+// written regardless of the flag so the hint's "see <path>" pointer is
+// valid. res.Err matters most: a timed-out push often has no output,
+// and the error is the only way to tell timeout from rejection. Returns
+// the write error so the caller can degrade the hint instead of pointing
+// at a log that was never written.
+func (a *App) logSyncFailure(res syncpkg.Result) error {
 	f, err := os.OpenFile(DebugLogPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
-		return
+		return err
 	}
 	defer f.Close()
-	fmt.Fprintf(f, "sync %s failed at %s:\n%s\n", res.Stage, a.nowFunc().Format(time.RFC3339), res.Output)
+	_, err = fmt.Fprintf(f, "sync %s failed at %s: %v\n%s\n",
+		res.Stage, a.nowFunc().Format(time.RFC3339), res.Err, res.Output)
+	return err
 }

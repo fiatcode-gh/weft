@@ -253,3 +253,52 @@ func TestRunRefusesWhenRebaseInProgress(t *testing.T) {
 		t.Errorf("HEAD moved (%s -> %s); a refused sync must not advance the branch", headBefore, headAfter)
 	}
 }
+
+// newRepoWithRemoteNoIdentity is newRepoWithRemote minus the local
+// user.name/user.email config, for tests exercising commit failure on a
+// machine with no git identity. The seed commit's identity comes from
+// the env the git() helper injects.
+func newRepoWithRemoteNoIdentity(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	origin := filepath.Join(root, "origin.git")
+	work := filepath.Join(root, "work")
+	git(t, root, "init", "--bare", "-b", "main", origin)
+	git(t, root, "clone", origin, work)
+	writeFile(t, work, "seed.md", "seed\n")
+	git(t, work, "add", "-A")
+	git(t, work, "commit", "-m", "seed")
+	git(t, work, "push", "origin", "main")
+	return work
+}
+
+func TestRunCommitFailureReportsCommitStage(t *testing.T) {
+	// arrange: a dirty tree and no committer identity anywhere — the
+	// fresh-machine failure mode. Run()'s git inherits the test process
+	// env, so blank every identity source it consults.
+	work := newRepoWithRemoteNoIdentity(t)
+	writeFile(t, work, "new.md", "hi\n")
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("EMAIL", "")
+	t.Setenv("GIT_AUTHOR_NAME", "")
+	t.Setenv("GIT_AUTHOR_EMAIL", "")
+	t.Setenv("GIT_COMMITTER_NAME", "")
+	t.Setenv("GIT_COMMITTER_EMAIL", "")
+
+	// act
+	res := Run(work, testClock)
+
+	// assert: the stage tells the user what to fix in a shell.
+	if res.Err == nil || res.Stage != "commit" {
+		t.Fatalf("Stage = %q, Err = %v; want commit failure", res.Stage, res.Err)
+	}
+	if res.Committed {
+		t.Error("Committed must be false when commit fails")
+	}
+	if res.Output == "" {
+		t.Error("expected captured git output naming the identity problem")
+	}
+}

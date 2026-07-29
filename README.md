@@ -4,7 +4,7 @@ Journals are the warp — the continuous daily timeline you lay down. `[[wiki-li
 
 One linking primitive — `[[wiki-links]]`, no tags. Pages are flat markdown under `pages/` and `journals/`, with `___` for namespaces and no nested directories to manage. weft is a navigator, not an outliner: it renders your bullets, workflow markers, and links, but it never makes you tend the tree — no fold/unfold, no block refs, no zoom.
 
-Press `e` to edit the current page in a full-screen in-app editor (`Ctrl+S` saves, `Esc` exits with an unsaved-changes prompt); `E` hands the file to your `$EDITOR`. While editing, typing `[[` opens a live, fuzzy-filtered page-name completion list — `↑`/`↓` to choose, `Enter` or `Tab` to insert `[[Page Name]]`, `Esc` to dismiss; an unmatched name shows a `＋ Create` row to drop a red link in one keystroke. Press `.` to jump to today's journal.
+Press `e` to edit the current page in a full-screen in-app editor (`Ctrl+S` saves, `Esc` exits with an unsaved-changes prompt); `E` hands the file to your `$EDITOR`. While editing, typing `[[` opens a live, fuzzy-filtered page-name completion list — `↑`/`↓` to choose, `Enter` or `Tab` to insert `[[Page Name]]`, `Esc` to dismiss; an unmatched name shows a `＋ Create` row to insert a link to the not-yet-created page in one keystroke. `e` refuses to open a file whose content the textarea would alter on load (CRLF line endings, tabs, or more than 10000 lines), pointing you at `E`/`$EDITOR` instead via a status-bar hint. Press `.` to jump to today's journal.
 
 Press `S` to sync the graph with git without leaving weft — it commits any changes, `pull --rebase`s, then pushes, reporting progress in the status bar (`⟳ syncing…` → `✓ synced`). A `●` shows in the status bar whenever the graph has local changes that aren't committed or pushed yet, so you always know when a sync is due. Conflicts are left for you to resolve in a shell — weft never touches a conflicted tree.
 
@@ -12,8 +12,8 @@ Press `S` to sync the graph with git without leaving weft — it commits any cha
 
 ## Install
 
-Requires Go 1.26+ and [ripgrep](https://github.com/BurntSushi/ripgrep) 14+ on PATH
-(the `--json` output format that the search view consumes was added in rg 14).
+Requires Go 1.26+ and [ripgrep](https://github.com/BurntSushi/ripgrep) on PATH
+(the search view consumes rg's `--json` output).
 
 ```bash
 go install git.fiatcode.dev/fiatcode/weft/v2/cmd/weft@latest
@@ -76,7 +76,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | Variable        | Effect                                                                            |
 |-----------------|-----------------------------------------------------------------------------------|
 | `WEFT_GRAPH`   | Default graph path (overridden by `--graph`).                                     |
-| `WEFT_STYLE`   | Force a Glamour markdown style (`dark`, `light`, `ascii`, `notty`). Default `dark`. |
+| `WEFT_STYLE`   | Force a Glamour markdown style (`dark`, `light`, `ascii`, `notty`) instead of weft's default terminal-palette style, which follows your terminal's own colors. |
 | `NO_COLOR`      | Honoured: forces `notty` rendering, no ANSI styling anywhere.                     |
 | `WEFT_DEBUG=1` | Mirror Bubble Tea events to `weft.log` under the user cache dir (`$XDG_CACHE_HOME/weft/weft.log`, or the OS equivalent via `os.UserCacheDir`; falls back to `./weft.log` only if the cache dir is unavailable). Useful when reporting bugs. |
 
@@ -91,12 +91,14 @@ crash weft — they degrade to plain text or a silent no-op.
 
 - **`{{query …}}` and `{{embed …}}` blocks** are stripped from the rendered
   page (Glamour can't render them usefully).
-- **Block references `[[page#block]]`** resolve to `page`; the `#block`
-  fragment is dropped.
+- **Block references** don't exist — `#` is an ordinary character in page
+  names, so `[[page#block]]` links to a page literally named `page#block`.
 - **`alias::` / `title::` / `tags::` properties** are not extracted — they
   appear as plain text in the page body.
-- **Case-insensitive linking** is not enforced. `[[alpha]]` on a page called
-  `Alpha` resolves correctly.
+- **Case-insensitive page-name uniqueness** is not enforced — `Alpha.md` and
+  `alpha.md` can coexist (weft warns on stderr and resolves links
+  deterministically to the first). Link resolution itself is case-insensitive:
+  `[[alpha]]` finds `Alpha`.
 - **`pages/` or `journals/` subdirectories** are skipped with a stderr
   warning. Namespace pages must use the `___` filename convention.
 - **The TODO dashboard shows only open markers** (`TODO` / `LATER` /

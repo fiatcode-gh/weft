@@ -113,6 +113,8 @@ func TestSyncPulledTriggersReindex(t *testing.T) {
 }
 
 func TestSyncFailureHintNamesStage(t *testing.T) {
+	// arrange: a private cache dir — the sync-failure arm writes weft.log.
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	a := bootApp(t)
 	model, _ := a.Update(syncDoneMsg{res: syncpkg.Result{Stage: "push", Output: "rejected", Err: errSyncTest}})
 	a = model.(*App)
@@ -209,5 +211,105 @@ func TestLinkifyBlockedWhileSyncing(t *testing.T) {
 	}
 	if !strings.Contains(a.hint, "sync in progress") {
 		t.Fatalf("hint = %q, want sync-in-progress hint", a.hint)
+	}
+}
+
+// stubOverlay drives App.Update's overlay-dispatch branch with a canned
+// OverlayResult, standing in for a real picker/backlinks overlay.
+type stubOverlay struct{ res OverlayResult }
+
+func (s stubOverlay) Update(string) OverlayResult { return s.res }
+func (s stubOverlay) View() string                { return "" }
+func (s stubOverlay) SetSize(int, int)            {}
+
+func TestPickerCreateBlockedWhileSyncing(t *testing.T) {
+	// arrange: a sync in flight and a picker about to create a page.
+	a := bootApp(t)
+	a.syncing = true
+	a.active = stubOverlay{res: OverlayResult{Accept: true, Create: true, Selected: "Brand New"}}
+
+	// act
+	model, _ := a.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	a = model.(*App)
+
+	// assert: no editor mid-rebase, same contract as e/E/./linkify.
+	if a.editor != nil {
+		t.Fatal("create opened the editor during a sync")
+	}
+	if !strings.Contains(a.hint, "sync in progress") {
+		t.Errorf("hint = %q, want sync-in-progress", a.hint)
+	}
+}
+
+func TestSyncFailureLogIncludesError(t *testing.T) {
+	// arrange: a private cache dir so the test owns weft.log.
+	cache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	a := bootApp(t)
+
+	// act: a push killed by timeout — empty Output, the cause only in Err.
+	a.Update(syncDoneMsg{res: syncpkg.Result{Stage: "push", Output: "", Err: errSyncTest}})
+
+	// assert
+	b, err := os.ReadFile(filepath.Join(cache, "weft", "weft.log"))
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	if !strings.Contains(string(b), errSyncTest.Error()) {
+		t.Errorf("log %q does not record the sync error", string(b))
+	}
+}
+
+func TestSyncFailureHintFallsBackInlineWhenLogUnwritable(t *testing.T) {
+	// arrange: make the log path unopenable — a directory where the
+	// file should be — without touching the checkout's cwd.
+	cache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	if err := os.MkdirAll(filepath.Join(cache, "weft", "weft.log"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	a := bootApp(t)
+
+	// act
+	model, _ := a.Update(syncDoneMsg{res: syncpkg.Result{Stage: "push", Err: errSyncTest}})
+	a = model.(*App)
+
+	// assert: the hint must carry the error itself, not point at a log
+	// that was never written.
+	if !strings.Contains(a.hint, errSyncTest.Error()) {
+		t.Errorf("hint = %q, want inline error", a.hint)
+	}
+}
+
+func TestEditorErrorExitStillReindexesChangedFile(t *testing.T) {
+	// arrange: an indexed page whose on-disk mtime differs from the
+	// snapshot taken at editor launch — i.e. the editor wrote the file.
+	a := bootApp(t)
+	path := a.idx.Pages[0].Path
+	t0 := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	// act: the editor exits non-zero (vim :cq after :w).
+	model, cmd := a.Update(editorExitedMsg{path: path, t0: t0, err: errSyncTest})
+	a = model.(*App)
+
+	// assert: the exit is surfaced AND the reindex still runs.
+	if !strings.Contains(a.hint, "editor exited") {
+		t.Errorf("hint = %q, want editor-exited", a.hint)
+	}
+	drainFor[indexLoadedMsg](t, cmd)
+}
+
+func TestStatusProbeErrorKeepsLastKnownIndicator(t *testing.T) {
+	// arrange: last successful probe said "unsynced".
+	a := bootApp(t)
+	a.unsynced = true
+
+	// act: a probe failure says nothing about actual sync state.
+	model, _ := a.Update(statusProbedMsg{err: errSyncTest})
+	a = model.(*App)
+
+	// assert
+	if !a.unsynced {
+		t.Error("probe error cleared the unsynced indicator to a false all-clear")
 	}
 }

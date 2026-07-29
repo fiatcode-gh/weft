@@ -186,3 +186,39 @@ func TestMentionsWholeWordCaseInsensitive(t *testing.T) {
 		t.Fatalf("want 2 whole-word hits (Alpha, alpha), got %d: %+v", len(hits), hits)
 	}
 }
+
+func TestParseJSONClampsIndentShiftedSpans(t *testing.T) {
+	// arrange: 4 leading spaces are trimmed from the context, shifting
+	// spans left by 4. After the shift: {0,3}→{-4,-1} falls entirely in
+	// the indent (dropped), {2,6}→{-2,2} straddles it (clamped to {0,2}),
+	// {8,99}→{4,95} overhangs the line (clamped to {4,6}), {5,5}→{1,1}
+	// is degenerate (dropped). A regression here slices Hit.Context out
+	// of range and panics inside the alt-screen.
+	line := `{"type":"match","data":{"path":{"text":"pages/X.md"},"lines":{"text":"    abcdef\n"},"line_number":3,"submatches":[{"start":0,"end":3},{"start":2,"end":6},{"start":8,"end":99},{"start":5,"end":5}]}}` + "\n"
+
+	// act
+	hits, err := parseJSON([]byte(line))
+
+	// assert
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 1 {
+		t.Fatalf("hits = %d, want 1", len(hits))
+	}
+	want := []Span{{Start: 0, End: 2}, {Start: 4, End: 6}}
+	got := hits[0].Matches
+	if len(got) != len(want) {
+		t.Fatalf("spans = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("span[%d] = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+	for _, sp := range got {
+		if sp.Start < 0 || sp.End > len(hits[0].Context) || sp.Start >= sp.End {
+			t.Errorf("span %+v can slice Context %q out of range", sp, hits[0].Context)
+		}
+	}
+}

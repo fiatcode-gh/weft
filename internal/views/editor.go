@@ -19,7 +19,7 @@ const (
 
 // editorInset is the left margin (in columns) applied to the whole editor
 // view so its text occupies the same horizontal box as the Glamour-rendered
-// read view, whose standard-style document margin is 2 columns. Without this,
+// read view, whose document margin is 2 columns. Without this,
 // switching from read to edit jumps the text flush-left.
 const editorInset = 2
 
@@ -43,6 +43,7 @@ type EditorView struct {
 	errMsg        string // non-empty while a save error is pending display
 	width, height int
 	completer     *linkCompleter
+	loadDiverged  bool // priming the textarea altered content — see LoadDiverged
 }
 
 // EditorResult is what EditorView.Update reports to the App.
@@ -59,7 +60,7 @@ type EditorResult struct {
 func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, width, height int) *EditorView {
 	ta := textarea.New()
 	ta.CharLimit = 0 // no length cap
-	ta.MaxHeight = 0 // no line cap — pages can exceed textarea's default 99
+	ta.MaxHeight = 0 // lift textarea's default 99-line height cap (a separate hard 10000-line insert cap remains — see loadDiverged)
 	ta.ShowLineNumbers = false
 	ta.Prompt = ""
 	// The empty prompt is still rendered through the prompt STYLE, which by
@@ -92,6 +93,12 @@ func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, wid
 	e.ta.CursorStart()
 	e.baseline = e.Content()  // normalize so open-time dirty() is accurate
 	e.refreshCompleter(false) // opening a file must not pop the strip
+	// The textarea's input sanitizer can silently alter content on load —
+	// CRLF becomes doubled newlines, tabs become spaces, invalid UTF-8 is
+	// dropped, and a hard 10000-line cap truncates. baseline was captured
+	// post-mutation, so dirty() can't warn; saving would corrupt the file.
+	// Record the divergence so the App can refuse in-app editing.
+	e.loadDiverged = e.Content() != strings.TrimRight(content, "\n")+"\n"
 	return e
 }
 
@@ -217,6 +224,10 @@ func (e *EditorView) Content() string {
 	return strings.TrimRight(e.ta.Value(), "\n") + "\n"
 }
 
+// LoadDiverged reports whether priming the textarea altered the loaded
+// content; a diverged buffer must never be written back over the file.
+func (e *EditorView) LoadDiverged() bool { return e.loadDiverged }
+
 // MarkSaved records a successful save: the given content becomes the new
 // clean baseline and the file now exists.
 func (e *EditorView) MarkSaved(content string) {
@@ -238,8 +249,10 @@ func (e *EditorView) View() string {
 
 // Update handles one key and reports whether the App should save/exit.
 // In editing mode every key except the intercepts (ctrl+s, esc/ctrl+c,
-// pgup/pgdown) is forwarded to the textarea. The returned tea.Cmd is the
-// textarea's own (cursor blink) command, which the App must propagate.
+// pgup/pgdown, the markdown helpers enter/ctrl+t/tab/shift+tab, and the
+// completion-strip keys while it is open) is forwarded to the textarea. The
+// returned tea.Cmd is the textarea's own (cursor blink) command, which the
+// App must propagate.
 func (e *EditorView) Update(msg tea.KeyMsg) (EditorResult, tea.Cmd) {
 	if e.mode == confirmingExit {
 		switch msg.String() {

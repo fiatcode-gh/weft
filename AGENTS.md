@@ -8,10 +8,13 @@ Within weft, graph files are written only through `internal/edit/`: the in-app
 editor (`e`) saves the displayed
 buffer on `Ctrl+S` and creates a page's file lazily on first save; `E` hands the
 file to `$EDITOR`. File creation for a new page is deferred until save, so
-opening then discarding never touches disk. While editing, typing `[[` opens a
+opening then discarding never touches disk. `e` refuses to open a file whose
+content the in-app textarea would alter on load (CRLF line endings, tabs, or
+more than 10000 lines), showing a status-bar hint pointing at `E`/`$EDITOR`
+instead. While editing, typing `[[` opens a
 live fuzzy completion list of page names (`↑`/`↓` to choose, `Enter`/`Tab` to
 insert `[[Page Name]]`, `Esc` to dismiss); an unmatched name offers a create row
-that inserts a red link without writing to disk. The in-app editor live-tints
+that inserts a link to the not-yet-created page without writing to disk. The in-app editor live-tints
 markdown (headings, blockquotes, code-fence delimiters, task markers, and
 `[[wiki-links]]`) and insets text to match the read view's left margin; the
 cursor's current row is shown as raw source.

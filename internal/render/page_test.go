@@ -275,6 +275,104 @@ func TestRenderPageStripsQueryAndEmbedBlocks(t *testing.T) {
 	}
 }
 
+func TestRenderSingleLineQueryOrEmbedDropsOnlyItsLine(t *testing.T) {
+	// arrange: single-line embed and query, with real content after them.
+	body := "{{embed [[Other]]}}\n\n- TODO one\n- TODO two\n\n{{query (todo)}}\nSee [[Somewhere]] for details.\n"
+
+	// act
+	out := mustRender(t, body, 80)
+
+	// assert
+	plain := plainText(out)
+	if strings.Contains(plain, "{{embed") || strings.Contains(plain, "{{query") {
+		t.Errorf("marker line leaked into output:\n%s", plain)
+	}
+	for _, want := range []string{"one", "two", "Somewhere"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("content after a single-line block was dropped (missing %q):\n%s", want, plain)
+		}
+	}
+	if len(out.Tasks) != 2 {
+		t.Errorf("Tasks = %d, want 2 (todos-dashboard deep-link ordinals depend on this)", len(out.Tasks))
+	}
+	if len(out.Links) != 1 {
+		t.Errorf("Links = %d, want 1 ([[Somewhere]])", len(out.Links))
+	}
+}
+
+func TestRenderSingleLineQueryOrEmbedWithTrailingWhitespace(t *testing.T) {
+	// arrange: single-line marker with trailing whitespace after }}.
+	body := "{{embed [[Other]]}}  \t\n- TODO item\nSee [[Link]].\n"
+
+	// act
+	out := mustRender(t, body, 80)
+
+	// assert
+	plain := plainText(out)
+	if strings.Contains(plain, "{{embed") {
+		t.Errorf("marker line with trailing whitespace leaked into output:\n%s", plain)
+	}
+	if !strings.Contains(plain, "item") || !strings.Contains(plain, "Link") {
+		t.Errorf("content after whitespace-trailing marker was dropped:\n%s", plain)
+	}
+	if len(out.Tasks) != 1 {
+		t.Errorf("Tasks = %d, want 1", len(out.Tasks))
+	}
+	if len(out.Links) != 1 {
+		t.Errorf("Links = %d, want 1", len(out.Links))
+	}
+}
+
+func TestRenderSingleLineQueryOrEmbedWithCRLF(t *testing.T) {
+	// arrange: single-line marker in CRLF body (Windows line endings).
+	// This tests the trim semantics: TrimSpace must remove \r, not just spaces/tabs.
+	body := "{{embed [[Other]]}}\r\n- TODO item\r\nSee [[Link]].\r\n"
+
+	// act
+	out := mustRender(t, body, 80)
+
+	// assert
+	plain := plainText(out)
+	if strings.Contains(plain, "{{embed") {
+		t.Errorf("CRLF marker line leaked into output:\n%s", plain)
+	}
+	if !strings.Contains(plain, "item") || !strings.Contains(plain, "Link") {
+		t.Errorf("content after CRLF marker was dropped:\n%s", plain)
+	}
+	if len(out.Tasks) != 1 {
+		t.Errorf("Tasks = %d, want 1 (CRLF line ending handling)", len(out.Tasks))
+	}
+	if len(out.Links) != 1 {
+		t.Errorf("Links = %d, want 1 (CRLF line ending handling)", len(out.Links))
+	}
+}
+
+func TestRenderSingleLineQueryOrEmbedWithTrailingText(t *testing.T) {
+	// arrange: opener and closer on the same line, but with trailing prose
+	// after the closing }} — not just whitespace. Without a same-line
+	// scan for }} anywhere after the opener, this used to be mistaken for
+	// an unclosed block and swallow the rest of the page.
+	body := "{{embed [[X]]}} trailing words\n- TODO item\nSee [[Link]].\n"
+
+	// act
+	out := mustRender(t, body, 80)
+
+	// assert
+	plain := plainText(out)
+	if strings.Contains(plain, "{{embed") {
+		t.Errorf("marker line with trailing text leaked into output:\n%s", plain)
+	}
+	if !strings.Contains(plain, "item") || !strings.Contains(plain, "Link") {
+		t.Errorf("content after a same-line embed with trailing text was dropped:\n%s", plain)
+	}
+	if len(out.Tasks) != 1 {
+		t.Errorf("Tasks = %d, want 1", len(out.Tasks))
+	}
+	if len(out.Links) != 1 {
+		t.Errorf("Links = %d, want 1", len(out.Links))
+	}
+}
+
 func TestRenderTaskMarkersSurviveStyling(t *testing.T) {
 	// arrange
 	body := strings.Join([]string{

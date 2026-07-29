@@ -65,11 +65,14 @@ func TestStatusProbeCleanHidesDot(t *testing.T) {
 	}
 }
 
-func TestStatusProbeErrorHidesDot(t *testing.T) {
-	// Arrange
+func TestStatusProbeErrorLeavesNeverSyncedIndicatorOff(t *testing.T) {
+	// Arrange: a graph that was never successfully probed (e.g. not a git
+	// repo) must not show the ● — with every probe erroring, unsynced
+	// keeps its boot-state false rather than adopting the dirty verdict
+	// the errored probe reported alongside its error.
 	a := bootApp(t)
 
-	// Act: a non-repo graph (or any probe error), even if the status looks dirty.
+	// Act
 	a = stubProbe(t, a, syncpkg.WorktreeStatus{Dirty: true}, errors.New("not a repo"))
 
 	// Assert
