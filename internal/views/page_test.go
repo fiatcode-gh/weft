@@ -11,6 +11,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/exp/teatest"
+	"github.com/muesli/termenv"
 
 	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
 	"git.fiatcode.dev/fiatcode/weft/v2/internal/render"
@@ -31,6 +32,58 @@ func TestPageViewRendersAlpha(t *testing.T) {
 	idx := loadFixture(t)
 	pv := NewPageView(idx, "Alpha", 80, 24)
 	teatest.RequireEqualOutput(t, []byte(pv.View()))
+}
+
+func TestPageViewRendersActiveLinkCursor(t *testing.T) {
+	// Under the colorless test profile the cursor style emits no escapes,
+	// making the splice invisible to a golden. Force TrueColor so the cursor
+	// bytes land in the snapshot. Must NOT call t.Parallel — SetColorProfile
+	// is process-global. Width 77 is unique to this test: the glamour
+	// renderer is width-cached process-wide, and it must be built under the
+	// forced profile.
+	orig := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(orig) })
+
+	// arrange
+	idx := loadFixture(t)
+	pv := NewPageView(idx, "Alpha", 77, 24)
+	pv.CycleLink(+1)
+	if pv.Cursor() != 0 {
+		t.Fatalf("precondition: cursor should sit on the first link, got %d", pv.Cursor())
+	}
+
+	// act + assert
+	teatest.RequireEqualOutput(t, []byte(pv.View()))
+}
+
+// A page whose file disappears mid-session must degrade to an error: line on
+// its next reload, not panic on the stale cursor/links. The reload path that
+// reaches the disk mid-session is a width change: SetSize with a new width
+// skips the width-keyed render cache and re-reads the file.
+func TestPageViewVanishedFileRendersError(t *testing.T) {
+	// arrange — a page with a link, cursor placed, then the file disappears
+	quietTerm(t)
+	dir, idx := writeGraph(t, map[string]string{
+		"pages/Doomed.md": "- body with a link [[Alpha]]\n",
+	})
+	pv := NewPageView(idx, "Doomed", 80, 24)
+	pv.CycleLink(+1)
+	if pv.Cursor() != 0 {
+		t.Fatalf("precondition: cursor should sit on the link, got %d", pv.Cursor())
+	}
+	if err := os.Remove(filepath.Join(dir, "pages", "Doomed.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	// act — a mid-session reload (terminal width change) re-reads the file
+	pv.SetSize(60, 24)
+
+	// assert — no panic, the page reports the failure
+	got := pv.View()
+	if !strings.Contains(got, "error:") {
+		t.Errorf("vanished page should render error:, got:\n%s", got)
+	}
 }
 
 func TestPageViewOffsetCursorAccessors(t *testing.T) {

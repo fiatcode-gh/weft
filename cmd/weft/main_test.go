@@ -78,6 +78,52 @@ func TestInitDebugLogFailsWhenLogUnopenable(t *testing.T) {
 	}
 }
 
+func TestResolveGraphPath(t *testing.T) {
+	cases := []struct {
+		name string
+		flag string
+		env  string
+		want string
+	}{
+		{"flag wins over env", "/flag/graph", "/env/graph", "/flag/graph"},
+		{"env fallback when flag empty", "", "/env/graph", "/env/graph"},
+		{"both empty", "", "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := resolveGraphPath(tc.flag, tc.env); got != tc.want {
+				t.Errorf("resolveGraphPath(%q, %q) = %q, want %q",
+					tc.flag, tc.env, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestResolvedVersion(t *testing.T) {
+	orig := Version
+	t.Cleanup(func() { Version = orig })
+
+	cases := []struct {
+		name string
+		set  string
+		want string
+	}{
+		{"ldflags-injected value wins", "v9.9.9", "v9.9.9"},
+		// Test binaries carry no usable module version ("" or "(devel)"),
+		// so the dev sentinel falls straight through.
+		{"dev sentinel falls back to dev", "dev", "dev"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			Version = tc.set
+			if got := resolvedVersion(); got != tc.want {
+				t.Errorf("resolvedVersion() with Version=%q = %q, want %q",
+					tc.set, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestShortenPseudoVersion(t *testing.T) {
 	cases := []struct {
 		name string

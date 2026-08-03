@@ -292,6 +292,37 @@ func TestEditorCompletion_ArrowsStealOnlyWhenActive(t *testing.T) {
 	}
 }
 
+func TestEditorCompletion_KeyUpMovesAndClampsSelection(t *testing.T) {
+	// arrange
+	quietTerm(t)
+	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "", true, 80, 24)
+	typeRunes(e, "[[")
+	if !e.completer.active || len(e.completer.cands) < 2 {
+		t.Fatalf("precondition: active strip with 2+ candidates; active=%v cands=%d",
+			e.completer.active, len(e.completer.cands))
+	}
+	before := e.ta.Value()
+	e.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if e.completer.sel != 1 {
+		t.Fatalf("precondition: down should move the selection to 1; sel=%d", e.completer.sel)
+	}
+
+	// act
+	e.Update(tea.KeyMsg{Type: tea.KeyUp})
+
+	// assert — up retreats, clamps at the top, and never edits the buffer
+	if e.completer.sel != 0 {
+		t.Errorf("up should move the selection back to 0; sel=%d", e.completer.sel)
+	}
+	e.Update(tea.KeyMsg{Type: tea.KeyUp})
+	if e.completer.sel != 0 {
+		t.Errorf("up at the first row must clamp to 0; sel=%d", e.completer.sel)
+	}
+	if e.ta.Value() != before {
+		t.Errorf("up must not edit the buffer while completing")
+	}
+}
+
 func TestEditorCompletion_NotActiveInsideClosedBrackets(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "[[]] tail\n", false, 80, 24)

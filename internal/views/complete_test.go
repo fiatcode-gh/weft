@@ -174,6 +174,35 @@ func TestStripHeightMatchesRowsBudget(t *testing.T) {
 	}
 }
 
+func TestLinkCompleterMoveBoundaries(t *testing.T) {
+	// arrange
+	c := &linkCompleter{
+		active: true,
+		sel:    0,
+		cands:  []linkCandidate{{name: "One"}, {name: "Two"}, {name: "Three"}},
+	}
+
+	// act + assert — up at the top clamps, down walks, up walks back,
+	// down at the bottom clamps
+	c.moveUp()
+	if c.sel != 0 {
+		t.Errorf("moveUp at the top must clamp to 0; sel=%d", c.sel)
+	}
+	c.moveDown()
+	if c.sel != 1 {
+		t.Errorf("moveDown should advance to 1; sel=%d", c.sel)
+	}
+	c.moveUp()
+	if c.sel != 0 {
+		t.Errorf("moveUp should retreat to 0; sel=%d", c.sel)
+	}
+	c.sel = 2
+	c.moveDown()
+	if c.sel != 2 {
+		t.Errorf("moveDown at the bottom must clamp to 2; sel=%d", c.sel)
+	}
+}
+
 func TestLinkCompleterClosingAhead(t *testing.T) {
 	quietTerm(t)
 	c := newLinkCompleter(loadFixture(t))
