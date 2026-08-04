@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"git.fiatcode.dev/fiatcode/weft/v2/internal/doctor"
 	"git.fiatcode.dev/fiatcode/weft/v2/internal/render"
 	"git.fiatcode.dev/fiatcode/weft/v2/internal/views"
 )
@@ -106,12 +108,13 @@ func main() {
 		fmt.Fprintln(os.Stderr, "weft: ripgrep (rg) not found on PATH — install it (https://github.com/BurntSushi/ripgrep) and try again.")
 		os.Exit(2)
 	}
-	if info, err := os.Stat(graphPath); err != nil {
-		fmt.Fprintf(os.Stderr, "weft: graph path %q is not accessible: %v\n", graphPath, err)
+	if err := validateGraphPath(graphPath); err != nil {
+		fmt.Fprintf(os.Stderr, "weft: %v\n", err)
 		os.Exit(2)
-	} else if !info.IsDir() {
-		fmt.Fprintf(os.Stderr, "weft: graph path %q is not a directory\n", graphPath)
-		os.Exit(2)
+	}
+
+	if flag.Arg(0) == "doctor" {
+		os.Exit(runDoctor(flag.Args()[1:], graphPath, os.Stdout))
 	}
 
 	debugLog, err := initDebugLog(os.Getenv("WEFT_DEBUG"))
@@ -140,4 +143,55 @@ func resolveGraphPath(flagVal, envVal string) string {
 		return flagVal
 	}
 	return envVal
+}
+
+// validateGraphPath reports whether graphPath is an accessible directory.
+func validateGraphPath(graphPath string) error {
+	info, err := os.Stat(graphPath)
+	if err != nil {
+		return fmt.Errorf("graph path %q is not accessible: %w", graphPath, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("graph path %q is not a directory", graphPath)
+	}
+	return nil
+}
+
+const doctorUsage = "usage: weft doctor [--graph PATH]"
+
+// runDoctor executes the headless doctor subcommand and returns its exit
+// code: 0 clean, 1 findings, 2 operational error. doctorFlagArgs are the
+// args after the "doctor" word; globalGraph is the already-validated graph
+// path resolved from the global --graph flag / $WEFT_GRAPH.
+func runDoctor(doctorFlagArgs []string, globalGraph string, stdout io.Writer) int {
+	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	fs.SetOutput(io.Discard) // usage printing is owned by this function
+	graphFlag := fs.String("graph", "", "path to Logseq graph (overrides the global --graph and $WEFT_GRAPH)")
+	err := fs.Parse(doctorFlagArgs)
+	switch {
+	case errors.Is(err, flag.ErrHelp):
+		fmt.Fprintln(stdout, doctorUsage)
+		return 0
+	case err != nil, fs.NArg() > 0:
+		fmt.Fprintln(os.Stderr, doctorUsage)
+		return 2
+	}
+	graphPath := globalGraph
+	if *graphFlag != "" {
+		graphPath = *graphFlag
+		if err := validateGraphPath(graphPath); err != nil {
+			fmt.Fprintf(os.Stderr, "weft: %v\n", err)
+			return 2
+		}
+	}
+	report, err := doctor.Run(graphPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "weft: doctor: %v\n", err)
+		return 2
+	}
+	report.WriteText(stdout)
+	if report.HasFindings() {
+		return 1
+	}
+	return 0
 }

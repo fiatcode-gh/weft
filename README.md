@@ -37,6 +37,22 @@ weft -version                  # print version and exit
 
 A graph path is required — either pass `--graph` or set `$WEFT_GRAPH`. The flag wins when both are set. Drop the env var into your shell config for the zero-arg invocation.
 
+## Doctor
+
+```bash
+weft doctor                  # check the graph from --graph / $WEFT_GRAPH
+weft doctor --graph PATH     # explicit path
+```
+
+`weft doctor` walks the graph once and prints a health report. It is read-only and never writes to the graph.
+
+- **unresolved links** — `[[wiki-links]]` whose target page does not exist
+- **orphan pages** — pages no other page links to (journals excluded)
+- **unlinked mentions** — bare-text mentions that could become links
+- **index warnings** — problems the index walk noticed (unreadable files, name collisions, subdirectories)
+
+Exit codes: `0` graph is clean, `1` findings exist, `2` operational error (bad graph path, missing ripgrep, failed scan).
+
 ## Keys
 
 Press `?` from the page view at any time to see a grouped keymap inside the app.

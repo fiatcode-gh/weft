@@ -1,0 +1,85 @@
+package graph
+
+import (
+	"reflect"
+	"testing"
+)
+
+func TestUnresolvedLinksFindsPhantoms(t *testing.T) {
+	// arrange
+	idx := buildFixtureIndex(t)
+
+	// act
+	got := idx.UnresolvedLinks()
+
+	// assert — [[DoesNotExist]] in Beta is the only phantom in the fixture;
+	// fenced [[ShouldNotMatch]] and [[NotALink]] never enter the index.
+	if len(got) != 1 {
+		t.Fatalf("want 1 unresolved link, got %d: %+v", len(got), got)
+	}
+	if got[0].Target != "DoesNotExist" {
+		t.Errorf("target = %q, want DoesNotExist", got[0].Target)
+	}
+	want := []Ref{{FromPage: "Beta", LineNumber: 3, Context: "- This link is dangling: [[DoesNotExist]]."}}
+	if !reflect.DeepEqual(got[0].Refs, want) {
+		t.Errorf("refs = %+v, want %+v", got[0].Refs, want)
+	}
+}
+
+func TestUnresolvedLinksResolvesCaseFolded(t *testing.T) {
+	// arrange — [[alpha]] resolves to Alpha.md case-insensitively
+	idx := buildTempIndex(t, map[string]string{
+		"Alpha.md": "- alpha page\n",
+		"Note.md":  "- see [[alpha]]\n",
+	})
+
+	// act
+	got := idx.UnresolvedLinks()
+
+	// assert
+	if len(got) != 0 {
+		t.Fatalf("case-folded target must resolve, got %+v", got)
+	}
+}
+
+func TestUnresolvedLinksSortsCaseInsensitively(t *testing.T) {
+	// arrange
+	idx := buildTempIndex(t, map[string]string{
+		"Note.md": "- [[zeta]] then [[Alpha Phantom]] then [[beta phantom]]\n",
+	})
+
+	// act
+	got := idx.UnresolvedLinks()
+
+	// assert — folded order: "alpha phantom" < "beta phantom" < "zeta"
+	var targets []string
+	for _, u := range got {
+		targets = append(targets, u.Target)
+	}
+	want := []string{"Alpha Phantom", "beta phantom", "zeta"}
+	if !reflect.DeepEqual(targets, want) {
+		t.Errorf("targets = %v, want %v", targets, want)
+	}
+}
+
+func TestUnresolvedLinksKeepsFirstSeenSpelling(t *testing.T) {
+	// arrange — two spellings share one folded key; walk order puts Note.md first
+	idx := buildTempIndex(t, map[string]string{
+		"Note.md":  "- [[Phantom]]\n",
+		"Other.md": "- [[PHANTOM]]\n",
+	})
+
+	// act
+	got := idx.UnresolvedLinks()
+
+	// assert — one entry with the first-seen spelling and both refs
+	if len(got) != 1 {
+		t.Fatalf("want 1 unresolved link, got %d: %+v", len(got), got)
+	}
+	if got[0].Target != "Phantom" {
+		t.Errorf("target = %q, want first-seen spelling Phantom", got[0].Target)
+	}
+	if len(got[0].Refs) != 2 || got[0].Refs[0].FromPage != "Note" || got[0].Refs[1].FromPage != "Other" {
+		t.Errorf("refs = %+v, want Note then Other", got[0].Refs)
+	}
+}

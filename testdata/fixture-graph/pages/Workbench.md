@@ -6,3 +6,4 @@ tags:: fixture
 - DOING Re-flatten the table saw fence
 - WAITING Quote on cast-iron wing
 - DONE Oil the tool chest hinges
+- The bench manual lives on the Alpha shelf.

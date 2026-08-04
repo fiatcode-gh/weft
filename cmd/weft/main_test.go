@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -167,5 +170,72 @@ func TestShortenPseudoVersion(t *testing.T) {
 				t.Errorf("shortenPseudoVersion(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
+	}
+}
+
+// writeTempGraph materialises a throwaway graph and returns its root.
+func writeTempGraph(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, body := range files {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+func TestRunDoctorExitCodes(t *testing.T) {
+	if _, err := exec.LookPath("rg"); err != nil {
+		t.Skip("rg not on PATH; install ripgrep to run this test")
+	}
+	fixture, err := filepath.Abs("../../testdata/fixture-graph")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clean := writeTempGraph(t, map[string]string{
+		"pages/Solo.md":  "- links to [[Other]]\n",
+		"pages/Other.md": "- links to [[Solo]]\n",
+	})
+
+	cases := []struct {
+		name  string
+		args  []string
+		graph string
+		want  int
+	}{
+		{"clean graph exits 0", []string{"--graph", clean}, "", 0},
+		{"findings exit 1", []string{"--graph", fixture}, "", 1},
+		{"missing graph dir exits 2", []string{"--graph", filepath.Join(t.TempDir(), "nope")}, "", 2},
+		{"unknown flag exits 2", []string{"--bogus"}, fixture, 2},
+		{"positional arg exits 2", []string{"extra"}, fixture, 2},
+		{"global graph fallback finds fixture findings", nil, fixture, 1},
+		{"doctor flag wins over findings-laden global", []string{"--graph", clean}, fixture, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if got := runDoctor(tc.args, tc.graph, &buf); got != tc.want {
+				t.Errorf("runDoctor(%v, %q) = %d, want %d", tc.args, tc.graph, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRunDoctorHelpPrintsUsage(t *testing.T) {
+	// arrange + act
+	var buf bytes.Buffer
+	got := runDoctor([]string{"-h"}, "ignored", &buf)
+
+	// assert
+	if got != 0 {
+		t.Errorf("-h exit = %d, want 0", got)
+	}
+	if !strings.Contains(buf.String(), "usage: weft doctor") {
+		t.Errorf("usage not printed to stdout, got %q", buf.String())
 	}
 }

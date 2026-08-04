@@ -17,8 +17,9 @@ type Index struct {
 	ByNameFold map[string]*PageMeta // case-folded (lowercase key) — for [[ALPHA]] → Alpha
 	Todos      []TodoBullet
 
-	backlinks map[string][]Ref // keyed by strings.ToLower(target) — resolution is case-insensitive
-	journals  []string         // journal page names, sorted ascending
+	backlinks   map[string][]Ref  // keyed by strings.ToLower(target) — resolution is case-insensitive
+	targetSpell map[string]string // folded target → first-seen original spelling (walk order)
+	journals    []string          // journal page names, sorted ascending
 
 	// Warnings collects non-fatal problems found during the walk (skipped
 	// subdirectories, case-fold collisions, unreadable pages, stat
@@ -38,10 +39,11 @@ func (idx *Index) warnf(format string, args ...any) {
 // Index.Warnings.
 func BuildIndex(graphPath string) (*Index, error) {
 	idx := &Index{
-		GraphPath:  graphPath,
-		ByName:     make(map[string]*PageMeta),
-		ByNameFold: make(map[string]*PageMeta),
-		backlinks:  make(map[string][]Ref),
+		GraphPath:   graphPath,
+		ByName:      make(map[string]*PageMeta),
+		ByNameFold:  make(map[string]*PageMeta),
+		backlinks:   make(map[string][]Ref),
+		targetSpell: make(map[string]string),
 	}
 
 	for _, sub := range []string{"pages", "journals"} {
@@ -118,6 +120,9 @@ func BuildIndex(graphPath string) (*Index, error) {
 		lines, links, todos := parseBody(string(body))
 		for _, lh := range links {
 			key := strings.ToLower(lh.Target)
+			if _, seen := idx.targetSpell[key]; !seen {
+				idx.targetSpell[key] = lh.Target
+			}
 			idx.backlinks[key] = append(idx.backlinks[key], Ref{
 				FromPage:   p.Name,
 				LineNumber: lh.Line,
