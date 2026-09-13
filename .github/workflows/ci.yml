@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  vet-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.3'
+
+      - name: Install staticcheck
+        # Pinned to match the old fiatcode-ci-go image (ci-images/build.sh).
+        run: go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
+
+      - name: Verify
+        run: |
+          test -z "$(gofmt -l .)"
+          go vet ./...
+          staticcheck ./...
+          go test -race ./...
+          go build ./...
