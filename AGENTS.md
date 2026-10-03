@@ -100,3 +100,10 @@ log to see what the model received.
 
 `main.Version` is `dev` by default. `-ldflags "-X main.Version=…"` overrides it;
 otherwise `runtime/debug.BuildInfo` fills it in for `go install` users.
+
+Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`: it vets and tests,
+then GoReleaser (`.goreleaser.yaml`) builds linux/darwin amd64/arm64 binaries
+with `main.Version` set to the tag and publishes a GitHub Release. The release
+notes are the tag's `## [X.Y.Z]` section of `CHANGELOG.md`; the workflow fails
+before publishing when that section is missing, so rename `## [Unreleased]`
+before tagging.

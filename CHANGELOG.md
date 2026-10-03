@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Tagged releases now publish prebuilt `weft` binaries for Linux and macOS (amd64 and arm64) on [GitHub Releases](https://github.com/fiatcode-gh/weft/releases), with a `checksums.txt`. The install instructions point there, since `go install` from the old `git.fiatcode.dev` module path can no longer fetch new versions.
+
 ### Fixed
 
 - Creating a page or linkifying a mention while a sync is running now says "sync in progress" inside the open panel, instead of an invisible status-bar hint that made the keypress look dead.
