@@ -13,8 +13,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
-	syncpkg "git.fiatcode.dev/fiatcode/weft/v2/internal/sync"
+	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	syncpkg "github.com/fiatcode-gh/weft/v2/internal/sync"
 )
 
 // pressE sends the e key to a booted app and returns the resulting cmd.

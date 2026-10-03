@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/graph"
 )
 
 // quietTerm forces a colourless, dumb terminal for the duration of the test so

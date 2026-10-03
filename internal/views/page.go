@@ -11,8 +11,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
 
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/render"
+	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/render"
 )
 
 // leadingTrimmedLines is how many whole lines load's strings.TrimSpace drops

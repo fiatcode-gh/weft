@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/search"
+	"github.com/fiatcode-gh/weft/v2/internal/search"
 )
 
 // UnlinkedRef is a bare-text mention of a page elsewhere in the graph that is

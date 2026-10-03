@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/search"
+	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/search"
 )
 
 // MentionScanner returns the unlinked (bare-text) references to one page.

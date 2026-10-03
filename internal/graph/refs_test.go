@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/search"
+	"github.com/fiatcode-gh/weft/v2/internal/search"
 )
 
 func TestFilterUnlinked(t *testing.T) {

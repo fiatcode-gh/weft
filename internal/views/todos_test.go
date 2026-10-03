@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/x/exp/teatest"
 
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/graph"
 )
 
 func TestTodosDashboardAllFilter(t *testing.T) {
