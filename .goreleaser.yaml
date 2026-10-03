@@ -24,7 +24,5 @@ builds:
 checksum:
   name_template: checksums.txt
 
-# Release notes come from the tag's CHANGELOG.md section, passed by the
-# release workflow with --release-notes.
-changelog:
-  disable: true
+# No changelog block: the release workflow passes the tag's CHANGELOG.md section
+# with --release-notes, and `changelog.disable` would skip that file too.
