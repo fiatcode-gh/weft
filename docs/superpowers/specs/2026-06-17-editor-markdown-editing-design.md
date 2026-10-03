@@ -17,6 +17,10 @@ behaviors:
    `plain → TODO → DONE → plain`.
 3. **Open at top** — opening a page lands the cursor (and viewport) at the top,
    not the bottom.
+   *Superseded: the editor now opens on
+   the source line behind the read view's top visible line (or a visible link
+   cursor), at the top when the page is unscrolled. The cursor/viewport
+   agreement this decision protected is retained.*
 
 ## Why this shape (grounded in the real graph)
 
@@ -130,6 +134,13 @@ Detection treats both `"TODO "`/`"DONE "` and a bare `"TODO"`/`"DONE"` (no
 trailing content) as that marker.
 
 ### Open at top — in `NewEditorView`
+
+> **Superseded.** The motivation below
+> (the cursor sat off-screen while the viewport stayed at the top) is kept as
+> the invariant: cursor and viewport must agree on open. The row-0 loop is
+> replaced by a walk from the buffer end up to the clamped anchor line; for a
+> non-zero anchor the textarea is rendered once so the existing re-layout can
+> scroll the viewport onto it (an empty viewport cannot scroll).
 
 `textarea.SetValue` is `Reset()` + `InsertString()`, leaving the cursor at the
 **end** of the buffer; `Reset()` puts the viewport at the top (`GotoTop`). The
