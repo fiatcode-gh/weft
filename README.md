@@ -12,17 +12,22 @@ Press `S` to sync the graph with git without leaving weft — it commits any cha
 
 ## Install
 
-Requires Go 1.26+ and [ripgrep](https://github.com/BurntSushi/ripgrep) on PATH
-(the search view consumes rg's `--json` output).
+Requires [ripgrep](https://github.com/BurntSushi/ripgrep) on PATH (the search
+view consumes rg's `--json` output).
+
+Download the archive for your platform (Linux or macOS, amd64 or arm64) from
+[GitHub Releases](https://github.com/fiatcode-gh/weft/releases), check it
+against `checksums.txt`, and put the `weft` binary on your PATH:
 
 ```bash
-go install git.fiatcode.dev/fiatcode/weft/v2/cmd/weft@latest
+tar -xzf weft_<version>_<os>_<arch>.tar.gz weft
+install weft ~/.local/bin/
 ```
 
-Or from source:
+Or build from source (Go 1.26+):
 
 ```bash
-git clone https://git.fiatcode.dev/fiatcode/weft
+git clone https://github.com/fiatcode-gh/weft
 cd weft
 go build ./cmd/weft
 ```

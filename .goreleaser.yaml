@@ -1,0 +1,30 @@
+version: 2
+
+project_name: weft
+
+builds:
+  - main: ./cmd/weft
+    binary: weft
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    # main.Version is what `weft -version` prints; keep the tag's "v" prefix
+    # so release binaries match what `go install` users see.
+    ldflags:
+      - -s -w -X main.Version={{ .Tag }}
+
+checksum:
+  name_template: checksums.txt
+
+# Release notes come from the tag's CHANGELOG.md section, passed by the
+# release workflow with --release-notes.
+changelog:
+  disable: true
