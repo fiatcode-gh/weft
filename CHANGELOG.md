@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The in-app editor (`e`) now opens with the cursor on the line you were reading — the source line behind the read view's top visible line, or the selected link when it is on screen — instead of the top of the page.
+
 ### Fixed
 
 - Creating a page or linkifying a mention while a sync is running now says "sync in progress" inside the open panel, instead of an invisible status-bar hint that made the keypress look dead.

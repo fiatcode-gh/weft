@@ -231,9 +231,11 @@ type linkSubst struct {
 // stripLogbookBlocks removes :LOGBOOK: / :END: blocks from body. These are
 // Logseq's per-bullet time-tracking metadata and they're pure noise in a
 // read-only browser. Fence-aware so a code block containing the literal
-// markers stays intact.
-func stripLogbookBlocks(body string) string {
+// markers stays intact. The []int holds, for each line of the result, its
+// index among strings.Split(body, "\n").
+func stripLogbookBlocks(body string) (string, []int) {
 	var out strings.Builder
+	var kept []int
 	out.Grow(len(body))
 	lines := strings.Split(body, "\n")
 	var fence graph.FenceState
@@ -250,24 +252,29 @@ func stripLogbookBlocks(body string) string {
 		switch {
 		case fence.Step(line):
 			out.WriteString(line)
+			kept = append(kept, i)
 		case logbookStartRe.MatchString(line):
 			inLogbook = true
 			continue // drop the :LOGBOOK: line; no newline either
 		default:
 			out.WriteString(line)
+			kept = append(kept, i)
 		}
 		if i < len(lines)-1 {
 			out.WriteByte('\n')
 		}
 	}
-	return out.String()
+	return out.String(), padKept(kept, out.String(), len(lines))
 }
 
 // stripQueryAndEmbedBlocks drops Logseq {{query …}} and {{embed …}}
 // blocks. A block closes with `}}` on its own line, or on the opening line
 // for the self-closing form. Fence-aware so fenced literals remain intact.
-func stripQueryAndEmbedBlocks(body string) string {
+// The []int holds, for each line of the result, its index among
+// strings.Split(body, "\n").
+func stripQueryAndEmbedBlocks(body string) (string, []int) {
 	var out strings.Builder
+	var kept []int
 	out.Grow(len(body))
 	lines := strings.Split(body, "\n")
 	var fence graph.FenceState
@@ -284,6 +291,7 @@ func stripQueryAndEmbedBlocks(body string) string {
 		switch {
 		case fence.Step(line):
 			out.WriteString(line)
+			kept = append(kept, i)
 		case queryOrEmbedRe.MatchString(line):
 			// A same-line `}}` closes the block immediately — `{{embed [[X]]}}`
 			// is single-line in practice. The closer is looked for anywhere
@@ -301,12 +309,24 @@ func stripQueryAndEmbedBlocks(body string) string {
 			continue // drop the opening line either way
 		default:
 			out.WriteString(line)
+			kept = append(kept, i)
 		}
 		if i < len(lines)-1 {
 			out.WriteByte('\n')
 		}
 	}
-	return out.String()
+	return out.String(), padKept(kept, out.String(), len(lines))
+}
+
+// padKept covers the trailing-empty artefact of the strip passes: when the
+// last input lines were all dropped, the output ends in "\n" and so has one
+// more (empty) row than lines were kept; that row stands for the last input
+// line.
+func padKept(kept []int, out string, nLines int) []int {
+	for len(kept) < strings.Count(out, "\n")+1 {
+		kept = append(kept, nLines-1)
+	}
+	return kept
 }
 
 // mapLinesOutsideFences rewrites body line by line: lines inside (or
@@ -620,22 +640,18 @@ func Render(body string, width int) (Result, error) {
 // RenderWithEmphasis is Render plus highlighting whole-word occurrences of
 // emphasis (recorded in Result.Finds). emphasis == "" is identical to Render.
 func RenderWithEmphasis(body string, width int, emphasis string) (Result, error) {
-	body = stripLogbookBlocks(body)
-	body = stripQueryAndEmbedBlocks(body)
-	body = hideMarkdownLinkURLs(body)
-	pre, wikiSubs := preprocessWikiLinks(body)
-	pre, taskMarkers := preprocessTaskMarkers(pre)
-	pre, emphSubs := preprocessEmphasis(pre, emphasis)
+	f := preprocess(body, emphasis)
+	wikiSubs, taskMarkers, emphSubs := f.wikiSubs, f.taskMarkers, f.emphSubs
 
 	r, err := rendererFor(width)
 	if err != nil {
 		return Result{}, err
 	}
-	styled, fallbackErr := glamourRender(r, pre)
+	styled, fallbackErr := glamourRender(r, f.pre)
 	if fallbackErr != nil {
 		// Fallback: plain text if Glamour chokes. Recorded on the Result so
 		// the caller can skip its cache and log the cause.
-		styled = pre
+		styled = f.pre
 	}
 
 	// indentWrappedBullets must run before sentinel substitution so the byte

@@ -21,7 +21,7 @@ cursor's current row is shown as raw source.
 Enter continues a `- ` bullet at the same indent (empty bullet ends the list);
 `Ctrl+T` cycles the current bullet's workflow marker (plain → TODO → DONE);
 `Tab` / `Shift+Tab` indent / de-indent the current line by one 2-space level.
-The editor opens with the cursor at the top of the page.
+The editor opens with the cursor on the source line matching the read view's top visible line (or the visible link cursor, when one is set).
 
 Press `S` to sync the graph to git — commit local changes, `pull --rebase`,
 then push — run asynchronously off the UI thread with the outcome in the status

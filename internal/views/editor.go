@@ -56,8 +56,9 @@ type EditorResult struct {
 // with `content` (empty for a not-yet-created page). isNew records whether
 // the file existed at open time. idx is the graph index used for link
 // completion; pass nil to disable completion (e.g. in tests that don't
-// exercise it).
-func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, width, height int) *EditorView {
+// exercise it). anchorLine is the 0-based line of `content` to open the
+// cursor on, clamped into the buffer.
+func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, width, height, anchorLine int) *EditorView {
 	ta := textarea.New()
 	ta.CharLimit = 0 // no length cap
 	ta.MaxHeight = 0 // lift textarea's default 99-line height cap (a separate hard 10000-line insert cap remains — see loadDiverged)
@@ -83,14 +84,17 @@ func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, wid
 	}
 	e.SetSize(width, height)
 	_ = e.ta.Focus() // blink cmd not needed here; the App calls Focus() again when it mounts the editor
-	// SetValue leaves the cursor at the end of the buffer; Reset() (inside
-	// SetValue) already put the viewport at the top. Move the cursor to the top
-	// so cursor and viewport agree on open instead of the cursor sitting
-	// off-screen at the bottom of a long page.
-	for e.ta.Line() > 0 {
+	// SetValue leaves the cursor at the end of the buffer. Walk it up to the
+	// anchor line — clamped, so a stale anchor (file changed since the read
+	// view rendered) degrades instead of panicking — and to column 0.
+	anchorLine = clampInt(anchorLine, 0, e.ta.LineCount()-1)
+	for e.ta.Line() > anchorLine {
 		e.ta.CursorUp()
 	}
 	e.ta.CursorStart()
+	if anchorLine > 0 {
+		e.scrollAnchorToTop(anchorLine)
+	}
 	e.baseline = e.Content()  // normalize so open-time dirty() is accurate
 	e.refreshCompleter(false) // opening a file must not pop the strip
 	// The textarea's input sanitizer can silently alter content on load —
@@ -100,6 +104,30 @@ func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, wid
 	// Record the divergence so the App can refuse in-app editing.
 	e.loadDiverged = e.Content() != strings.TrimRight(content, "\n")+"\n"
 	return e
+}
+
+// scrollAnchorToTop leaves the cursor at column 0 of anchorLine with that
+// line's first visual row at the top of the textarea window (or as high as
+// the buffer's end allows). The textarea only ever scrolls minimally to keep
+// the cursor visible, so left alone the anchor would park on the bottom row.
+// Parking the cursor a window's height further down first, syncing the
+// viewport, then walking back up gives the same result as a top-aligned
+// scroll. The textarea's viewport also has no lines until its first View(),
+// hence the render before the sync.
+func (e *EditorView) scrollAnchorToTop(anchorLine int) {
+	for range e.ta.Height() - 1 {
+		line, row := e.ta.Line(), e.ta.LineInfo().RowOffset
+		e.ta.CursorDown()
+		if e.ta.Line() == line && e.ta.LineInfo().RowOffset == row {
+			break // end of buffer: no further visual row to move to
+		}
+	}
+	_ = e.ta.View()
+	e.syncViewport()
+	for e.ta.Line() > anchorLine {
+		e.ta.CursorUp()
+	}
+	e.ta.CursorStart()
 }
 
 // SetError records a message (e.g. a failed save) to show in the status
