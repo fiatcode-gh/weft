@@ -4,6 +4,12 @@ All notable changes to weft are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.1] - 2026-10-03
+
+### Changed
+
+- The Go module path is now `github.com/fiatcode-gh/weft/v2`, so `go install github.com/fiatcode-gh/weft/v2/cmd/weft@latest` works again. The old `git.fiatcode.dev/fiatcode/weft/v2` path no longer resolves; the Go proxy only has its cached versions up to v2.4.0.
+
 ## [2.5.0] - 2026-10-03
 
 ### Added
