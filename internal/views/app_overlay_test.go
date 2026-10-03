@@ -8,7 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/search"
+	"github.com/fiatcode-gh/weft/v2/internal/search"
 )
 
 // activeKind returns a short name for the active overlay's concrete type, or

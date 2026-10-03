@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/search"
+	"github.com/fiatcode-gh/weft/v2/internal/search"
 )
 
 // linkifyOK runs LinkifyMention and fails the test if it returns an error,

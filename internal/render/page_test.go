@@ -10,7 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/graph"
 )
 
 // mustRender renders body at the given width and fails the test on error. It is
@@ -537,7 +537,7 @@ func TestHideMarkdownLinkURLsLeavesLiteralExampleInCode(t *testing.T) {
 
 func TestRenderMarkdownLinkHidesURL(t *testing.T) {
 	// End-to-end: the rendered read view shows the link text but not the URL.
-	out := mustRender(t, "see [PR 17](https://git.fiatcode.dev/fiatcode/weft/pulls/17) done\n", 80)
+	out := mustRender(t, "see [PR 17](https://github.com/fiatcode-gh/weft/pulls/17) done\n", 80)
 
 	plain := plainText(out)
 	if !strings.Contains(plain, "PR 17") {

@@ -11,10 +11,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/edit"
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/search"
-	syncpkg "git.fiatcode.dev/fiatcode/weft/v2/internal/sync"
+	"github.com/fiatcode-gh/weft/v2/internal/edit"
+	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/search"
+	syncpkg "github.com/fiatcode-gh/weft/v2/internal/sync"
 )
 
 // indexLoadedMsg carries the result of an asynchronous graph.BuildIndex

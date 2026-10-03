@@ -10,9 +10,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/search"
-	syncpkg "git.fiatcode.dev/fiatcode/weft/v2/internal/sync"
+	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/search"
+	syncpkg "github.com/fiatcode-gh/weft/v2/internal/sync"
 )
 
 var errSyncTest = errors.New("boom")

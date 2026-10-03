@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/graph"
 )
 
 type Todos struct {

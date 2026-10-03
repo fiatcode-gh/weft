@@ -6,7 +6,7 @@ import (
 
 	"github.com/sahilm/fuzzy"
 
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/graph"
 )
 
 // maxCompleterRows caps how many candidate rows the strip shows at once; it

@@ -13,8 +13,8 @@ import (
 	"github.com/charmbracelet/x/exp/teatest"
 	"github.com/muesli/termenv"
 
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/render"
+	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/render"
 )
 
 func loadFixture(t *testing.T) *graph.Index {

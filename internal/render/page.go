@@ -13,7 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/graph"
 )
 
 // Link is one wiki-link occurrence inside the styled output.
