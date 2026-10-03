@@ -138,9 +138,7 @@ trailing content) as that marker.
 > **Superseded.** The motivation below
 > (the cursor sat off-screen while the viewport stayed at the top) is kept as
 > the invariant: cursor and viewport must agree on open. The row-0 loop is
-> replaced by a walk from the buffer end up to the clamped anchor line; for a
-> non-zero anchor the textarea is rendered once so the existing re-layout can
-> scroll the viewport onto it (an empty viewport cannot scroll).
+> replaced by placing the clamped anchor line on the top row of the editor window.
 
 `textarea.SetValue` is `Reset()` + `InsertString()`, leaving the cursor at the
 **end** of the buffer; `Reset()` puts the viewport at the top (`GotoTop`). The

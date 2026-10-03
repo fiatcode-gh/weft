@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
 	syncpkg "git.fiatcode.dev/fiatcode/weft/v2/internal/sync"
@@ -356,6 +357,13 @@ func assertEditorOnReadTop(t *testing.T, raw string) {
 	}
 	if got := strings.Split(a.editor.ta.Value(), "\n")[line]; got != want {
 		t.Fatalf("editor cursor line = %q, want %q", got, want)
+	}
+	// The window must show the reading position, not just hold the cursor:
+	// a line from the middle of the read window has to be on screen too.
+	var n int
+	fmt.Sscanf(want, "- line %d", &n)
+	if mid := fmt.Sprintf("line %d", n+5); !strings.Contains(ansi.Strip(a.View()), mid) {
+		t.Fatalf("editor view does not show %q below the reading position:\n%s", mid, ansi.Strip(a.View()))
 	}
 }
 

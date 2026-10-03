@@ -46,14 +46,6 @@ type Result struct {
 	// un-styled source (sentinels still substituted). Callers must not
 	// cache the result — the failure may be transient.
 	FallbackErr error
-	// SourceRows maps each row of Styled (0-based, Styled split on "\n") to the
-	// 0-based line of the body passed to Render/RenderWithEmphasis that produced
-	// it. A row with no source text of its own (Glamour margins, blank
-	// separators, a thematic break, an empty bullet) takes the line of the next
-	// row that has some; rows after the last such row take the last mapped line.
-	// Nil when the map could not be produced; callers treat nil as "no map".
-	// When non-nil, len(SourceRows) == strings.Count(Styled, "\n")+1.
-	SourceRows []int
 }
 
 var (
@@ -648,30 +640,18 @@ func Render(body string, width int) (Result, error) {
 // RenderWithEmphasis is Render plus highlighting whole-word occurrences of
 // emphasis (recorded in Result.Finds). emphasis == "" is identical to Render.
 func RenderWithEmphasis(body string, width int, emphasis string) (Result, error) {
-	body, keptLog := stripLogbookBlocks(body)
-	body, keptQuery := stripQueryAndEmbedBlocks(body)
-	src := make([]int, len(keptQuery))
-	for i, k := range keptQuery {
-		src[i] = keptLog[k]
-	}
-	body = hideMarkdownLinkURLs(body)
-	pre, wikiSubs := preprocessWikiLinks(body)
-	pre, taskMarkers := preprocessTaskMarkers(pre)
-	pre, emphSubs := preprocessEmphasis(pre, emphasis)
+	f := preprocess(body, emphasis)
+	wikiSubs, taskMarkers, emphSubs := f.wikiSubs, f.taskMarkers, f.emphSubs
 
 	r, err := rendererFor(width)
 	if err != nil {
 		return Result{}, err
 	}
-	styled, fallbackErr := glamourRender(r, pre)
-	var rows []int
+	styled, fallbackErr := glamourRender(r, f.pre)
 	if fallbackErr != nil {
 		// Fallback: plain text if Glamour chokes. Recorded on the Result so
 		// the caller can skip its cache and log the cause.
-		styled = pre
-		rows = src // the fallback is pre itself: one row per pre line
-	} else {
-		rows = sourceRows(r, styled, pre, src)
+		styled = f.pre
 	}
 
 	// indentWrappedBullets must run before sentinel substitution so the byte
@@ -725,5 +705,5 @@ func RenderWithEmphasis(body string, width int, emphasis string) (Result, error)
 	}
 	out.WriteString(styled[last:])
 
-	return Result{Styled: out.String(), Links: links, Tasks: tasks, Finds: finds, FallbackErr: fallbackErr, SourceRows: rows}, nil
+	return Result{Styled: out.String(), Links: links, Tasks: tasks, Finds: finds, FallbackErr: fallbackErr}, nil
 }

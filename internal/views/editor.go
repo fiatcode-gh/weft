@@ -93,11 +93,7 @@ func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, wid
 	}
 	e.ta.CursorStart()
 	if anchorLine > 0 {
-		// The textarea's viewport has no lines until its first View(), and
-		// repositionView can't scroll an empty viewport. Render once so the
-		// repositionMsg poke in refreshCompleter's layout() lands, keeping
-		// cursor and viewport in agreement on open.
-		_ = e.ta.View()
+		e.scrollAnchorToTop(anchorLine)
 	}
 	e.baseline = e.Content()  // normalize so open-time dirty() is accurate
 	e.refreshCompleter(false) // opening a file must not pop the strip
@@ -108,6 +104,30 @@ func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, wid
 	// Record the divergence so the App can refuse in-app editing.
 	e.loadDiverged = e.Content() != strings.TrimRight(content, "\n")+"\n"
 	return e
+}
+
+// scrollAnchorToTop leaves the cursor at column 0 of anchorLine with that
+// line's first visual row at the top of the textarea window (or as high as
+// the buffer's end allows). The textarea only ever scrolls minimally to keep
+// the cursor visible, so left alone the anchor would park on the bottom row.
+// Parking the cursor a window's height further down first, syncing the
+// viewport, then walking back up gives the same result as a top-aligned
+// scroll. The textarea's viewport also has no lines until its first View(),
+// hence the render before the sync.
+func (e *EditorView) scrollAnchorToTop(anchorLine int) {
+	for range e.ta.Height() - 1 {
+		line, row := e.ta.Line(), e.ta.LineInfo().RowOffset
+		e.ta.CursorDown()
+		if e.ta.Line() == line && e.ta.LineInfo().RowOffset == row {
+			break // end of buffer: no further visual row to move to
+		}
+	}
+	_ = e.ta.View()
+	e.syncViewport()
+	for e.ta.Line() > anchorLine {
+		e.ta.CursorUp()
+	}
+	e.ta.CursorStart()
 }
 
 // SetError records a message (e.g. a failed save) to show in the status

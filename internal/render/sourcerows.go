@@ -13,8 +13,10 @@ import (
 	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
 )
 
-// Result.SourceRows is computed from a second Glamour render of a tagged
-// copy of the preprocessed body, never from the real render. Tagging the real
+// SourceRows is computed from a second Glamour render of a tagged
+// copy of the preprocessed body, never from the real render, and only on
+// demand (the editor opens at the reading position), so ordinary renders pay
+// nothing. Tagging the real
 // input would change Glamour's layout (a prefix or suffix marker changes
 // wrapping and paragraph joining), and byte-identical Styled/Links/Tasks/
 // Finds is a hard requirement. The tagged copy is free to be disturbed: it
@@ -119,6 +121,54 @@ func rowTagCut(line string) int {
 		prev = r
 	}
 	return cut
+}
+
+// frontend is the shared front of the render pipeline: the preprocessed body
+// that Glamour sees plus the substitution tables RenderWithEmphasis restores
+// afterwards. src[j] is the line of the original body behind line j of pre.
+type frontend struct {
+	pre         string
+	src         []int
+	wikiSubs    []linkSubst
+	taskMarkers []taskInfo
+	emphSubs    []string
+}
+
+// preprocess runs the strip passes and the line-preserving substitutions.
+// RenderWithEmphasis and SourceRows both call it so their inputs to Glamour
+// cannot drift.
+func preprocess(body, emphasis string) frontend {
+	body, keptLog := stripLogbookBlocks(body)
+	body, keptQuery := stripQueryAndEmbedBlocks(body)
+	src := make([]int, len(keptQuery))
+	for i, k := range keptQuery {
+		src[i] = keptLog[k]
+	}
+	body = hideMarkdownLinkURLs(body)
+	pre, wikiSubs := preprocessWikiLinks(body)
+	pre, taskMarkers := preprocessTaskMarkers(pre)
+	pre, emphSubs := preprocessEmphasis(pre, emphasis)
+	return frontend{pre: pre, src: src, wikiSubs: wikiSubs, taskMarkers: taskMarkers, emphSubs: emphSubs}
+}
+
+// SourceRows maps each row of the Styled output that RenderWithEmphasis
+// produces for the same arguments to the 0-based line of body behind it.
+// Nil when the map cannot be produced; callers treat nil as "no map".
+func SourceRows(body string, width int, emphasis string) []int {
+	f := preprocess(body, emphasis)
+	r, err := rendererFor(width)
+	if err != nil {
+		return nil
+	}
+	styled, err := glamourRender(r, f.pre)
+	if err != nil {
+		// Fallback: Styled is pre itself, one row per pre line.
+		if strings.Count(f.pre, "\n")+1 != len(f.src) {
+			return nil
+		}
+		return f.src
+	}
+	return sourceRows(r, styled, f.pre, f.src)
 }
 
 // sourceRows renders the tagged copy of pre with r and maps every row of

@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/teatest"
 	"github.com/muesli/termenv"
 )
@@ -131,6 +132,45 @@ func TestEditorViewAnchorKeepsCursorVisible(t *testing.T) {
 	}
 	if strings.Contains(v, "filler 99") {
 		t.Errorf("viewport stayed at the end of the buffer:\n%s", v)
+	}
+}
+
+// firstContentRow returns the first non-blank visible row of the editor view,
+// past its top margin.
+func firstContentRow(t *testing.T, e *EditorView) string {
+	t.Helper()
+	for _, row := range strings.Split(ansi.Strip(e.View()), "\n") {
+		if strings.TrimSpace(row) != "" {
+			return row
+		}
+	}
+	t.Fatal("editor view has no content row")
+	return ""
+}
+
+func TestEditorViewAnchorOnTopRow(t *testing.T) {
+	quietTerm(t)
+	lines := fillerLines(100)
+	lines[50] = "ANCHORED LINE\n"
+	e := NewEditorView(nil, "Page", "/tmp/page.md", strings.Join(lines, ""), false, 80, 12, 50)
+	if row := firstContentRow(t, e); !strings.Contains(row, "ANCHORED LINE") {
+		t.Errorf("first content row = %q, want the anchored line", row)
+	}
+	if got := e.ta.Line(); got != 50 {
+		t.Errorf("cursor on line %d, want 50", got)
+	}
+}
+
+func TestEditorViewAnchorNearEndStaysVisible(t *testing.T) {
+	quietTerm(t)
+	lines := fillerLines(100)
+	lines[98] = "NEAR END LINE\n"
+	e := NewEditorView(nil, "Page", "/tmp/page.md", strings.Join(lines, ""), false, 80, 12, 98)
+	if got := e.ta.Line(); got != 98 {
+		t.Fatalf("cursor on line %d, want 98", got)
+	}
+	if v := ansi.Strip(e.View()); !strings.Contains(v, "NEAR END LINE") {
+		t.Errorf("anchored line not visible:\n%s", v)
 	}
 }
 

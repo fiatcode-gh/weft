@@ -21,27 +21,52 @@ func sourceRowOf(t *testing.T, res Result, substr string) int {
 	return -1
 }
 
-func TestRenderSourceRowsCoverEveryStyledRow(t *testing.T) {
-	body := "# Heading\n\nline one\nline two\n\n- see [[Alpha]] here\n  - nested\n- TODO task\n```go\nx := 1\n```\n> quote\n\n---\n\n1. first\n2. second\n"
-	tests := []struct {
-		name string
-		res  func(t *testing.T) Result
-	}{
-		{"Render", func(t *testing.T) Result { return mustRender(t, body, 40) }},
-		{"RenderWithEmphasis", func(t *testing.T) Result { return mustRenderEmphasis(t, body, 40, "first") }},
+// mustSourceRows returns the real render of body plus its row map, failing when
+// the map is nil.
+func mustSourceRows(t *testing.T, body string, width int, emphasis string) (Result, []int) {
+	t.Helper()
+	res := mustRenderEmphasis(t, body, width, emphasis)
+	rows := SourceRows(body, width, emphasis)
+	if rows == nil {
+		t.Fatal("SourceRows is nil")
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			res := tt.res(t)
-			if res.SourceRows == nil {
-				t.Fatal("SourceRows is nil")
-			}
-			if want := strings.Count(res.Styled, "\n") + 1; len(res.SourceRows) != want {
-				t.Fatalf("len(SourceRows) = %d, want %d", len(res.SourceRows), want)
+	return res, rows
+}
+
+func TestRenderCallsGlamourOnce(t *testing.T) {
+	orig := glamourRender
+	t.Cleanup(func() { glamourRender = orig })
+	calls := 0
+	glamourRender = func(r *glamour.TermRenderer, in string) (string, error) {
+		calls++
+		return orig(r, in)
+	}
+	if _, err := Render("- a\n- b\n", 80); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Errorf("Render called glamourRender %d times, want 1", calls)
+	}
+	calls = 0
+	if _, err := RenderWithEmphasis("- a\n- b\n", 80, "x"); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Errorf("RenderWithEmphasis called glamourRender %d times, want 1", calls)
+	}
+}
+
+func TestSourceRowsCoverEveryStyledRow(t *testing.T) {
+	body := "# Heading\n\nline one\nline two\n\n- see [[Alpha]] here\n  - nested\n- TODO task\n```go\nx := 1\n```\n> quote\n\n---\n\n1. first\n2. second\n"
+	for _, emphasis := range []string{"", "first"} {
+		t.Run("emphasis="+emphasis, func(t *testing.T) {
+			res, rows := mustSourceRows(t, body, 40, emphasis)
+			if want := strings.Count(res.Styled, "\n") + 1; len(rows) != want {
+				t.Fatalf("len(rows) = %d, want %d", len(rows), want)
 			}
 			lines := strings.Count(body, "\n") + 1
 			prev := 0
-			for i, v := range res.SourceRows {
+			for i, v := range rows {
 				if v < 0 || v >= lines {
 					t.Errorf("row %d maps to %d, outside [0,%d)", i, v, lines)
 				}
@@ -57,7 +82,7 @@ func TestRenderSourceRowsCoverEveryStyledRow(t *testing.T) {
 	}
 }
 
-func TestRenderSourceRowsSkipStrippedBlocks(t *testing.T) {
+func TestSourceRowsSkipStrippedBlocks(t *testing.T) {
 	tests := []struct {
 		name, body, find string
 		want             int
@@ -67,52 +92,52 @@ func TestRenderSourceRowsSkipStrippedBlocks(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := mustRender(t, tt.body, 80)
-			if got := res.SourceRows[sourceRowOf(t, res, tt.find)]; got != tt.want {
+			res, rows := mustSourceRows(t, tt.body, 80, "")
+			if got := rows[sourceRowOf(t, res, tt.find)]; got != tt.want {
 				t.Errorf("%q maps to %d, want %d", tt.find, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestRenderSourceRowsTrackFencedCode(t *testing.T) {
-	res := mustRender(t, "- intro\n```go\nx := 1\ny := 2\n```\n- after\n", 80)
+func TestSourceRowsTrackFencedCode(t *testing.T) {
+	res, rows := mustSourceRows(t, "- intro\n```go\nx := 1\ny := 2\n```\n- after\n", 80, "")
 	for find, want := range map[string]int{"x := 1": 2, "y := 2": 3, "after": 5} {
-		if got := res.SourceRows[sourceRowOf(t, res, find)]; got != want {
+		if got := rows[sourceRowOf(t, res, find)]; got != want {
 			t.Errorf("%q maps to %d, want %d", find, got, want)
 		}
 	}
 }
 
-func TestRenderSourceRowsTrackWrappedBullet(t *testing.T) {
-	res := mustRender(t, "- This bullet has enough text that Glamour will wrap it across two lines for sure.\n- next\n", 40)
+func TestSourceRowsTrackWrappedBullet(t *testing.T) {
+	res, rows := mustSourceRows(t, "- This bullet has enough text that Glamour will wrap it across two lines for sure.\n- next\n", 40, "")
 	first, next := sourceRowOf(t, res, "This bullet"), sourceRowOf(t, res, "next")
 	if next-first < 2 {
 		t.Fatalf("bullet did not wrap: rows %d..%d", first, next)
 	}
 	for i := first; i < next; i++ {
-		if res.SourceRows[i] != 0 {
-			t.Errorf("row %d maps to %d, want 0", i, res.SourceRows[i])
+		if rows[i] != 0 {
+			t.Errorf("row %d maps to %d, want 0", i, rows[i])
 		}
 	}
-	if got := res.SourceRows[next]; got != 1 {
+	if got := rows[next]; got != 1 {
 		t.Errorf("next maps to %d, want 1", got)
 	}
 }
 
-func TestRenderSourceRowsTrackLinkOnlyBullets(t *testing.T) {
-	res := mustRender(t, "- intro\n- [[Alpha]]\n- [text](https://example.com)\n- TODO [[Beta]]\n- outro\n", 80)
+func TestSourceRowsTrackLinkOnlyBullets(t *testing.T) {
+	res, rows := mustSourceRows(t, "- intro\n- [[Alpha]]\n- [text](https://example.com)\n- TODO [[Beta]]\n- outro\n", 80, "")
 	for find, want := range map[string]int{"Alpha": 1, "text": 2, "Beta": 3, "outro": 4} {
-		if got := res.SourceRows[sourceRowOf(t, res, find)]; got != want {
+		if got := rows[sourceRowOf(t, res, find)]; got != want {
 			t.Errorf("%q maps to %d, want %d", find, got, want)
 		}
 	}
 }
 
-func TestRenderSourceRowsRealignAfterLayoutDivergence(t *testing.T) {
-	res := mustRender(t, "- before\n\n[foo]: http://example.com/a/very/long/path/that/wraps/around\n\n- text [foo]\n- after one\n- after two\n", 40)
-	if want := strings.Count(res.Styled, "\n") + 1; len(res.SourceRows) != want {
-		t.Fatalf("len(SourceRows) = %d, want %d", len(res.SourceRows), want)
+func TestSourceRowsRealignAfterLayoutDivergence(t *testing.T) {
+	res, rows := mustSourceRows(t, "- before\n\n[foo]: http://example.com/a/very/long/path/that/wraps/around\n\n- text [foo]\n- after one\n- after two\n", 40, "")
+	if want := strings.Count(res.Styled, "\n") + 1; len(rows) != want {
+		t.Fatalf("len(rows) = %d, want %d", len(rows), want)
 	}
 	for find, want := range map[string]int{
 		"before":          0,
@@ -121,31 +146,36 @@ func TestRenderSourceRowsRealignAfterLayoutDivergence(t *testing.T) {
 		"after one":       5,
 		"after two":       6,
 	} {
-		if got := res.SourceRows[sourceRowOf(t, res, find)]; got != want {
+		if got := rows[sourceRowOf(t, res, find)]; got != want {
 			t.Errorf("%q maps to %d, want %d", find, got, want)
 		}
 	}
 }
 
-func TestRenderSourceRowsOnGlamourFallback(t *testing.T) {
+func TestSourceRowsOnGlamourFallback(t *testing.T) {
 	orig := glamourRender
 	t.Cleanup(func() { glamourRender = orig })
 	glamourRender = func(*glamour.TermRenderer, string) (string, error) {
 		return "", errors.New("boom")
 	}
-	res := mustRender(t, "- a\n  :LOGBOOK:\n  x\n  :END:\n- b\n", 80)
+	body := "- a\n  :LOGBOOK:\n  x\n  :END:\n- b\n"
+	res := mustRender(t, body, 80)
+	rows := SourceRows(body, 80, "")
 	want := []int{0, 4, 5}
-	if len(res.SourceRows) != len(want) {
-		t.Fatalf("SourceRows = %v, want %v", res.SourceRows, want)
+	if len(rows) != len(want) {
+		t.Fatalf("rows = %v, want %v", rows, want)
 	}
 	for i := range want {
-		if res.SourceRows[i] != want[i] {
-			t.Fatalf("SourceRows = %v, want %v", res.SourceRows, want)
+		if rows[i] != want[i] {
+			t.Fatalf("rows = %v, want %v", rows, want)
 		}
+	}
+	if got := strings.Count(res.Styled, "\n") + 1; len(rows) != got {
+		t.Errorf("len(rows) = %d, Styled has %d rows", len(rows), got)
 	}
 }
 
-func TestRenderSourceRowsNilWhenTaggedRenderFails(t *testing.T) {
+func TestSourceRowsNilWhenTaggedRenderFails(t *testing.T) {
 	orig := glamourRender
 	t.Cleanup(func() { glamourRender = orig })
 	glamourRender = func(r *glamour.TermRenderer, in string) (string, error) {
@@ -154,12 +184,12 @@ func TestRenderSourceRowsNilWhenTaggedRenderFails(t *testing.T) {
 		}
 		return orig(r, in)
 	}
+	if rows := SourceRows("- a\n- b\n", 80, ""); rows != nil {
+		t.Errorf("SourceRows = %v, want nil", rows)
+	}
 	res := mustRender(t, "- a\n- b\n", 80)
 	if res.FallbackErr != nil {
 		t.Errorf("FallbackErr = %v, want nil", res.FallbackErr)
-	}
-	if res.SourceRows != nil {
-		t.Errorf("SourceRows = %v, want nil", res.SourceRows)
 	}
 	if res.Styled == "" {
 		t.Error("Styled is empty")
