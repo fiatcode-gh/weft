@@ -431,7 +431,7 @@ func (a *App) enterEditor() tea.Cmd {
 	} else if !os.IsNotExist(err) {
 		return a.setHint("cannot read: " + err.Error())
 	}
-	e := NewEditorView(a.idx, name, path, content, isNew, a.width, a.height)
+	e := NewEditorView(a.idx, name, path, content, isNew, a.width, a.height, 0)
 	if e.LoadDiverged() {
 		return a.setHint("in-app editor would alter this file (CRLF, tabs, or >10000 lines) — press E to edit externally")
 	}

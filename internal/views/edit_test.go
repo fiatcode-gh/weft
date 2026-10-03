@@ -2,6 +2,7 @@ package views
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -297,14 +298,16 @@ func TestNewEditorViewFlagsSanitizerDivergence(t *testing.T) {
 		{"over textarea line cap", strings.Repeat("x\n", 10001), true},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			// act
-			e := NewEditorView(nil, "P", "unused.md", tc.content, false, 80, 24)
+		for _, anchor := range []int{0, 2} {
+			t.Run(fmt.Sprintf("%s/anchor %d", tc.name, anchor), func(t *testing.T) {
+				// act
+				e := NewEditorView(nil, "P", "unused.md", tc.content, false, 80, 24, anchor)
 
-			// assert
-			if got := e.LoadDiverged(); got != tc.want {
-				t.Errorf("LoadDiverged = %v, want %v", got, tc.want)
-			}
-		})
+				// assert
+				if got := e.LoadDiverged(); got != tc.want {
+					t.Errorf("LoadDiverged = %v, want %v", got, tc.want)
+				}
+			})
+		}
 	}
 }

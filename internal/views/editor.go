@@ -56,8 +56,9 @@ type EditorResult struct {
 // with `content` (empty for a not-yet-created page). isNew records whether
 // the file existed at open time. idx is the graph index used for link
 // completion; pass nil to disable completion (e.g. in tests that don't
-// exercise it).
-func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, width, height int) *EditorView {
+// exercise it). anchorLine is the 0-based line of `content` to open the
+// cursor on, clamped into the buffer.
+func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, width, height, anchorLine int) *EditorView {
 	ta := textarea.New()
 	ta.CharLimit = 0 // no length cap
 	ta.MaxHeight = 0 // lift textarea's default 99-line height cap (a separate hard 10000-line insert cap remains — see loadDiverged)
@@ -83,14 +84,21 @@ func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, wid
 	}
 	e.SetSize(width, height)
 	_ = e.ta.Focus() // blink cmd not needed here; the App calls Focus() again when it mounts the editor
-	// SetValue leaves the cursor at the end of the buffer; Reset() (inside
-	// SetValue) already put the viewport at the top. Move the cursor to the top
-	// so cursor and viewport agree on open instead of the cursor sitting
-	// off-screen at the bottom of a long page.
-	for e.ta.Line() > 0 {
+	// SetValue leaves the cursor at the end of the buffer. Walk it up to the
+	// anchor line — clamped, so a stale anchor (file changed since the read
+	// view rendered) degrades instead of panicking — and to column 0.
+	anchorLine = clampInt(anchorLine, 0, e.ta.LineCount()-1)
+	for e.ta.Line() > anchorLine {
 		e.ta.CursorUp()
 	}
 	e.ta.CursorStart()
+	if anchorLine > 0 {
+		// The textarea's viewport has no lines until its first View(), and
+		// repositionView can't scroll an empty viewport. Render once so the
+		// repositionMsg poke in refreshCompleter's layout() lands, keeping
+		// cursor and viewport in agreement on open.
+		_ = e.ta.View()
+	}
 	e.baseline = e.Content()  // normalize so open-time dirty() is accurate
 	e.refreshCompleter(false) // opening a file must not pop the strip
 	// The textarea's input sanitizer can silently alter content on load —
