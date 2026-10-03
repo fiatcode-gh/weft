@@ -412,7 +412,8 @@ func (a *App) editCurrent() tea.Cmd {
 // enterEditor opens the in-app editor on the current page. The target file
 // path is computed but NOT created — a brand-new page is written to disk
 // only on save (Ctrl+S). Journals route to journals/, every other name to
-// pages/ (flat, "/" mangled to "___" by FilenameFromPageName).
+// pages/ (flat, "/" mangled to "___" by FilenameFromPageName). The cursor
+// opens on the read view's anchor line.
 func (a *App) enterEditor() tea.Cmd {
 	name := a.page.Page()
 	var path string
@@ -431,7 +432,11 @@ func (a *App) enterEditor() tea.Cmd {
 	} else if !os.IsNotExist(err) {
 		return a.setHint("cannot read: " + err.Error())
 	}
-	e := NewEditorView(a.idx, name, path, content, isNew, a.width, a.height, 0)
+	anchor := 0
+	if line, ok := a.page.AnchorSourceLine(); ok {
+		anchor = line + leadingTrimmedLines(content)
+	}
+	e := NewEditorView(a.idx, name, path, content, isNew, a.width, a.height, anchor)
 	if e.LoadDiverged() {
 		return a.setHint("in-app editor would alter this file (CRLF, tabs, or >10000 lines) — press E to edit externally")
 	}

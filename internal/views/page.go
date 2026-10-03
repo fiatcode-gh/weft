@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
@@ -13,6 +14,13 @@ import (
 	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
 	"git.fiatcode.dev/fiatcode/weft/v2/internal/render"
 )
+
+// leadingTrimmedLines is how many whole lines load's strings.TrimSpace drops
+// from the top of raw: the offset from a line of the rendered body to the
+// same line in the file.
+func leadingTrimmedLines(raw string) int {
+	return strings.Count(raw[:len(raw)-len(strings.TrimLeftFunc(raw, unicode.IsSpace))], "\n")
+}
 
 // renderCount is incremented on every renderPage call inside
 // PageView. Tests assert that the per-page cache keeps it from

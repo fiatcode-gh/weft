@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -309,5 +310,75 @@ func TestNewEditorViewFlagsSanitizerDivergence(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+var readLineRe = regexp.MustCompile(`line \d+`)
+
+// topReadLine returns the "line N" text on the read view's top row.
+func topReadLine(t *testing.T, a *App) string {
+	t.Helper()
+	rows := strings.Split(a.page.result.Styled, "\n")
+	m := readLineRe.FindString(rows[a.page.Offset()])
+	if m == "" {
+		t.Fatalf("no 'line N' on read top row %d: %q", a.page.Offset(), rows[a.page.Offset()])
+	}
+	return m
+}
+
+func bullets(n int) string {
+	var b strings.Builder
+	for i := range n {
+		fmt.Fprintf(&b, "- line %d\n", i)
+	}
+	return b.String()
+}
+
+func assertEditorOnReadTop(t *testing.T, raw string) {
+	t.Helper()
+	quietTerm(t)
+	dir, _ := writeGraph(t, map[string]string{"pages/Long.md": raw})
+	a := New(dir, "test")
+	a.Update(a.Init()())
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 12})
+	a.navigate("Long")
+	for range 30 {
+		a.page.LineDown()
+	}
+	want := "- " + topReadLine(t, a)
+	pressE(t, a)
+	if a.editor == nil {
+		t.Fatal("editor did not open")
+	}
+	line := a.editor.ta.Line()
+	if line == 0 {
+		t.Fatal("editor opened at line 0, want the reading position")
+	}
+	if got := strings.Split(a.editor.ta.Value(), "\n")[line]; got != want {
+		t.Fatalf("editor cursor line = %q, want %q", got, want)
+	}
+}
+
+func TestE_OpensAtReadingPosition(t *testing.T) {
+	assertEditorOnReadTop(t, bullets(80))
+}
+
+func TestE_OpensAtReadingPositionAfterLeadingBlankLines(t *testing.T) {
+	assertEditorOnReadTop(t, "\n\n\n"+bullets(80))
+}
+
+func TestE_OnUnscrolledPageOpensAtTop(t *testing.T) {
+	quietTerm(t)
+	dir, _ := writeGraph(t, map[string]string{"pages/Long.md": "\n\n- line 0\n- line 1\n"})
+	a := New(dir, "test")
+	a.Update(a.Init()())
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 12})
+	a.navigate("Long")
+	pressE(t, a)
+	if a.editor == nil {
+		t.Fatal("editor did not open")
+	}
+	if got := a.editor.ta.Line(); got != 0 {
+		t.Fatalf("editor line = %d, want 0", got)
 	}
 }
