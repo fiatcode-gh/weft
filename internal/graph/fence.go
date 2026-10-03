@@ -33,3 +33,7 @@ func (f *FenceState) Step(line string) bool {
 	}
 	return true
 }
+
+// Open reports whether the walk is inside a fenced code block after the
+// last Step (a closing delimiter leaves it false).
+func (f *FenceState) Open() bool { return f.open != 0 }

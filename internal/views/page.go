@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
@@ -13,6 +14,13 @@ import (
 	"git.fiatcode.dev/fiatcode/weft/v2/internal/graph"
 	"git.fiatcode.dev/fiatcode/weft/v2/internal/render"
 )
+
+// leadingTrimmedLines is how many whole lines load's strings.TrimSpace drops
+// from the top of raw: the offset from a line of the rendered body to the
+// same line in the file.
+func leadingTrimmedLines(raw string) int {
+	return strings.Count(raw[:len(raw)-len(strings.TrimLeftFunc(raw, unicode.IsSpace))], "\n")
+}
 
 // renderCount is incremented on every renderPage call inside
 // PageView. Tests assert that the per-page cache keeps it from
@@ -27,6 +35,10 @@ func RenderCount() int64 { return renderCount }
 // can inject render results. RenderWithEmphasis("") is identical to Render.
 var renderPage = render.RenderWithEmphasis
 
+// sourceRowsFor builds the row map behind AnchorSourceLine — a var so tests
+// can count calls or inject a missing map.
+var sourceRowsFor = render.SourceRows
+
 // PageView renders a single page with a wiki-link cursor.
 type PageView struct {
 	idx      *graph.Index
@@ -39,10 +51,15 @@ type PageView struct {
 	width    int
 	height   int
 	cache    map[string]cachedPage
+
+	body     string // body result was rendered from; "" when nothing rendered
+	rows     []int  // memoised render.SourceRows(body, ...), valid when rowsDone
+	rowsDone bool
 }
 
 type cachedPage struct {
 	result  render.Result
+	body    string
 	modTime time.Time
 	width   int
 }
@@ -124,14 +141,10 @@ func (p *PageView) CycleLink(dir int) {
 // inside the visible window. Links already in view leave the offset
 // untouched; off-screen links are centred vertically in the viewport.
 func (p *PageView) scrollToCursor() {
-	if p.cursor < 0 || p.cursor >= len(p.result.Links) {
+	row, ok := p.linkRow(p.cursor)
+	if !ok {
 		return
 	}
-	l := p.result.Links[p.cursor]
-	if l.Start < 0 || l.Start > len(p.result.Styled) {
-		return
-	}
-	row := strings.Count(p.result.Styled[:l.Start], "\n")
 	top := p.vp.YOffset
 	bottom := top + p.vp.Height - 1
 	if row >= top && row <= bottom {
@@ -142,6 +155,54 @@ func (p *PageView) scrollToCursor() {
 		target = 0
 	}
 	p.vp.SetYOffset(target)
+}
+
+// linkRow returns the styled row of link i, or false when i or the link's
+// offset is out of range. Shared by scrollToCursor and AnchorSourceLine so
+// both agree on where a link sits.
+func (p *PageView) linkRow(i int) (int, bool) {
+	if i < 0 || i >= len(p.result.Links) {
+		return 0, false
+	}
+	l := p.result.Links[i]
+	if l.Start < 0 || l.Start > len(p.result.Styled) {
+		return 0, false
+	}
+	return strings.Count(p.result.Styled[:l.Start], "\n"), true
+}
+
+// AnchorSourceLine reports the 0-based line of the rendered page body (the
+// TrimSpace'd body load renders) that the in-app editor should open on.
+// A link cursor whose row is inside the visible window wins; otherwise the
+// top visible row decides. ok is false — open at the top of the file — when
+// the view is at the top with no visible link cursor, or no row map can be
+// produced. The map is computed lazily, once per load, and only after an
+// anchor is known to be needed.
+func (p *PageView) AnchorSourceLine() (line int, ok bool) {
+	top := p.vp.YOffset
+	row := top
+	if r, found := p.linkRow(p.cursor); found && r >= top && r <= top+p.vp.Height-1 {
+		row = r
+	} else if top == 0 {
+		return 0, false
+	}
+	rows := p.sourceRows()
+	if len(rows) == 0 {
+		return 0, false
+	}
+	return rows[clampInt(row, 0, len(rows)-1)], true
+}
+
+// sourceRows returns the styled-row → body-line map for the loaded render,
+// computing it on first use after each load.
+func (p *PageView) sourceRows() []int {
+	if !p.rowsDone {
+		p.rowsDone = true
+		if p.body != "" {
+			p.rows = sourceRowsFor(p.body, p.width, p.emphasis)
+		}
+	}
+	return p.rows
 }
 
 // FollowCursor returns the link target under the cursor, or "" if none.
@@ -269,6 +330,7 @@ func (p *PageView) View() string {
 func (p *PageView) load() {
 	p.err = nil
 	p.result = render.Result{}
+	p.body, p.rows, p.rowsDone = "", nil, false
 	meta, ok := p.idx.Resolve(p.page)
 	if !ok {
 		return
@@ -279,6 +341,7 @@ func (p *PageView) load() {
 	if p.emphasis == "" {
 		if c, hit := p.cache[meta.Name]; hit && c.modTime.Equal(meta.ModTime) && c.width == p.width {
 			p.result = c.result
+			p.body = c.body
 			p.vp.SetContent(p.result.Styled)
 			return
 		}
@@ -301,8 +364,9 @@ func (p *PageView) load() {
 		logRenderFallback(p.page, res.FallbackErr)
 	}
 	p.result = res
+	p.body = body
 	if p.emphasis == "" && res.FallbackErr == nil {
-		p.cache[meta.Name] = cachedPage{result: res, modTime: meta.ModTime, width: p.width}
+		p.cache[meta.Name] = cachedPage{result: res, body: body, modTime: meta.ModTime, width: p.width}
 	}
 	p.vp.SetContent(p.result.Styled)
 }

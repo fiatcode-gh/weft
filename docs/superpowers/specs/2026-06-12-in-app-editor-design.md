@@ -29,6 +29,11 @@ references + linkify (Slice 3); queries, block model, outliner editing, WYSIWYG.
    cancel** prompt; on that prompt `Esc`/cancel returns to editing with nothing lost.
    A stray keystroke can never silently mutate the graph.
 3. **Cursor lands at top of file** on entering edit. Uniform across all pages.
+   *Superseded: the editor now opens on
+   the source line behind the read view's top visible line (or a visible link
+   cursor), at the top when unscrolled — so the reader isn't made to scroll
+   back down to the passage they were reading. The cursor/viewport agreement
+   invariant is retained.*
 4. **Navigation:** textarea built-ins (arrows, `Alt`+arrows word-jump, `Ctrl+A`/`E`
    line ends, `Ctrl+Home`/`Ctrl+End` file top/bottom) **plus** `PageUp`/`PageDown`,
    which v1.0.0 textarea lacks. Readline-style, not modal vim (that's what `E` is for).
