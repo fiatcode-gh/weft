@@ -449,3 +449,121 @@ func TestPageViewSkipsCacheAndLogsOnRenderFallback(t *testing.T) {
 		t.Fatalf("log missing fallback entry:\n%s", logBytes)
 	}
 }
+
+// anchorLongPage builds a page with `prefix` followed by 60 "line N" bullets.
+func anchorLongPage(prefix string) string {
+	var b strings.Builder
+	b.WriteString(prefix)
+	for n := range 60 {
+		fmt.Fprintf(&b, "- line %d\n", n)
+	}
+	return b.String()
+}
+
+var anchorLineRe = regexp.MustCompile(`line (\d+)`)
+
+// topRowLine parses N from the "line N" bullet on the page's top visible row.
+func topRowLine(t *testing.T, p *PageView) int {
+	t.Helper()
+	row := strings.Split(p.result.Styled, "\n")[p.Offset()]
+	m := anchorLineRe.FindStringSubmatch(row)
+	if m == nil {
+		t.Fatalf("top row %d is not a line bullet: %q", p.Offset(), row)
+	}
+	var k int
+	fmt.Sscanf(m[1], "%d", &k)
+	return k
+}
+
+func scrollDown(p *PageView, n int) {
+	for range n {
+		p.LineDown()
+	}
+}
+
+func TestPageViewAnchorFollowsScroll(t *testing.T) {
+	quietTerm(t)
+	_, idx := writeGraph(t, map[string]string{
+		"pages/A.md": anchorLongPage("- head\n  :LOGBOOK:\n  CLOCK: x\n  :END:\n"),
+	})
+	p := NewPageView(idx, "A", 80, 10)
+	scrollDown(p, 20)
+	if p.Offset() <= 0 {
+		t.Fatalf("expected scrolled view, offset=%d", p.Offset())
+	}
+	k := topRowLine(t, p)
+
+	line, ok := p.AnchorSourceLine()
+
+	if !ok || line != k+4 {
+		t.Fatalf("AnchorSourceLine = (%d, %v), want (%d, true)", line, ok, k+4)
+	}
+	if line == p.Offset() {
+		t.Fatalf("row and line must diverge; both %d", line)
+	}
+}
+
+func TestPageViewAnchorAtTopIsNoAnchor(t *testing.T) {
+	quietTerm(t)
+	_, idx := writeGraph(t, map[string]string{
+		"pages/A.md": anchorLongPage("- head\n  :LOGBOOK:\n  CLOCK: x\n  :END:\n"),
+	})
+	p := NewPageView(idx, "A", 80, 10)
+
+	if line, ok := p.AnchorSourceLine(); line != 0 || ok {
+		t.Fatalf("AnchorSourceLine = (%d, %v), want (0, false)", line, ok)
+	}
+}
+
+func TestPageViewAnchorPrefersVisibleLinkCursor(t *testing.T) {
+	quietTerm(t)
+	_, idx := writeGraph(t, map[string]string{
+		"pages/A.md": "- a\n- b\n- c\n- see [[B]]\n- d\n",
+		"pages/B.md": "- b\n",
+	})
+	p := NewPageView(idx, "A", 80, 10)
+	p.CycleLink(+1)
+	if p.Offset() != 0 || p.Cursor() != 0 {
+		t.Fatalf("offset=%d cursor=%d, want 0,0", p.Offset(), p.Cursor())
+	}
+
+	line, ok := p.AnchorSourceLine()
+
+	if !ok || line != 3 {
+		t.Fatalf("AnchorSourceLine = (%d, %v), want (3, true)", line, ok)
+	}
+}
+
+func TestPageViewAnchorIgnoresOffscreenLinkCursor(t *testing.T) {
+	quietTerm(t)
+	_, idx := writeGraph(t, map[string]string{
+		"pages/A.md": anchorLongPage("- see [[B]]\n"),
+		"pages/B.md": "- b\n",
+	})
+	p := NewPageView(idx, "A", 80, 10)
+	p.CycleLink(+1)
+	scrollDown(p, 20)
+	k := topRowLine(t, p)
+
+	line, ok := p.AnchorSourceLine()
+
+	if !ok || line != k+1 {
+		t.Fatalf("AnchorSourceLine = (%d, %v), want (%d, true)", line, ok, k+1)
+	}
+}
+
+func TestPageViewAnchorWithoutRowMapIsNoAnchor(t *testing.T) {
+	quietTerm(t)
+	orig := renderPage
+	t.Cleanup(func() { renderPage = orig })
+	renderPage = func(body string, width int, emphasis string) (render.Result, error) {
+		return render.Result{Styled: strings.Repeat("row\n", 60)}, nil
+	}
+	_, idx := writeGraph(t, map[string]string{"pages/A.md": "- hi\n"})
+	p := NewPageView(idx, "A", 80, 10)
+	scrollDown(p, 20)
+
+	if line, ok := p.AnchorSourceLine(); line != 0 || ok {
+		t.Fatalf("AnchorSourceLine = (%d, %v), want (0, false)", line, ok)
+	}
+}

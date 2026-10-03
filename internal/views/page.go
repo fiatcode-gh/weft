@@ -124,14 +124,10 @@ func (p *PageView) CycleLink(dir int) {
 // inside the visible window. Links already in view leave the offset
 // untouched; off-screen links are centred vertically in the viewport.
 func (p *PageView) scrollToCursor() {
-	if p.cursor < 0 || p.cursor >= len(p.result.Links) {
+	row, ok := p.linkRow(p.cursor)
+	if !ok {
 		return
 	}
-	l := p.result.Links[p.cursor]
-	if l.Start < 0 || l.Start > len(p.result.Styled) {
-		return
-	}
-	row := strings.Count(p.result.Styled[:l.Start], "\n")
 	top := p.vp.YOffset
 	bottom := top + p.vp.Height - 1
 	if row >= top && row <= bottom {
@@ -142,6 +138,41 @@ func (p *PageView) scrollToCursor() {
 		target = 0
 	}
 	p.vp.SetYOffset(target)
+}
+
+// linkRow returns the styled row of link i, or false when i or the link's
+// offset is out of range. Shared by scrollToCursor and AnchorSourceLine so
+// both agree on where a link sits.
+func (p *PageView) linkRow(i int) (int, bool) {
+	if i < 0 || i >= len(p.result.Links) {
+		return 0, false
+	}
+	l := p.result.Links[i]
+	if l.Start < 0 || l.Start > len(p.result.Styled) {
+		return 0, false
+	}
+	return strings.Count(p.result.Styled[:l.Start], "\n"), true
+}
+
+// AnchorSourceLine reports the 0-based line of the rendered page body (the
+// TrimSpace'd body load renders) that the in-app editor should open on.
+// A link cursor whose row is inside the visible window wins; otherwise the
+// top visible row decides. ok is false — open at the top of the file — when
+// the view is at the top with no visible link cursor, or the render carries
+// no row map.
+func (p *PageView) AnchorSourceLine() (line int, ok bool) {
+	rows := p.result.SourceRows
+	if len(rows) == 0 {
+		return 0, false
+	}
+	top := p.vp.YOffset
+	row := top
+	if r, found := p.linkRow(p.cursor); found && r >= top && r <= top+p.vp.Height-1 {
+		row = r
+	} else if top == 0 {
+		return 0, false
+	}
+	return rows[clampInt(row, 0, len(rows)-1)], true
 }
 
 // FollowCursor returns the link target under the cursor, or "" if none.
