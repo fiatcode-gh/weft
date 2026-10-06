@@ -4,7 +4,7 @@
 │  Browse                                                       Edit                                                     │
 │    j / k     scroll one line                                    e         edit current page in-app                     │
 │    ctrl-d    half page down                                     E         edit current page in $EDITOR                 │
-│    ctrl-u    half page up                                       ctrl-s    save (while editing)                         │
+│    ctrl-u    half page up                                       ctrl-s    save; merges outside edits, asks on a clash  │
 │    g / G     top / bottom                                       pgup/pgdn page up / down (while editing)               │
 │                                                                 enter     continue list bullet (empty bullet ends it)  │
 │  Links                                                          ctrl-t    cycle TODO / DONE on the current bullet      │

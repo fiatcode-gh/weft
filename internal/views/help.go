@@ -89,7 +89,7 @@ var helpGroups = []helpGroup{
 	{"Edit", []helpRow{
 		{"e", "edit current page in-app"},
 		{"E", "edit current page in $EDITOR"},
-		{"ctrl-s", "save (while editing)"},
+		{"ctrl-s", "save; merges outside edits, asks on a clash"},
 		{"pgup/pgdn", "page up / down (while editing)"},
 		{"enter", "continue list bullet (empty bullet ends it)"},
 		{"ctrl-t", "cycle TODO / DONE on the current bullet"},

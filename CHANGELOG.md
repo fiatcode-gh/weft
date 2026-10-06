@@ -4,6 +4,13 @@ All notable changes to weft are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Saving in the in-app editor (`Ctrl+S`, or save from the exit prompt) no longer overwrites changes made to the file outside weft while it was open, for example an agent appending to today's journal. Changes on separate lines are merged, and so are lines both sides added at the same spot, such as you and an agent both appending to a journal (yours first); the status line says so. Overlapping or adjacent changes, a page that appeared on disk while being drafted, or a deleted file stop the save and ask: overwrite, reload (not for a deleted file) or keep editing (`Esc`). The comparison is by content, so a touched modification time alone is not a change.
+- Linkifying a mention no longer writes when the file changed between weft reading and writing it. The backlinks panel says so; try again.
+
 ## [2.5.1] - 2026-10-03
 
 ### Changed
