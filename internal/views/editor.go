@@ -7,14 +7,19 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/fiatcode-gh/weft/v2/internal/edit"
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
 )
+
+// clashPrompt is the state behind the confirmingClash mode.
+type clashPrompt struct{ theirs edit.Snapshot }
 
 type editorMode int
 
 const (
 	editing editorMode = iota
 	confirmingExit
+	confirmingClash
 )
 
 // editorInset is the left margin (in columns) applied to the whole editor
@@ -34,13 +39,15 @@ const editorTopMargin = 1
 // internal/edit stays the only writer.
 type EditorView struct {
 	ta            textarea.Model
-	path          string // target file (may not exist yet)
-	pageName      string // logical page name, for the status line
-	baseline      string // content as last loaded/saved
-	isNew         bool
-	saved         bool // at least one successful save this session
+	path          string        // target file (may not exist yet)
+	pageName      string        // logical page name, for the status line
+	baseline      string        // content as last loaded/saved
+	disk          edit.Snapshot // the file as weft last read or wrote it: the base for the save guard
+	saved         bool          // at least one successful save this session
 	mode          editorMode
 	errMsg        string // non-empty while a save error is pending display
+	notice        string // transient status line text: the merged-save notice
+	clash         clashPrompt
 	width, height int
 	completer     *linkCompleter
 	loadDiverged  bool // priming the textarea altered content — see LoadDiverged
@@ -53,31 +60,20 @@ type EditorResult struct {
 }
 
 // NewEditorView builds an editor for page `name` targeting `path`, primed
-// with `content` (empty for a not-yet-created page). isNew records whether
-// the file existed at open time. idx is the graph index used for link
+// with `content` (empty for a not-yet-created page). isNew seeds disk.Exists:
+// whether the file existed at open time. idx is the graph index used for link
 // completion; pass nil to disable completion (e.g. in tests that don't
 // exercise it). anchorLine is the 0-based line of `content` to open the
 // cursor on, clamped into the buffer.
 func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, width, height, anchorLine int) *EditorView {
-	ta := textarea.New()
-	ta.CharLimit = 0 // no length cap
-	ta.MaxHeight = 0 // lift textarea's default 99-line height cap (a separate hard 10000-line insert cap remains — see loadDiverged)
-	ta.ShowLineNumbers = false
-	ta.Prompt = ""
-	// The empty prompt is still rendered through the prompt STYLE, which by
-	// default carries a foreground color — emitting an ANSI escape at the start
-	// of every row. tintView treats any row containing an escape as the cursor
-	// row and leaves it untinted, so a styled empty prompt would suppress all
-	// tinting. Neutralize the prompt style so non-cursor rows stay escape-free.
-	ta.FocusedStyle.Prompt = lipgloss.NewStyle()
-	ta.BlurredStyle.Prompt = lipgloss.NewStyle()
+	ta := newEditorTextarea()
 	ta.SetValue(content)
 	e := &EditorView{
 		ta:        ta,
 		path:      path,
 		pageName:  name,
 		baseline:  content,
-		isNew:     isNew,
+		disk:      edit.Snapshot{Content: content, Exists: !isNew},
 		width:     width,
 		height:    height,
 		completer: newLinkCompleter(idx),
@@ -102,8 +98,26 @@ func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, wid
 	// dropped, and a hard 10000-line cap truncates. baseline was captured
 	// post-mutation, so dirty() can't warn; saving would corrupt the file.
 	// Record the divergence so the App can refuse in-app editing.
-	e.loadDiverged = e.Content() != strings.TrimRight(content, "\n")+"\n"
+	e.loadDiverged = e.Content() != normalizeContent(content)
 	return e
+}
+
+// newEditorTextarea is the textarea configuration shared by the live editor
+// and loadsFaithfully, so the probe sanitizes exactly as the editor does.
+func newEditorTextarea() textarea.Model {
+	ta := textarea.New()
+	ta.CharLimit = 0 // no length cap
+	ta.MaxHeight = 0 // lift textarea's default 99-line height cap (a separate hard 10000-line insert cap remains — see loadDiverged)
+	ta.ShowLineNumbers = false
+	ta.Prompt = ""
+	// The empty prompt is still rendered through the prompt STYLE, which by
+	// default carries a foreground color — emitting an ANSI escape at the start
+	// of every row. tintView treats any row containing an escape as the cursor
+	// row and leaves it untinted, so a styled empty prompt would suppress all
+	// tinting. Neutralize the prompt style so non-cursor rows stay escape-free.
+	ta.FocusedStyle.Prompt = lipgloss.NewStyle()
+	ta.BlurredStyle.Prompt = lipgloss.NewStyle()
+	return ta
 }
 
 // scrollAnchorToTop leaves the cursor at column 0 of anchorLine with that
@@ -249,7 +263,20 @@ func (e *EditorView) layout() {
 
 // Content is the buffer normalized to end in exactly one newline.
 func (e *EditorView) Content() string {
-	return strings.TrimRight(e.ta.Value(), "\n") + "\n"
+	return normalizeContent(e.ta.Value())
+}
+
+// normalizeContent makes s end in exactly one newline.
+func normalizeContent(s string) string {
+	return strings.TrimRight(s, "\n") + "\n"
+}
+
+// loadsFaithfully reports whether the editor's textarea holds s unaltered
+// (modulo trailing newlines): no tabs, CRLF, invalid UTF-8 or over-long text.
+func loadsFaithfully(s string) bool {
+	ta := newEditorTextarea()
+	ta.SetValue(s)
+	return normalizeContent(ta.Value()) == normalizeContent(s)
 }
 
 // LoadDiverged reports whether priming the textarea altered the loaded
@@ -260,9 +287,43 @@ func (e *EditorView) LoadDiverged() bool { return e.loadDiverged }
 // clean baseline and the file now exists.
 func (e *EditorView) MarkSaved(content string) {
 	e.baseline = content
+	e.disk = edit.Snapshot{Content: content, Exists: true}
 	e.saved = true
-	e.isNew = false
 	e.errMsg = ""
+}
+
+// replaceBuffer swaps the whole buffer for content and puts the cursor on
+// logical line `line` (clamped by the textarea) at absolute column col. It is
+// the shared buffer-swap for merge-on-save and reload; it does not touch
+// baseline or disk.
+func (e *EditorView) replaceBuffer(content string, line, col int) {
+	e.ta.SetValue(content)
+	for e.ta.Line() > line {
+		e.ta.CursorUp()
+	}
+	e.ta.SetCursor(col)
+	e.syncViewport()
+	e.refreshCompleter(false)
+}
+
+// applyMerge installs a merged text that was already written to disk: the
+// cursor follows its mine-line through the merge, and the merged text becomes
+// the saved baseline.
+func (e *EditorView) applyMerge(text string, mineLine []int) {
+	row := clampInt(e.ta.Line(), 0, len(mineLine)-1)
+	li := e.ta.LineInfo()
+	col := li.StartColumn + li.ColumnOffset
+	e.replaceBuffer(text, mineLine[row], col)
+	e.MarkSaved(text)
+	e.notice = mergedNotice
+}
+
+// showClash opens the clash prompt for a disk state that cannot be merged.
+func (e *EditorView) showClash(theirs edit.Snapshot) {
+	e.clash = clashPrompt{theirs: theirs}
+	e.mode = confirmingClash
+	e.completer.dismiss() // the prompt owns the keys
+	e.layout()
 }
 
 func (e *EditorView) View() string {
@@ -282,6 +343,14 @@ func (e *EditorView) View() string {
 // returned tea.Cmd is the textarea's own (cursor blink) command, which the
 // App must propagate.
 func (e *EditorView) Update(msg tea.KeyMsg) (EditorResult, tea.Cmd) {
+	e.notice = ""
+	if e.mode == confirmingClash {
+		switch msg.String() {
+		case "k", keyEsc, "ctrl+c":
+			e.mode = editing
+		}
+		return EditorResult{}, nil // ignore everything else
+	}
 	if e.mode == confirmingExit {
 		switch msg.String() {
 		case "s":
@@ -408,6 +477,14 @@ func (e *EditorView) statusLine() string {
 			styleTitle.Render("[d]") + styleFaint.Render("iscard · ") +
 			styleTitle.Render("[c]") + styleFaint.Render("ancel")
 	}
+	if e.mode == confirmingClash {
+		reason := "Changed on disk."
+		if !e.clash.theirs.Exists {
+			reason = "Deleted on disk."
+		}
+		return styleFaint.Render(reason) + "  " +
+			styleTitle.Render("[k]") + styleFaint.Render("eep editing")
+	}
 	mark := ""
 	if e.dirty() {
 		mark = " ●"
@@ -416,6 +493,8 @@ func (e *EditorView) statusLine() string {
 	right := styleFaint.Render("^S save · esc exit")
 	if e.errMsg != "" {
 		right = styleTitle.Render("save failed: " + e.errMsg)
+	} else if e.notice != "" {
+		right = styleTitle.Render(e.notice)
 	}
 	return left + "  " + right
 }

@@ -638,13 +638,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if a.editor != nil {
 			res, taCmd := a.editor.Update(m)
 			cmds := []tea.Cmd{taCmd}
+			outcome := saveWritten // meaningful only when res.Save
 			if res.Save {
-				content := a.editor.Content()
-				if err := edit.WriteFile(a.editor.path, []byte(content)); err != nil {
-					a.editor.SetError(err.Error())
-					return a, taCmd
+				if outcome = a.saveEditor(); outcome == saveBlocked {
+					return a, taCmd // stays in the editor: clash prompt or error shown
 				}
-				a.editor.MarkSaved(content)
 			}
 			if res.Exit {
 				saved := a.editor.saved
@@ -657,6 +655,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					off, cur := a.page.Offset(), a.page.Cursor()
 					a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
 					a.page.Restore(off, cur)
+				}
+				if res.Save && outcome == saveMerged {
+					cmds = append(cmds, a.setHint(mergedNotice))
 				}
 			} else if res.Save {
 				// A save without exit doesn't reindex, so probe directly.
