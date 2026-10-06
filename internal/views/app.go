@@ -1,6 +1,7 @@
 package views
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -105,6 +106,11 @@ type App struct {
 	statusProbe func(repoDir string) (syncpkg.WorktreeStatus, error)
 	unsynced    bool
 
+	// readSnapshot reads a file's content for the enter-editor and linkify
+	// paths; injected so tests can simulate a change between read and write,
+	// like statusProbe.
+	readSnapshot func(path string) (edit.Snapshot, error)
+
 	// Browser-style page history. hist[histIdx] is the entry currently on
 	// screen. histIdx == -1 before the first page is shown.
 	hist    []historyEntry
@@ -147,6 +153,7 @@ func New(graphPath, version string) *App {
 		return syncpkg.Run(repoDir, a.nowFunc())
 	}
 	a.statusProbe = syncpkg.Status
+	a.readSnapshot = edit.ReadSnapshot
 	return a
 }
 
@@ -426,12 +433,11 @@ func (a *App) enterEditor() tea.Cmd {
 		}
 		path = filepath.Join(a.graphPath, sub, graph.FilenameFromPageName(name))
 	}
-	content, isNew := "", true
-	if b, err := os.ReadFile(path); err == nil {
-		content, isNew = string(b), false
-	} else if !os.IsNotExist(err) {
+	snap, err := a.readSnapshot(path)
+	if err != nil {
 		return a.setHint("cannot read: " + err.Error())
 	}
+	content, isNew := snap.Content, !snap.Exists
 	anchor := 0
 	if line, ok := a.page.AnchorSourceLine(); ok {
 		anchor = line + leadingTrimmedLines(content)
@@ -466,8 +472,10 @@ func (a *App) unlinkedRefs(name string) []graph.UnlinkedRef {
 // linkify wraps the unlinked reference's mention as a [[link]] in its source
 // file, then reindexes and rebuilds the backlinks overlay so the reference
 // moves from Unlinked to Linked. The file is re-read and re-matched here (not
-// trusting the offset captured at panel-open) so a file that changed since
-// detection fails safely. Failures render inside the panel via SetError; a
+// trusting the offset captured at panel-open) and written back only if the
+// file is still byte-identical to what was read (edit.WriteFileIfUnchanged),
+// so a file that changed since detection, or mid-linkify, fails safely.
+// Failures render inside the panel via SetError; a
 // status-bar hint would be invisible behind the overlay. Returns nil — the
 // reindex is synchronous, so there is no command to run.
 func (a *App) linkify(ref *graph.UnlinkedRef, target string) tea.Cmd {
@@ -478,15 +486,21 @@ func (a *App) linkify(ref *graph.UnlinkedRef, target string) tea.Cmd {
 		}
 		return nil
 	}
-	body, err := os.ReadFile(ref.FilePath)
+	snap, err := a.readSnapshot(ref.FilePath)
 	if err != nil {
 		return fail("cannot read " + ref.PageName + ": " + err.Error())
 	}
-	newBody, _, err := graph.LinkifyMention(string(body), ref.Line, target)
+	if !snap.Exists {
+		return fail("cannot read " + ref.PageName + ": file not found")
+	}
+	newBody, _, err := graph.LinkifyMention(snap.Content, ref.Line, target)
 	if err != nil {
 		return fail("mention no longer found in " + ref.PageName)
 	}
-	if err := edit.WriteFile(ref.FilePath, []byte(newBody)); err != nil {
+	if err := edit.WriteFileIfUnchanged(ref.FilePath, snap, []byte(newBody)); err != nil {
+		if errors.Is(err, edit.ErrChanged) {
+			return fail(ref.PageName + " changed on disk — try again")
+		}
 		return fail("write failed: " + err.Error())
 	}
 	if err := a.reindex(); err != nil {

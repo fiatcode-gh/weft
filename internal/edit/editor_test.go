@@ -373,3 +373,141 @@ func TestSnapshotMtime(t *testing.T) {
 		}
 	})
 }
+
+func TestReadSnapshot(t *testing.T) {
+	t.Run("existing file", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "a.md")
+		if err := os.WriteFile(path, []byte("hello\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		got, err := ReadSnapshot(path)
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := (Snapshot{Content: "hello\n", Exists: true}); got != want {
+			t.Errorf("got %+v, want %+v", got, want)
+		}
+	})
+	t.Run("missing file", func(t *testing.T) {
+		got, err := ReadSnapshot(filepath.Join(t.TempDir(), "nope.md"))
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != (Snapshot{}) {
+			t.Errorf("got %+v, want zero Snapshot", got)
+		}
+	})
+	t.Run("directory", func(t *testing.T) {
+		if _, err := ReadSnapshot(t.TempDir()); err == nil {
+			t.Error("reading a directory should return an error")
+		}
+	})
+}
+
+func TestWriteFileIfUnchanged(t *testing.T) {
+	t.Run("unchanged writes", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "a.md")
+		if err := os.WriteFile(path, []byte("old\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		seen, _ := ReadSnapshot(path)
+
+		err := WriteFileIfUnchanged(path, seen, []byte("new\n"))
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := os.ReadFile(path); string(got) != "new\n" {
+			t.Errorf("file = %q, want new content", got)
+		}
+	})
+	t.Run("content changed → ErrChanged, file untouched", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "a.md")
+		if err := os.WriteFile(path, []byte("old\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		seen, _ := ReadSnapshot(path)
+		if err := os.WriteFile(path, []byte("outside\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		err := WriteFileIfUnchanged(path, seen, []byte("new\n"))
+
+		if !errors.Is(err, ErrChanged) {
+			t.Fatalf("err = %v, want ErrChanged", err)
+		}
+		if got, _ := os.ReadFile(path); string(got) != "outside\n" {
+			t.Errorf("file = %q, want untouched", got)
+		}
+	})
+	t.Run("seen missing, file now exists → ErrChanged, untouched", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "a.md")
+		seen, _ := ReadSnapshot(path)
+		if err := os.WriteFile(path, []byte("appeared\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		err := WriteFileIfUnchanged(path, seen, []byte("new\n"))
+
+		if !errors.Is(err, ErrChanged) {
+			t.Fatalf("err = %v, want ErrChanged", err)
+		}
+		if got, _ := os.ReadFile(path); string(got) != "appeared\n" {
+			t.Errorf("file = %q, want untouched", got)
+		}
+	})
+	t.Run("seen existing, file deleted → ErrChanged, not recreated", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "a.md")
+		if err := os.WriteFile(path, []byte("old\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		seen, _ := ReadSnapshot(path)
+		if err := os.Remove(path); err != nil {
+			t.Fatal(err)
+		}
+
+		err := WriteFileIfUnchanged(path, seen, []byte("new\n"))
+
+		if !errors.Is(err, ErrChanged) {
+			t.Fatalf("err = %v, want ErrChanged", err)
+		}
+		if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+			t.Errorf("file must not be recreated; stat err = %v", statErr)
+		}
+	})
+	t.Run("seen missing and still missing → creates file and parent dir", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "sub", "a.md")
+
+		err := WriteFileIfUnchanged(path, Snapshot{}, []byte("new\n"))
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := os.ReadFile(path); string(got) != "new\n" {
+			t.Errorf("file = %q, want new content", got)
+		}
+	})
+	t.Run("mtime-only change still writes", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "a.md")
+		if err := os.WriteFile(path, []byte("old\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		seen, _ := ReadSnapshot(path)
+		later := time.Now().Add(time.Hour)
+		if err := os.Chtimes(path, later, later); err != nil {
+			t.Fatal(err)
+		}
+
+		err := WriteFileIfUnchanged(path, seen, []byte("new\n"))
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := os.ReadFile(path); string(got) != "new\n" {
+			t.Errorf("file = %q, want new content", got)
+		}
+	})
+}
