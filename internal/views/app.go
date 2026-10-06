@@ -106,9 +106,9 @@ type App struct {
 	statusProbe func(repoDir string) (syncpkg.WorktreeStatus, error)
 	unsynced    bool
 
-	// readSnapshot reads a file's content for the enter-editor and linkify
-	// paths; injected so tests can simulate a change between read and write,
-	// like statusProbe.
+	// readSnapshot reads a file's content for the editor open/save and
+	// linkify paths; injected so tests can simulate a change between read and
+	// write, like statusProbe.
 	readSnapshot func(path string) (edit.Snapshot, error)
 
 	// Browser-style page history. hist[histIdx] is the entry currently on

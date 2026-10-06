@@ -64,7 +64,7 @@ an intentional UI change, run with `-update` and visually diff the golden before
   `$VISUAL` / `$EDITOR` / `vi`, snapshots file mtime, and exposes
   `Resolve` / `EnsureFile` / `ReadSnapshot` / `WriteFileIfUnchanged` / `SnapshotMtime`.
   Every replacing write is content-guarded: `writeFile` is unexported. Invoked by the in-app editor (`e`,
-  saves on `Ctrl+S`) and by `App.editCurrent` for `$EDITOR` handoff (`E`).
+  saves on `Ctrl+S`), by linkify in the backlinks panel, and by `App.editCurrent` for `$EDITOR` handoff (`E`).
 - `internal/merge/` — pure git-style three-way line merge (adjacent changes
   conflict; both sides inserting at the same spot keeps mine then theirs) used by
   the editor save. No disk access.

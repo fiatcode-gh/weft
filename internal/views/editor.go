@@ -59,7 +59,7 @@ type EditorView struct {
 
 // EditorResult is what EditorView.Update reports to the App.
 type EditorResult struct {
-	Save      bool // App writes Content() to path
+	Save      bool // App runs the guarded save (saveEditor): plain write, merge, or clash prompt
 	Overwrite bool // App writes Content() over the clash snapshot (prompt "o")
 	Exit      bool // App tears down the editor and returns to the read view
 }
@@ -335,6 +335,7 @@ func (e *EditorView) showClash(theirs edit.Snapshot, exitAfter bool) {
 		reloadable: theirs.Exists && loadsFaithfully(theirs.Content),
 		exitAfter:  exitAfter,
 	}
+	e.errMsg = "" // the clash prompt supersedes any earlier save error
 	e.mode = confirmingClash
 	e.completer.dismiss() // the prompt owns the keys
 	e.layout()

@@ -445,6 +445,25 @@ func TestClashKeepEditingChangesNothing(t *testing.T) {
 	}
 }
 
+// A save error shown before the clash must not reappear once the user leaves
+// the prompt: the clash supersedes it.
+func TestClashClearsStaleSaveError(t *testing.T) {
+	a, _ := openJournal(t)
+	typeApp(a, "X")
+	a.editor.SetError(changedWhileSavingMsg)
+	writeOutside(t, a.editor.path, clashTheirs)
+	a.Update(ctrlS)
+	if a.editor.mode != confirmingClash {
+		t.Fatalf("mode = %v, want confirmingClash", a.editor.mode)
+	}
+
+	a.Update(key("k"))
+
+	if a.editor.errMsg != "" {
+		t.Errorf("errMsg = %q after leaving the clash prompt, want empty", a.editor.errMsg)
+	}
+}
+
 func TestClashDeletedOverwriteRecreates(t *testing.T) {
 	a, path := openJournal(t)
 	typeApp(a, "X")
