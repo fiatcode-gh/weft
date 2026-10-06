@@ -512,7 +512,7 @@ func TestEditBootstrapRebuildsPageView(t *testing.T) {
 // when the guarded write (edit.WriteFileIfUnchanged) fails, the in-app editor must stay open with the
 // buffer intact and the error surfaced — never torn down and never losing
 // unsaved work. The save is made to fail deterministically by revoking
-// write permission on the page's directory, which makes WriteFile's
+// write permission on the page's directory, which makes writeFile's
 // os.CreateTemp(dir, ...) fail before anything is touched on disk.
 func TestSaveFailureKeepsEditorAndBuffer(t *testing.T) {
 	if os.Geteuid() == 0 {

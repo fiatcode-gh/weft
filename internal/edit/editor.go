@@ -79,9 +79,10 @@ func EnsureFile(path string) (created bool, err error) {
 // matching EnsureFile's bootstrap mode.
 const defaultFileMode os.FileMode = 0o644
 
-// WriteFile writes data to path atomically, creating the parent directory if
-// it does not yet exist. It is the replace primitive behind WriteFileIfUnchanged;
-// EnsureFile is the separate create-only bootstrap.
+// writeFile writes data to path atomically, creating the parent directory if
+// it does not yet exist. It is the unguarded primitive behind
+// WriteFileIfUnchanged, unexported so every replacing write goes through the
+// content guard; EnsureFile is the separate create-only bootstrap.
 //
 // The write goes to a temp file in the destination directory and is moved into
 // place with os.Rename, so a crash mid-write leaves the original intact rather
@@ -98,7 +99,7 @@ const defaultFileMode os.FileMode = 0o644
 // rename guarantees atomicity against a process crash, which is the failure
 // this protects against; durability against power loss is out of scope for a
 // local notes TUI.
-func WriteFile(path string, data []byte) error {
+func writeFile(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -169,7 +170,7 @@ func WriteFileIfUnchanged(path string, seen Snapshot, data []byte) error {
 	if now != seen {
 		return ErrChanged
 	}
-	return WriteFile(path, data)
+	return writeFile(path, data)
 }
 
 // SnapshotMtime returns the file's modification time, or time.Time{}

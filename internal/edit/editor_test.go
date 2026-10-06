@@ -165,8 +165,8 @@ func TestEnsureFileNeverTruncatesExisting(t *testing.T) {
 }
 
 // seedFile writes an existing file at dir/name with the given content and an
-// explicit mode (chmod is umask-proof, unlike the WriteFile perm arg). It is
-// the shared arrange step for the overwrite-path WriteFile tests.
+// explicit mode (chmod is umask-proof, unlike the os.WriteFile perm arg). It is
+// the shared arrange step for the overwrite-path writeFile tests.
 func seedFile(t *testing.T, dir, name, content string, mode os.FileMode) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
@@ -213,18 +213,18 @@ func fileNames(t *testing.T, dir string) []string {
 	return names
 }
 
-func TestWriteFile(t *testing.T) {
+func TestWriteFileAtomic(t *testing.T) {
 	t.Run("writes content and creates parent dir", func(t *testing.T) {
 		// arrange
 		dir := t.TempDir()
 		path := filepath.Join(dir, "pages", "New Page.md")
 
 		// act
-		err := WriteFile(path, []byte("hello\n"))
+		err := writeFile(path, []byte("hello\n"))
 
 		// assert
 		if err != nil {
-			t.Fatalf("WriteFile: %v", err)
+			t.Fatalf("writeFile: %v", err)
 		}
 		if got := readBack(t, path); got != "hello\n" {
 			t.Errorf("content: got %q, want %q", got, "hello\n")
@@ -240,11 +240,11 @@ func TestWriteFile(t *testing.T) {
 		path := seedFile(t, dir, "p.md", "old\n", 0o644)
 
 		// act
-		err := WriteFile(path, []byte("new\n"))
+		err := writeFile(path, []byte("new\n"))
 
 		// assert
 		if err != nil {
-			t.Fatalf("WriteFile: %v", err)
+			t.Fatalf("writeFile: %v", err)
 		}
 		if got := readBack(t, path); got != "new\n" {
 			t.Errorf("content: got %q, want %q", got, "new\n")
@@ -259,11 +259,11 @@ func TestWriteFile(t *testing.T) {
 		path := seedFile(t, dir, "p.md", "old\n", 0o640)
 
 		// act
-		err := WriteFile(path, []byte("new\n"))
+		err := writeFile(path, []byte("new\n"))
 
 		// assert
 		if err != nil {
-			t.Fatalf("WriteFile: %v", err)
+			t.Fatalf("writeFile: %v", err)
 		}
 		if got := permOf(t, path); got != 0o640 {
 			t.Errorf("mode: got %v, want 0o640 (preserved)", got)
@@ -276,11 +276,11 @@ func TestWriteFile(t *testing.T) {
 		path := filepath.Join(dir, "p.md")
 
 		// act
-		err := WriteFile(path, []byte("data\n"))
+		err := writeFile(path, []byte("data\n"))
 
 		// assert
 		if err != nil {
-			t.Fatalf("WriteFile: %v", err)
+			t.Fatalf("writeFile: %v", err)
 		}
 		if got := fileNames(t, dir); len(got) != 1 || got[0] != "p.md" {
 			t.Errorf("dir entries: got %v, want [p.md] (temp cleaned up)", got)
@@ -302,11 +302,11 @@ func TestWriteFile(t *testing.T) {
 		t.Cleanup(func() { os.Chmod(dir, 0o700) }) // let t.TempDir clean up
 
 		// act
-		err := WriteFile(path, []byte("replacement\n"))
+		err := writeFile(path, []byte("replacement\n"))
 
 		// assert
 		if err == nil {
-			t.Fatal("WriteFile: want error writing into a read-only dir, got nil")
+			t.Fatal("writeFile: want error writing into a read-only dir, got nil")
 		}
 		if err := os.Chmod(dir, 0o700); err != nil {
 			t.Fatal(err)

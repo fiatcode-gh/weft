@@ -640,9 +640,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds := []tea.Cmd{taCmd}
 			outcome := saveWritten // meaningful only when res.Save
 			if res.Save {
-				if outcome = a.saveEditor(); outcome == saveBlocked {
+				if outcome = a.saveEditor(res.Exit); outcome == saveBlocked {
 					return a, taCmd // stays in the editor: clash prompt or error shown
 				}
+			}
+			if res.Overwrite && !a.overwriteEditor() {
+				return a, taCmd
 			}
 			if res.Exit {
 				saved := a.editor.saved
@@ -659,7 +662,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if res.Save && outcome == saveMerged {
 					cmds = append(cmds, a.setHint(mergedNotice))
 				}
-			} else if res.Save {
+			} else if res.Save || res.Overwrite {
 				// A save without exit doesn't reindex, so probe directly.
 				cmds = append(cmds, a.statusProbeCmd())
 			}

@@ -12,7 +12,11 @@ import (
 )
 
 // clashPrompt is the state behind the confirmingClash mode.
-type clashPrompt struct{ theirs edit.Snapshot }
+type clashPrompt struct {
+	theirs     edit.Snapshot
+	reloadable bool // theirs exists and loads into the buffer unchanged
+	exitAfter  bool // the prompt came from save-and-exit
+}
 
 type editorMode int
 
@@ -55,8 +59,9 @@ type EditorView struct {
 
 // EditorResult is what EditorView.Update reports to the App.
 type EditorResult struct {
-	Save bool // App writes Content() to path
-	Exit bool // App tears down the editor and returns to the read view
+	Save      bool // App writes Content() to path
+	Overwrite bool // App writes Content() over the clash snapshot (prompt "o")
+	Exit      bool // App tears down the editor and returns to the read view
 }
 
 // NewEditorView builds an editor for page `name` targeting `path`, primed
@@ -311,16 +316,25 @@ func (e *EditorView) replaceBuffer(content string, line, col int) {
 // the saved baseline.
 func (e *EditorView) applyMerge(text string, mineLine []int) {
 	row := clampInt(e.ta.Line(), 0, len(mineLine)-1)
-	li := e.ta.LineInfo()
-	col := li.StartColumn + li.ColumnOffset
+	_, col := e.cursorRowCol()
 	e.replaceBuffer(text, mineLine[row], col)
 	e.MarkSaved(text)
 	e.notice = mergedNotice
 }
 
+// cursorRowCol returns the cursor's buffer row and absolute column.
+func (e *EditorView) cursorRowCol() (row, col int) {
+	li := e.ta.LineInfo()
+	return e.ta.Line(), li.StartColumn + li.ColumnOffset
+}
+
 // showClash opens the clash prompt for a disk state that cannot be merged.
-func (e *EditorView) showClash(theirs edit.Snapshot) {
-	e.clash = clashPrompt{theirs: theirs}
+func (e *EditorView) showClash(theirs edit.Snapshot, exitAfter bool) {
+	e.clash = clashPrompt{
+		theirs:     theirs,
+		reloadable: theirs.Exists && loadsFaithfully(theirs.Content),
+		exitAfter:  exitAfter,
+	}
 	e.mode = confirmingClash
 	e.completer.dismiss() // the prompt owns the keys
 	e.layout()
@@ -346,6 +360,18 @@ func (e *EditorView) Update(msg tea.KeyMsg) (EditorResult, tea.Cmd) {
 	e.notice = ""
 	if e.mode == confirmingClash {
 		switch msg.String() {
+		case "o":
+			e.mode = editing
+			return EditorResult{Overwrite: true, Exit: e.clash.exitAfter}, nil
+		case "r":
+			if e.clash.reloadable {
+				row, col := e.cursorRowCol()
+				e.replaceBuffer(e.clash.theirs.Content, row, col)
+				e.baseline = e.Content()
+				e.disk = e.clash.theirs
+				e.errMsg = ""
+				e.mode = editing
+			}
 		case "k", keyEsc, "ctrl+c":
 			e.mode = editing
 		}
@@ -479,11 +505,18 @@ func (e *EditorView) statusLine() string {
 	}
 	if e.mode == confirmingClash {
 		reason := "Changed on disk."
-		if !e.clash.theirs.Exists {
+		switch {
+		case !e.clash.theirs.Exists:
 			reason = "Deleted on disk."
+		case !e.clash.reloadable:
+			reason = "Changed on disk (can't load it here)."
 		}
-		return styleFaint.Render(reason) + "  " +
-			styleTitle.Render("[k]") + styleFaint.Render("eep editing")
+		s := styleFaint.Render(reason) + "  " +
+			styleTitle.Render("[o]") + styleFaint.Render("verwrite · ")
+		if e.clash.reloadable {
+			s += styleTitle.Render("[r]") + styleFaint.Render("eload · ")
+		}
+		return s + styleTitle.Render("[k]") + styleFaint.Render("eep editing")
 	}
 	mark := ""
 	if e.dirty() {

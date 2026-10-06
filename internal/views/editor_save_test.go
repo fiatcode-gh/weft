@@ -360,3 +360,208 @@ func TestEditorSaveChangedWhileSavingKeepsBuffer(t *testing.T) {
 		t.Error("editor marked saved after failed write")
 	}
 }
+
+const clashTheirs = "- ONE\n- two\n- three\n"
+
+// openClash opens the journal, types X and writes an overlapping outside
+// change, then saves into the clash prompt.
+func openClash(t *testing.T) (*App, string) {
+	t.Helper()
+	a, path := openJournal(t)
+	typeApp(a, "X")
+	writeOutside(t, path, clashTheirs)
+	a.Update(ctrlS)
+	if a.editor.mode != confirmingClash {
+		t.Fatalf("mode = %v, want confirmingClash", a.editor.mode)
+	}
+	return a, path
+}
+
+func TestClashOverwriteWritesMine(t *testing.T) {
+	a, path := openClash(t)
+
+	a.Update(key("o"))
+
+	if got, want := readFile(t, path), "X- one\n- two\n- three\n"; got != want {
+		t.Fatalf("file = %q, want %q", got, want)
+	}
+	if a.editor.mode != editing || a.editor.dirty() || !a.editor.saved {
+		t.Errorf("mode=%v dirty=%v saved=%v, want editing, clean, saved", a.editor.mode, a.editor.dirty(), a.editor.saved)
+	}
+
+	writeOutside(t, path, clashTheirs)
+	a.Update(ctrlS)
+	if a.editor.mode != editing {
+		t.Errorf("mode after second save = %v, want plain save", a.editor.mode)
+	}
+}
+
+func TestClashReloadTakesTheirs(t *testing.T) {
+	a, path := openClash(t)
+
+	a.Update(key("r"))
+
+	if got := a.editor.Content(); got != clashTheirs {
+		t.Fatalf("buffer = %q, want %q", got, clashTheirs)
+	}
+	if a.editor.dirty() {
+		t.Error("buffer dirty after reload")
+	}
+	if got := readFile(t, path); got != clashTheirs {
+		t.Errorf("file = %q, want %q", got, clashTheirs)
+	}
+	if a.editor.mode != editing {
+		t.Fatalf("mode = %v, want editing", a.editor.mode)
+	}
+
+	typeApp(a, "Z")
+	a.Update(ctrlS)
+	if a.editor.mode != editing {
+		t.Fatalf("mode after save = %v, want editing", a.editor.mode)
+	}
+	got := readFile(t, path)
+	if got != a.editor.Content() || !strings.Contains(got, "Z") || !strings.Contains(got, "ONE") {
+		t.Errorf("file = %q, want buffer %q containing Z and ONE", got, a.editor.Content())
+	}
+}
+
+func TestClashKeepEditingChangesNothing(t *testing.T) {
+	for name, k := range map[string]tea.KeyMsg{"k": key("k"), "esc": {Type: tea.KeyEsc}} {
+		t.Run(name, func(t *testing.T) {
+			a, path := openClash(t)
+
+			a.Update(k)
+
+			if got, want := a.editor.Content(), "X- one\n- two\n- three\n"; got != want {
+				t.Errorf("buffer = %q, want %q", got, want)
+			}
+			if got := readFile(t, path); got != clashTheirs {
+				t.Errorf("file = %q, want %q", got, clashTheirs)
+			}
+			if a.editor.mode != editing {
+				t.Errorf("mode = %v, want editing", a.editor.mode)
+			}
+		})
+	}
+}
+
+func TestClashDeletedOverwriteRecreates(t *testing.T) {
+	a, path := openJournal(t)
+	typeApp(a, "X")
+	buf := a.editor.Content()
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	a.Update(ctrlS)
+
+	a.Update(key("r"))
+
+	if a.editor.mode != confirmingClash || a.editor.Content() != buf {
+		t.Fatalf("after r: mode=%v buffer=%q, want clash prompt and intact buffer", a.editor.mode, a.editor.Content())
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("file should stay absent, stat err = %v", err)
+	}
+	if strings.Contains(a.editor.View(), "[r]") {
+		t.Error("deleted prompt must not offer reload")
+	}
+
+	a.Update(key("o"))
+
+	if got := readFile(t, path); got != buf {
+		t.Errorf("file = %q, want %q", got, buf)
+	}
+}
+
+func TestClashNewPageOverwrite(t *testing.T) {
+	a, path := openEditor(t, map[string]string{"pages/Anchor.md": "- a\n"}, "Fresh")
+	typeApp(a, "x")
+	writeOutside(t, path, "- outside\n")
+	a.Update(ctrlS)
+	if a.editor.mode != confirmingClash {
+		t.Fatalf("mode = %v, want confirmingClash", a.editor.mode)
+	}
+
+	a.Update(key("o"))
+
+	if got, want := readFile(t, path), a.editor.Content(); got != want {
+		t.Errorf("file = %q, want %q", got, want)
+	}
+}
+
+func TestClashSaveAndExitOverwriteExits(t *testing.T) {
+	a, path := openJournal(t)
+	typeApp(a, "X")
+	writeOutside(t, path, clashTheirs)
+	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a.Update(key("s"))
+	if a.editor == nil || a.editor.mode != confirmingClash {
+		t.Fatal("want clash prompt with editor open")
+	}
+
+	a.Update(key("o"))
+
+	if a.editor != nil {
+		t.Error("editor should close after overwrite from save-and-exit")
+	}
+	if got, want := readFile(t, path), "X- one\n- two\n- three\n"; got != want {
+		t.Errorf("file = %q, want %q", got, want)
+	}
+}
+
+func TestClashSaveAndExitReloadStays(t *testing.T) {
+	a, path := openJournal(t)
+	typeApp(a, "X")
+	writeOutside(t, path, clashTheirs)
+	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a.Update(key("s"))
+
+	a.Update(key("r"))
+
+	if a.editor == nil {
+		t.Fatal("reload must not exit")
+	}
+	if a.editor.Content() != clashTheirs || a.editor.mode != editing {
+		t.Errorf("buffer=%q mode=%v, want theirs and editing", a.editor.Content(), a.editor.mode)
+	}
+}
+
+func TestClashOverwriteAfterFurtherChangeRefuses(t *testing.T) {
+	a, path := openClash(t)
+	writeOutside(t, path, "- third\n")
+
+	a.Update(key("o"))
+
+	if got := readFile(t, path); got != "- third\n" {
+		t.Errorf("file = %q, want untouched", got)
+	}
+	if a.editor == nil {
+		t.Fatal("editor closed")
+	}
+	if a.editor.errMsg != changedWhileSavingMsg || a.editor.mode != editing {
+		t.Errorf("errMsg=%q mode=%v, want changed-while-saving and editing", a.editor.errMsg, a.editor.mode)
+	}
+}
+
+func TestClashUnloadableTheirsOffersNoReload(t *testing.T) {
+	a, path := openJournal(t)
+	typeApp(a, "X")
+	writeOutside(t, path, "- ONE\tx\n- two\n- three\n")
+	a.Update(ctrlS)
+	if a.editor.mode != confirmingClash {
+		t.Fatalf("mode = %v, want confirmingClash", a.editor.mode)
+	}
+
+	a.Update(key("r"))
+
+	v := a.editor.View()
+	if a.editor.mode != confirmingClash || !strings.Contains(v, "can't load it here") || strings.Contains(v, "[r]") {
+		t.Fatalf("mode=%v view=%q, want clash prompt without reload", a.editor.mode, v)
+	}
+
+	a.Update(key("o"))
+
+	if got, want := readFile(t, path), "X- one\n- two\n- three\n"; got != want {
+		t.Errorf("file = %q, want %q", got, want)
+	}
+}
