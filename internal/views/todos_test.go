@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/x/exp/teatest"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
 )
@@ -13,7 +13,7 @@ import (
 func TestTodosDashboardAllFilter(t *testing.T) {
 	quietTerm(t)
 	td := NewTodos(loadFixture(t), 100, 30)
-	teatest.RequireEqualOutput(t, []byte(td.View()))
+	teatest.RequireEqualOutput(t, []byte(plain(td.View())))
 }
 
 func TestTodosDashboardLaterFilter(t *testing.T) {
@@ -21,7 +21,7 @@ func TestTodosDashboardLaterFilter(t *testing.T) {
 	td := NewTodos(loadFixture(t), 100, 30)
 	td.Update("t") // → TODO
 	td.Update("t") // → LATER
-	teatest.RequireEqualOutput(t, []byte(td.View()))
+	teatest.RequireEqualOutput(t, []byte(plain(td.View())))
 }
 
 func TestTodosUpDownBounds(t *testing.T) {
@@ -161,7 +161,7 @@ func TestTodosScrollHintsAppear(t *testing.T) {
 	td := NewTodos(idx, 80, 24)
 
 	td.sel = len(td.visible) / 2
-	mid := td.View()
+	mid := plain(td.View())
 	if !strings.Contains(mid, "more above") {
 		t.Errorf("mid selection: want \"more above\" hint; got:\n%s", mid)
 	}
@@ -170,7 +170,7 @@ func TestTodosScrollHintsAppear(t *testing.T) {
 	}
 
 	td.sel = 0
-	top := td.View()
+	top := plain(td.View())
 	if strings.Contains(top, "more above") {
 		t.Errorf("top selection: should not show \"more above\"; got:\n%s", top)
 	}
@@ -207,7 +207,7 @@ func TestTodosLongRowStaysOneLine(t *testing.T) {
 	// or not. Without clamp, lipgloss would wrap the row across multiple
 	// lines and only the first carried the ▶ marker.
 	td.sel = 0
-	if got := countTodoBlockLines(td.View(), "LongCase"); got != 1 {
+	if got := countTodoBlockLines(plain(td.View()), "LongCase"); got != 1 {
 		t.Errorf("selected long row should occupy exactly one bullet line, got %d", got)
 	}
 }

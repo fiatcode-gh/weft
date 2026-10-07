@@ -7,7 +7,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/charmbracelet/glamour"
+	"charm.land/glamour/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"

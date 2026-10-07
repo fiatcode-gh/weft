@@ -1,7 +1,7 @@
 package views
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
 )

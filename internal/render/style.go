@@ -1,6 +1,6 @@
 package render
 
-import "github.com/charmbracelet/glamour/ansi"
+import "charm.land/glamour/v2/ansi"
 
 // terminalStyleConfig is weft's default Glamour style, drawing the rendered
 // markdown body from the user's own terminal palette instead of Glamour's
@@ -9,8 +9,8 @@ import "github.com/charmbracelet/glamour/ansi"
 // Headings are cyan and links are blue so the two stay visually distinct.
 //
 // Colors come in two flavors, guarded by TestTerminalStyleConfigColors:
-//   - termenv-rendered colors (everything outside CodeBlock.Chroma) are bare
-//     ANSI 0-15 index strings, which termenv maps to the terminal palette.
+//   - Lip Gloss-rendered colors (everything outside CodeBlock.Chroma) are bare
+//     ANSI 0-15 index strings, which map to the terminal palette.
 //   - Chroma (code-fence) colors are #rrggbb hex anchors: chroma parses colors
 //     as hex RGB, and the terminal16 formatter (see page.go) downsamples them
 //     to the terminal's 16-color palette.

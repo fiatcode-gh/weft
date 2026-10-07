@@ -55,10 +55,15 @@ an intentional UI change, run with `-update` and visually diff the golden before
 ## Layout
 
 - `cmd/weft/` — entry point, flag/env wiring, ripgrep preflight, Bubble Tea boot.
+  `programOptions` sets the colour profile (`render.ColorProfile`) and writes through
+  `quietStdout`, which drops the terminal probes and keyboard-protocol switches Bubble
+  Tea v2 sends on its own, so weft sends no queries and keeps the terminal's normal key
+  encoding.
 - `internal/graph/` — filesystem walk, page parsing, name resolution, index.
 - `internal/render/` — Glamour-based page rendering (wiki-link styling, hanging-indent,
   workflow-marker colouring, `:LOGBOOK:` stripping). Has a `Warmup()` paid before the
-  TUI takes the screen to avoid chroma init flicker.
+  TUI takes the screen to avoid chroma init flicker. `ColorProfile` (NO_COLOR → no
+  styling; any colour terminal → TrueColor); Glamour v2 hyperlinks are stripped.
 - `internal/edit/` — one of two deliberate disk-mutating surfaces (with
   `internal/sync/`). Resolves
   `$VISUAL` / `$EDITOR` / `vi`, snapshots file mtime, and exposes
@@ -91,8 +96,12 @@ an intentional UI change, run with `-update` and visually diff the golden before
 
 - Tests use the checked-in `testdata/fixture-graph/`. **Never point tests at the
   real graph** (`~/Documents/fiat-codex`) — it's mutable and will make tests flaky.
-- View tests use `teatest` (`charmbracelet/x/exp/teatest`) for golden-ish frame
+- View tests use `teatest` (`github.com/charmbracelet/x/exp/teatest/v2`) for golden-ish frame
   assertions; golden files live under `internal/views/testdata/`.
+- Lip Gloss v2 always emits ANSI. View tests read rendered output through
+  `plain()`/`appText()` (`internal/views/helpers_test.go`); `quietTerm` sets
+  `NO_COLOR=1` only so Glamour uses the `notty` layout the goldens were recorded
+  with. Tests that assert styling read raw output.
 - `testdata/fake-editor.sh` is a POSIX shell script that stands in for a real
   editor in the App integration tests for the `E` key (`$EDITOR` handoff).
 
@@ -102,6 +111,8 @@ an intentional UI change, run with `-update` and visually diff the golden before
 the user cache dir (`internal/views.DebugLogPath()`; falls back to `./weft.log`
 only if the cache dir is unavailable). The alt-screen swallows panics; tail the
 log to see what the model received.
+
+Smoke-run the TUI under `env -i` (the agent harness sets `NO_COLOR`, `CI` and `TERM=dumb`).
 
 ## Versioning
 

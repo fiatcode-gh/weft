@@ -3,9 +3,9 @@ package views
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textarea"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textarea"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/edit"
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
@@ -85,14 +85,10 @@ func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, wid
 	}
 	e.SetSize(width, height)
 	_ = e.ta.Focus() // blink cmd not needed here; the App calls Focus() again when it mounts the editor
-	// SetValue leaves the cursor at the end of the buffer. Walk it up to the
-	// anchor line — clamped, so a stale anchor (file changed since the read
-	// view rendered) degrades instead of panicking — and to column 0.
+	// SetValue leaves the cursor at the end of the buffer. Move it to the
+	// anchor line, column 0. Clamped, so a stale anchor (file changed since the read view rendered) degrades instead of panicking.
 	anchorLine = clampInt(anchorLine, 0, e.ta.LineCount()-1)
-	for e.ta.Line() > anchorLine {
-		e.ta.CursorUp()
-	}
-	e.ta.CursorStart()
+	e.moveCursorTo(anchorLine, 0)
 	if anchorLine > 0 {
 		e.scrollAnchorToTop(anchorLine)
 	}
@@ -112,7 +108,7 @@ func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, wid
 func newEditorTextarea() textarea.Model {
 	ta := textarea.New()
 	ta.CharLimit = 0 // no length cap
-	ta.MaxHeight = 0 // lift textarea's default 99-line height cap (a separate hard 10000-line insert cap remains — see loadDiverged)
+	ta.MaxHeight = 0 // the default 99 blocks Enter once the buffer reaches 99 lines (a separate hard 10000-line insert cap remains — see loadDiverged)
 	ta.ShowLineNumbers = false
 	ta.Prompt = ""
 	// The empty prompt is still rendered through the prompt STYLE, which by
@@ -120,31 +116,119 @@ func newEditorTextarea() textarea.Model {
 	// of every row. tintView treats any row containing an escape as the cursor
 	// row and leaves it untinted, so a styled empty prompt would suppress all
 	// tinting. Neutralize the prompt style so non-cursor rows stay escape-free.
-	ta.FocusedStyle.Prompt = lipgloss.NewStyle()
-	ta.BlurredStyle.Prompt = lipgloss.NewStyle()
+	styles := textarea.DefaultDarkStyles()
+	styles.Focused.Prompt = lipgloss.NewStyle()
+	styles.Blurred.Prompt = lipgloss.NewStyle()
+	styles.Cursor.Color = nil // plain reverse-video cursor, as in Bubbles v1
+	ta.SetStyles(styles)
+	ta.KeyMap = editorKeyMap()
 	return ta
 }
+
+// editorKeyMap is the Bubbles v2 textarea keymap cut back to the v1
+// bindings: v2's selection, select-all, copy, ctrl+arrow word moves,
+// ctrl+backspace/delete and its own paging stay off until editor-core.
+func editorKeyMap() textarea.KeyMap {
+	km := textarea.DefaultKeyMap()
+	km.WordForward.SetKeys("alt+right", "alt+f")
+	km.WordBackward.SetKeys("alt+left", "alt+b")
+	km.DeleteWordBackward.SetKeys("alt+backspace", "ctrl+w")
+	km.DeleteWordForward.SetKeys("alt+delete", "alt+d")
+	km.PageUp.SetEnabled(false)
+	km.PageDown.SetEnabled(false)
+	km.SelectCharacterForward.SetEnabled(false)
+	km.SelectCharacterBackward.SetEnabled(false)
+	km.SelectWordForward.SetEnabled(false)
+	km.SelectWordBackward.SetEnabled(false)
+	km.SelectLineUp.SetEnabled(false)
+	km.SelectLineDown.SetEnabled(false)
+	km.SelectAll.SetEnabled(false)
+	km.CopySelection.SetEnabled(false)
+	return km
+}
+
+// Paste inserts bracketed-paste text while editing. The clash and exit
+// prompts ignore it, as they ignored a pasted key under Bubble Tea v1.
+func (e *EditorView) Paste(msg tea.PasteMsg) tea.Cmd {
+	e.notice = ""
+	if e.mode != editing {
+		return nil
+	}
+	return e.forward(msg)
+}
+
+// forward hands msg to the textarea and refreshes completion; only a
+// message that changed the buffer may open the strip.
+func (e *EditorView) forward(msg tea.Msg) tea.Cmd {
+	prev := e.ta.Value()
+	var cmd tea.Cmd
+	e.ta, cmd = e.ta.Update(msg)
+	e.refreshCompleter(e.ta.Value() != prev)
+	return cmd
+}
+
+// moveCursorTo puts the cursor on logical line row (clamped) at column col
+// (clamped) in one pass over the buffer. Bubbles v2 repositions the viewport
+// on every CursorUp/CursorDown at a cost that grows with the cursor's row, so
+// walking the cursor line by line is quadratic in the buffer length. Instead
+// the buffer is rebuilt from row down, with the lines above it inserted at
+// the top: InsertString leaves the cursor at the start of row. The text is
+// the textarea's own (already sanitized and within the line cap), so the
+// rebuild leaves the content unchanged. SetValue resets the viewport to the
+// top; callers sync it.
+func (e *EditorView) moveCursorTo(row, col int) {
+	lines := strings.Split(e.ta.Value(), "\n")
+	row = clampInt(row, 0, len(lines)-1)
+	e.ta.SetValue(strings.Join(lines[row:], "\n"))
+	e.ta.MoveToBegin()
+	if row > 0 {
+		e.ta.InsertString(strings.Join(lines[:row], "\n") + "\n")
+	}
+	e.ta.SetCursorColumn(col)
+}
+
+// textWidth is the width the textarea is laid out at: the editor width less
+// the left inset.
+func (e *EditorView) textWidth() int { return max(1, e.width-editorInset) }
 
 // scrollAnchorToTop leaves the cursor at column 0 of anchorLine with that
 // line's first visual row at the top of the textarea window (or as high as
 // the buffer's end allows). The textarea only ever scrolls minimally to keep
 // the cursor visible, so left alone the anchor would park on the bottom row.
-// Parking the cursor a window's height further down first, syncing the
-// viewport, then walking back up gives the same result as a top-aligned
-// scroll. The textarea's viewport also has no lines until its first View(),
-// hence the render before the sync.
+// A probe textarea holding just the window's lines, at the same width, finds
+// how far down the cursor can park (a window's height of visual rows, or the
+// buffer's end). The real cursor goes there and the viewport syncs once; then
+// PageUp snaps the cursor to the window's top row in one move, or, when the
+// buffer ends inside the window, a few CursorUps walk back to the anchor.
 func (e *EditorView) scrollAnchorToTop(anchorLine int) {
-	for range e.ta.Height() - 1 {
-		line, row := e.ta.Line(), e.ta.LineInfo().RowOffset
-		e.ta.CursorDown()
-		if e.ta.Line() == line && e.ta.LineInfo().RowOffset == row {
+	h := e.ta.Height()
+	lines := strings.Split(e.ta.Value(), "\n")
+	probe := newEditorTextarea()
+	probe.SetWidth(e.textWidth())
+	probe.SetValue(strings.Join(lines[anchorLine:min(len(lines), anchorLine+h)], "\n"))
+	probe.MoveToBegin()
+	steps := 0
+	for range h - 1 {
+		line, row := probe.Line(), probe.LineInfo().RowOffset
+		probe.CursorDown()
+		if probe.Line() == line && probe.LineInfo().RowOffset == row {
 			break // end of buffer: no further visual row to move to
 		}
+		steps++
 	}
-	_ = e.ta.View()
+	e.moveCursorTo(anchorLine+probe.Line(), probe.Column())
 	e.syncViewport()
-	for e.ta.Line() > anchorLine {
-		e.ta.CursorUp()
+	if steps > 0 && steps == h-1 {
+		// The anchor's first row is now the window's top row: snap to it in one move.
+		// (A one-row window has no rows to climb: the cursor is on the top row
+		// already, and PageUp from there would move a whole page up.)
+		e.ta.PageUp()
+	} else {
+		// The buffer ends less than a window below the anchor (or the window is
+		// one row): at most h-2 moves.
+		for e.ta.Line() > anchorLine {
+			e.ta.CursorUp()
+		}
 	}
 	e.ta.CursorStart()
 }
@@ -212,7 +296,7 @@ func (e *EditorView) acceptCompletion() {
 		e.ta.InsertString("]]")
 	} else {
 		for range []rune(e.completer.partial) {
-			e.ta, _ = e.ta.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+			e.ta, _ = e.ta.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 		}
 		e.ta.InsertString(cand.name + "]]")
 	}
@@ -228,41 +312,42 @@ func (e *EditorView) replaceCurrentLine(newText string, newCol int) {
 	oldLen := len([]rune(before + after))
 	e.ta.CursorEnd()
 	for i := 0; i < oldLen; i++ {
-		e.ta, _ = e.ta.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+		e.ta, _ = e.ta.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 	}
 	e.ta.InsertString(newText)
-	e.ta.SetCursor(newCol)
+	e.ta.SetCursorColumn(newCol)
 	e.syncViewport()
 }
 
 // syncViewport repositions the textarea viewport onto the cursor after an
-// intercept mutates the buffer without routing a message through ta.Update
-// (the only place the textarea calls repositionView). repositionMsg is the
-// content-neutral message layout() already uses for the same purpose.
+// intercept mutates the buffer without routing a message through ta.Update.
+// InsertString and SetCursorColumn never reposition; only Update, SetHeight and
+// cursor moves do. repositionMsg is the content-neutral message layout()
+// already uses for the same purpose.
 func (e *EditorView) syncViewport() { e.ta, _ = e.ta.Update(repositionMsg{}) }
 
 // repositionMsg is a content-neutral message handed to the textarea purely to
-// trigger its viewport reposition. The textarea repositions the viewport only
-// inside Update (never on SetHeight), and it ignores message types it doesn't
-// recognize — so sending this changes no buffer state, it just re-centers the
-// viewport on the cursor after a resize.
+// trigger its viewport reposition. The textarea ignores message types it
+// doesn't recognize, so sending this changes no buffer state; it just
+// re-centers the viewport on the cursor.
 type repositionMsg struct{}
 
 // layout sizes the textarea, reserving one row for the status line plus the
 // completion strip's rows while it is active.
 func (e *EditorView) layout() {
-	e.ta.SetWidth(max(1, e.width-editorInset))
+	e.ta.SetWidth(e.textWidth())
 	// Cap the strip so it can't push the textarea/status off a short terminal:
 	// reserve the box chrome (4 rows), the status line (1), and ≥1 textarea row.
 	e.completer.maxVisible = clampInt(e.height-6-editorTopMargin, 1, maxCompleterRows)
 	h := e.height - 1 - editorTopMargin - e.completer.rows()
 	e.ta.SetHeight(max(1, h))
-	// SetHeight/SetWidth never reposition the textarea viewport (bubbles
-	// quirk: repositioning happens only inside Update), so after ANY resize —
-	// whether or not the completion strip is involved — the cursor line can
-	// sit outside the visible window until the next keystroke. Poke Update
-	// with a content-neutral message to force a reposition; it's a no-op
-	// when the cursor is already visible.
+	// Bubbles v2's SetWidth does not reposition the viewport, and the
+	// viewport still holds the old width's wrapped content, which SetHeight's
+	// own reposition clamps against. After a resize that wraps more lines
+	// the cursor line can sit below the window until the next keystroke.
+	// Poke Update with a content-neutral message to render at the new width
+	// and reposition; it's a no-op when the cursor is already visible
+	// (TestEditorResizeNarrowKeepsCursorVisible).
 	e.ta, _ = e.ta.Update(repositionMsg{})
 }
 
@@ -303,10 +388,7 @@ func (e *EditorView) MarkSaved(content string) {
 // baseline or disk.
 func (e *EditorView) replaceBuffer(content string, line, col int) {
 	e.ta.SetValue(content)
-	for e.ta.Line() > line {
-		e.ta.CursorUp()
-	}
-	e.ta.SetCursor(col)
+	e.moveCursorTo(line, col)
 	e.syncViewport()
 	e.refreshCompleter(false)
 }
@@ -343,7 +425,7 @@ func (e *EditorView) showClash(theirs edit.Snapshot, exitAfter bool) {
 
 func (e *EditorView) View() string {
 	v := tintView(e.ta.View())
-	if strip := e.completer.View(max(1, e.width-editorInset)); strip != "" {
+	if strip := e.completer.View(e.textWidth()); strip != "" {
 		v += "\n" + strip
 	}
 	v += "\n" + e.statusLine()
@@ -357,7 +439,7 @@ func (e *EditorView) View() string {
 // completion-strip keys while it is open) is forwarded to the textarea. The
 // returned tea.Cmd is the textarea's own (cursor blink) command, which the
 // App must propagate.
-func (e *EditorView) Update(msg tea.KeyMsg) (EditorResult, tea.Cmd) {
+func (e *EditorView) Update(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
 	e.notice = ""
 	if e.mode == confirmingClash {
 		switch msg.String() {
@@ -474,26 +556,23 @@ func (e *EditorView) Update(msg tea.KeyMsg) (EditorResult, tea.Cmd) {
 		return EditorResult{}, nil
 	}
 
-	var cmd tea.Cmd
-	prev := e.ta.Value()
-	e.ta, cmd = e.ta.Update(msg)
-	// allowOpen only when the key actually edited the buffer — a bare caret move
-	// must not pop the completion strip open (it stays a typing affordance).
-	e.refreshCompleter(e.ta.Value() != prev)
-	return EditorResult{}, cmd
+	return EditorResult{}, e.forward(msg)
 }
 
-// scrollPage moves the cursor by one viewport-height of lines by feeding the
-// textarea that many up/down keys, reusing its built-in line navigation and
-// viewport tracking. v1.0.0 textarea has no PageUp/PageDown of its own.
+// scrollPage moves the cursor by one viewport-height of visual rows (h-1, at
+// least one) with the textarea's own CursorDown/CursorUp. weft pages that way
+// so paging moves exactly as before, not through the textarea's PageUp/PageDown.
+// The moves are made directly, not as key messages: Bubbles v2 renders the
+// whole buffer on every Update, which made one page cost h full renders. A
+// direct move still repositions the viewport on its own, and View renders the
+// buffer itself, so nothing needs syncing afterwards.
 func (e *EditorView) scrollPage(dir int) {
-	steps := max(1, e.ta.Height()-1)
-	k := tea.KeyMsg{Type: tea.KeyDown}
-	if dir < 0 {
-		k = tea.KeyMsg{Type: tea.KeyUp}
-	}
-	for i := 0; i < steps; i++ {
-		e.ta, _ = e.ta.Update(k)
+	for range max(1, e.ta.Height()-1) {
+		if dir < 0 {
+			e.ta.CursorUp()
+		} else {
+			e.ta.CursorDown()
+		}
 	}
 }
 

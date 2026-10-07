@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/exp/teatest"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 	"github.com/sahilm/fuzzy"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
@@ -25,7 +25,7 @@ func TestPickerFiltersOnQuery(t *testing.T) {
 	p.Update("a") // type 'a'
 	p.Update("l")
 	p.Update("p")
-	teatest.RequireEqualOutput(t, []byte(p.View()))
+	teatest.RequireEqualOutput(t, []byte(plain(p.View())))
 }
 
 func TestRelativeTimeHints(t *testing.T) {
@@ -248,10 +248,10 @@ func TestOverlayFootersFitNarrowWidth(t *testing.T) {
 		name string
 		view func() string
 	}{
-		{"picker", func() string { return NewPicker(idx, 30, 30).View() }},
-		{"search", func() string { return NewSearchView(idx, 30, 30).View() }},
-		{"backlinks", func() string { return NewBacklinks(idx, "Hub", nil, 30, 30).View() }},
-		{"todos", func() string { return NewTodos(idx, 30, 30).View() }},
+		{"picker", func() string { return plain(NewPicker(idx, 30, 30).View()) }},
+		{"search", func() string { return plain(NewSearchView(idx, 30, 30).View()) }},
+		{"backlinks", func() string { return plain(NewBacklinks(idx, "Hub", nil, 30, 30).View()) }},
+		{"todos", func() string { return plain(NewTodos(idx, 30, 30).View()) }},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -433,7 +433,7 @@ func TestPickerRowsNeverWrap(t *testing.T) {
 	short := NewPicker(shortIdx, 80, 30)
 
 	// act / assert — panel height must not depend on name length or hint.
-	if got, want := lipgloss.Height(p.View()), lipgloss.Height(short.View()); got != want {
+	if got, want := lipgloss.Height(plain(p.View())), lipgloss.Height(plain(short.View())); got != want {
 		t.Fatalf("long name+hint row wrapped and grew the picker: got height %d, want %d", got, want)
 	}
 }
@@ -449,12 +449,12 @@ func TestPickerSetErrorRendersInPanel(t *testing.T) {
 	p.SetError("sync in progress — retry when it finishes")
 
 	// assert
-	if !strings.Contains(p.View(), "sync in progress — retry when it finishes") {
-		t.Fatalf("expected in-panel message, got:\n%s", p.View())
+	if !strings.Contains(plain(p.View()), "sync in progress — retry when it finishes") {
+		t.Fatalf("expected in-panel message, got:\n%s", plain(p.View()))
 	}
 	p.Update("a") // any subsequent key clears it
-	if strings.Contains(p.View(), "sync in progress") {
-		t.Fatalf("expected message cleared on next key, got:\n%s", p.View())
+	if strings.Contains(plain(p.View()), "sync in progress") {
+		t.Fatalf("expected message cleared on next key, got:\n%s", plain(p.View()))
 	}
 }
 

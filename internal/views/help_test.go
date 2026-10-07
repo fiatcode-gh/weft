@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/exp/teatest"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 )
 
 func TestNewHelpRendersVersion(t *testing.T) {
 	quietTerm(t)
-	view := NewHelp("v0.1.2", 80, 0).View()
+	view := plain(NewHelp("v0.1.2", 80, 0).View())
 	if !strings.Contains(view, "weft v0.1.2") {
 		t.Errorf("help view missing version segment; got:\n%s", view)
 	}
@@ -21,7 +21,7 @@ func TestNewHelpRendersVersion(t *testing.T) {
 
 func TestNewHelpEmptyVersionHidesSegment(t *testing.T) {
 	quietTerm(t)
-	view := NewHelp("", 80, 0).View()
+	view := plain(NewHelp("", 80, 0).View())
 	if !strings.Contains(view, "? or esc to close") {
 		t.Errorf("help view missing close hint; got:\n%s", view)
 	}
@@ -38,7 +38,7 @@ func TestNewHelpEmptyVersionHidesSegment(t *testing.T) {
 func TestHelpRespectsNarrowWidth(t *testing.T) {
 	quietTerm(t)
 	const w = 30
-	view := NewHelp("v0.1.2", w, 0).View()
+	view := plain(NewHelp("v0.1.2", w, 0).View())
 	for _, line := range strings.Split(view, "\n") {
 		if lipgloss.Width(line) > w {
 			t.Errorf("line exceeds width %d: w=%d, line=%q", w, lipgloss.Width(line), line)
@@ -51,7 +51,7 @@ func TestHelpRespectsNarrowWidth(t *testing.T) {
 // don't care about width).
 func TestHelpZeroWidthDisablesClamp(t *testing.T) {
 	quietTerm(t)
-	view := NewHelp("v0.1.2", 0, 0).View()
+	view := plain(NewHelp("v0.1.2", 0, 0).View())
 	// With no width constraint the panel renders two content-sized columns,
 	// far wider than 30 cells.
 	max := 0
@@ -70,14 +70,14 @@ func TestHelpGolden(t *testing.T) {
 	// Width 130 is wide enough to exercise the two-column layout; height 0
 	// disables the height cap so the golden captures the full panel.
 	h := NewHelp("v1.0.0", 130, 0)
-	teatest.RequireEqualOutput(t, []byte(h.View()))
+	teatest.RequireEqualOutput(t, []byte(plain(h.View())))
 }
 
 func TestHelpSetSizeUpdatesWidth(t *testing.T) {
 	quietTerm(t)
 	h := NewHelp("v1.0.0", 80, 0)
 	h.SetSize(30, 10) // shrink below natural content width
-	for _, line := range strings.Split(h.View(), "\n") {
+	for _, line := range strings.Split(plain(h.View()), "\n") {
 		if lipgloss.Width(line) > 30 {
 			t.Errorf("after SetSize(30,_) line exceeds 30: w=%d line=%q",
 				lipgloss.Width(line), line)
@@ -91,7 +91,7 @@ func TestHelpSetSizeUpdatesWidth(t *testing.T) {
 func TestHelpHeightGuardClipsToTerminal(t *testing.T) {
 	quietTerm(t)
 	const ht = 12
-	view := NewHelp("v1.0.0", 130, ht).View()
+	view := plain(NewHelp("v1.0.0", 130, ht).View())
 	if n := len(strings.Split(view, "\n")); n > ht {
 		t.Errorf("panel taller than terminal: %d lines > height %d:\n%s", n, ht, view)
 	}

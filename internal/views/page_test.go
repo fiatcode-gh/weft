@@ -9,9 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/exp/teatest"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
 	"github.com/fiatcode-gh/weft/v2/internal/render"
@@ -31,19 +30,13 @@ func TestPageViewRendersAlpha(t *testing.T) {
 	quietTerm(t)
 	idx := loadFixture(t)
 	pv := NewPageView(idx, "Alpha", 80, 24)
-	teatest.RequireEqualOutput(t, []byte(pv.View()))
+	teatest.RequireEqualOutput(t, []byte(plain(pv.View())))
 }
 
 func TestPageViewRendersActiveLinkCursor(t *testing.T) {
-	// Under the colorless test profile the cursor style emits no escapes,
-	// making the splice invisible to a golden. Force TrueColor so the cursor
-	// bytes land in the snapshot. Must NOT call t.Parallel — SetColorProfile
-	// is process-global. Width 77 is unique to this test: the glamour
-	// renderer is width-cached process-wide, and it must be built under the
-	// forced profile.
-	orig := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(orig) })
+	// Lip Gloss v2 always emits SGR, so the cursor splice lands in the
+	// snapshot without forcing a colour profile. Width 77 is unique to this
+	// test: the glamour renderer is width-cached process-wide.
 
 	// arrange
 	idx := loadFixture(t)
@@ -80,7 +73,7 @@ func TestPageViewVanishedFileRendersError(t *testing.T) {
 	pv.SetSize(60, 24)
 
 	// assert — no panic, the page reports the failure
-	got := pv.View()
+	got := plain(pv.View())
 	if !strings.Contains(got, "error:") {
 		t.Errorf("vanished page should render error:, got:\n%s", got)
 	}
@@ -305,8 +298,8 @@ func TestScrollToTaskCentresOnTodo(t *testing.T) {
 	}
 	// The target row must sit inside the viewport window.
 	row := strings.Count(pv.result.Styled[:pv.result.Tasks[0]], "\n")
-	if row < off || row >= off+pv.vp.Height {
-		t.Errorf("target row %d outside viewport [%d,%d)", row, off, off+pv.vp.Height)
+	if row < off || row >= off+pv.vp.Height() {
+		t.Errorf("target row %d outside viewport [%d,%d)", row, off, off+pv.vp.Height())
 	}
 }
 
@@ -573,7 +566,7 @@ func TestPageViewAnchorPrefersVisibleLinkCursorWhenScrolled(t *testing.T) {
 		p.LineUp()
 	}
 	row, found := p.linkRow(p.Cursor())
-	if !found || p.Offset() <= 0 || row <= p.Offset() || row > p.Offset()+p.vp.Height-1 {
+	if !found || p.Offset() <= 0 || row <= p.Offset() || row > p.Offset()+p.vp.Height()-1 {
 		t.Fatalf("setup: link row %d must be visible below top %d", row, p.Offset())
 	}
 	top := topRowLine(t, p)

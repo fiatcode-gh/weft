@@ -211,5 +211,5 @@ func (c *linkCompleter) View(width int) string {
 			b.WriteString("\n")
 		}
 	}
-	return styleBorder.Width(inner + 2).Render(b.String())
+	return renderBordered(inner+2, b.String())
 }

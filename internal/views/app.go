@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/edit"
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
@@ -85,7 +85,7 @@ type App struct {
 
 	// hint is a transient right-side status replacement. Set via setHint
 	// (which schedules a hintTTL tick) and cleared either at the top of the
-	// next tea.KeyMsg or by a matching hintExpireMsg. hintGen is bumped each
+	// next tea.KeyPressMsg or by a matching hintExpireMsg. hintGen is bumped each
 	// time a hint is set so stale ticks ignore themselves.
 	hint    string
 	hintGen int
@@ -619,7 +619,15 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.editor.SetSize(m.Width, m.Height)
 		}
 		return a, nil
-	case tea.KeyMsg:
+	case tea.PasteMsg:
+		// Bubble Tea v1 delivered a bracketed paste as one key whose String()
+		// ("[text]") matched no binding: only the editor's textarea took it.
+		a.hint = ""
+		if a.page != nil && a.editor != nil {
+			return a, a.editor.Paste(m)
+		}
+		return a, nil
+	case tea.KeyPressMsg:
 		key := m.String()
 		a.hint = ""
 		// While loading or in an error state, only quit + retry are honoured.
@@ -812,7 +820,17 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
-func (a *App) View() string {
+// View renders the current frame on the alternate screen, which Bubble
+// Tea v1 entered through tea.WithAltScreen.
+func (a *App) View() tea.View {
+	v := tea.NewView(a.frame())
+	v.AltScreen = true
+	return v
+}
+
+// frame renders the screen content: the load/error splash, the editor, an
+// overlay, or the page with its status bar.
+func (a *App) frame() string {
 	if a.loadErr != nil {
 		return styleTitle.Render(fmt.Sprintf("weft — failed to index %s", a.graphPath)) +
 			"\n\n" + a.loadErr.Error() +

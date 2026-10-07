@@ -3,7 +3,7 @@ package views
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // Help is a stateless overlay listing the keymap. ? or esc toggles it off.

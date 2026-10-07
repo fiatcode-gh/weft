@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
 )
@@ -174,7 +174,7 @@ func (t *Todos) View() string {
 		sb.WriteString("\n")
 		sb.WriteString("\n")
 		sb.WriteString(styleFaint.Render(clamp("↑/↓ select · t cycle filter · enter open · esc back", inner)))
-		return styleBorder.Width(inner + 4).Render(sb.String())
+		return renderBordered(inner+4, sb.String())
 	}
 
 	start, end := t.computeWindow()
@@ -231,5 +231,5 @@ func (t *Todos) View() string {
 
 	sb.WriteString("\n")
 	sb.WriteString(styleFaint.Render(clamp("↑/↓ select · t cycle filter · enter open · esc back", inner)))
-	return styleBorder.Width(inner + 4).Render(sb.String())
+	return renderBordered(inner+4, sb.String())
 }

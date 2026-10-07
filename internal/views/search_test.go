@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
-	"github.com/charmbracelet/x/exp/teatest"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
 	"github.com/fiatcode-gh/weft/v2/internal/search"
@@ -430,7 +430,7 @@ func TestSearchVisibleRowsClamps(t *testing.T) {
 func TestSearchViewEmptyState(t *testing.T) {
 	quietTerm(t)
 	s := NewSearchView(loadFixture(t), 80, 24)
-	teatest.RequireEqualOutput(t, []byte(s.View()))
+	teatest.RequireEqualOutput(t, []byte(plain(s.View())))
 }
 
 func TestSearchViewWithHits(t *testing.T) {
@@ -443,7 +443,7 @@ func TestSearchViewWithHits(t *testing.T) {
 		{FilePath: "/abs/pages/Hub.md", Line: 2, Context: "the hub mentions Beta in passing",
 			Matches: []search.Span{{Start: 17, End: 21}}},
 	}
-	teatest.RequireEqualOutput(t, []byte(s.View()))
+	teatest.RequireEqualOutput(t, []byte(plain(s.View())))
 }
 
 func TestSearchUpdateAcceptsMultibyteRune(t *testing.T) {
@@ -518,7 +518,7 @@ func TestSearchZeroResultIsNotNeverSearched(t *testing.T) {
 	if !s.searched {
 		t.Fatalf("a completed search should set searched=true")
 	}
-	if got := s.View(); !strings.Contains(got, "no matches") {
+	if got := plain(s.View()); !strings.Contains(got, "no matches") {
 		t.Errorf("zero-result view should say 'no matches'; got:\n%s", got)
 	}
 
@@ -543,7 +543,7 @@ func TestSearchEditingQueryResetsSearched(t *testing.T) {
 	if s.searched {
 		t.Errorf("editing the query must reset searched to false")
 	}
-	if got := s.View(); !strings.Contains(got, "press enter to search") {
+	if got := plain(s.View()); !strings.Contains(got, "press enter to search") {
 		t.Errorf("after editing, view should prompt to search again; got:\n%s", got)
 	}
 }
@@ -568,7 +568,7 @@ func TestSearchHighlightStopsBeforeEllipsis(t *testing.T) {
 	// which selects the first hit; force selection to an out-of-range index).
 	s.sel = -1
 
-	view := s.View()
+	view := plain(s.View())
 	plain := ansi.Strip(view)
 	if !strings.Contains(plain, "…") {
 		t.Fatalf("expected an ellipsis in truncated context:\n%s", plain)

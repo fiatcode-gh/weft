@@ -9,8 +9,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/glamour/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
@@ -99,6 +99,13 @@ const (
 	taskSentinelPad   = "\ue008" // width-padding for the task sentinel (see wikiSentinelPad)
 )
 
+// orphanPadReplacer deletes sentinel pad runes left behind when Glamour v2
+// hard-wraps a sentinel wider than the column: sentinelRe consumes the pad
+// run on the sentinel's own row, and the rest of the wrapped run would show
+// as private-use glyphs. Deleting runes keeps the row count, so SourceRows
+// stays aligned with Styled.
+var orphanPadReplacer = strings.NewReplacer(wikiSentinelPad, "", taskSentinelPad, "", emphSentinelPad, "")
+
 // sentinelRe matches a wiki-link, task-marker, or emphasis sentinel.
 // Group 1 (m[2:3]) captures the wiki id; group 2 (m[4:5]) captures the task id;
 // group 3 (m[6:7]) captures the emphasis id.
@@ -154,8 +161,14 @@ var (
 // glamourRender invokes the width-cached renderer. A var so tests can
 // simulate a Glamour failure — no markdown input reliably triggers one.
 var glamourRender = func(r *glamour.TermRenderer, in string) (string, error) {
-	return r.Render(in)
+	out, err := r.Render(in)
+	return hyperlinkRe.ReplaceAllString(out, ""), err
 }
+
+// hyperlinkRe matches an OSC 8 hyperlink open or close sequence. Glamour v2
+// wraps reference links and autolinks in them; weft v2.5 rendered none, so
+// they are stripped to keep the read view identical (no clickable links).
+var hyperlinkRe = regexp.MustCompile(`\x1b\]8;[^\x07\x1b]*(?:\x07|\x1b\\)`)
 
 // styleSelection is which Glamour style weft should render with. selectStyle
 // derives it from env vars only — never querying the terminal.
@@ -173,7 +186,7 @@ type styleSelection struct {
 //
 // NO_COLOR wins over WEFT_STYLE.
 func selectStyle() styleSelection {
-	if os.Getenv("NO_COLOR") != "" {
+	if noColor() {
 		return styleSelection{name: "notty"}
 	}
 	if s := os.Getenv("WEFT_STYLE"); s != "" {
@@ -665,7 +678,7 @@ func RenderWithEmphasis(body string, width int, emphasis string) (Result, error)
 	var finds []int
 	last := 0
 	for _, m := range sentinelRe.FindAllStringSubmatchIndex(styled, -1) {
-		out.WriteString(styled[last:m[0]])
+		orphanPadReplacer.WriteString(&out, styled[last:m[0]])
 		last = m[1]
 		switch {
 		case m[2] >= 0: // wiki-link sentinel
@@ -703,7 +716,7 @@ func RenderWithEmphasis(body string, width int, emphasis string) (Result, error)
 			out.WriteString(emphasisStyle.Render(emphSubs[id]))
 		}
 	}
-	out.WriteString(styled[last:])
+	orphanPadReplacer.WriteString(&out, styled[last:])
 
 	return Result{Styled: out.String(), Links: links, Tasks: tasks, Finds: finds, FallbackErr: fallbackErr}, nil
 }

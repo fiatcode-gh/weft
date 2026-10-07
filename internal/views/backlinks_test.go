@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/x/exp/teatest"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
 	"github.com/fiatcode-gh/weft/v2/internal/search"
@@ -147,13 +147,13 @@ func TestBacklinksInnerWidthClamps(t *testing.T) {
 func TestBacklinksViewWithRefsGolden(t *testing.T) {
 	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", nil, 100, 30)
-	teatest.RequireEqualOutput(t, []byte(b.View()))
+	teatest.RequireEqualOutput(t, []byte(plain(b.View())))
 }
 
 func TestBacklinksViewNoRefsGolden(t *testing.T) {
 	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Orphan", nil, 100, 30)
-	out := b.View()
+	out := plain(b.View())
 	if !strings.Contains(out, "no backlinks") {
 		t.Errorf("view should announce empty refs; got:\n%s", out)
 	}
@@ -205,7 +205,7 @@ func TestBacklinksScrollHintsAppear(t *testing.T) {
 	b.rows = b.buildRows()
 
 	b.sel = len(b.refs) / 2
-	mid := b.View()
+	mid := plain(b.View())
 	if !strings.Contains(mid, "more above") {
 		t.Errorf("mid selection: want \"more above\" hint; got:\n%s", mid)
 	}
@@ -214,7 +214,7 @@ func TestBacklinksScrollHintsAppear(t *testing.T) {
 	}
 
 	b.sel = 0
-	top := b.View()
+	top := plain(b.View())
 	if strings.Contains(top, "more above") {
 		t.Errorf("top selection: should not show \"more above\"; got:\n%s", top)
 	}
@@ -256,7 +256,7 @@ func TestBacklinksUnlinkedSkipsHeaderOnNav(t *testing.T) {
 func TestBacklinksViewWithUnlinkedGolden(t *testing.T) {
 	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 100, 30)
-	teatest.RequireEqualOutput(t, []byte(b.View()))
+	teatest.RequireEqualOutput(t, []byte(plain(b.View())))
 }
 
 func TestBacklinksUnlinkedRefHighlights(t *testing.T) {
@@ -374,7 +374,7 @@ func TestBacklinksConfirmViewGolden(t *testing.T) {
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 100, 30)
 	selectFirstUnlinked(t, b)
 	b.Update("l")
-	teatest.RequireEqualOutput(t, []byte(b.View()))
+	teatest.RequireEqualOutput(t, []byte(plain(b.View())))
 }
 
 func TestBacklinksConfirmViewShowsBeforeAfter(t *testing.T) {
@@ -382,7 +382,7 @@ func TestBacklinksConfirmViewShowsBeforeAfter(t *testing.T) {
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 100, 30)
 	selectFirstUnlinked(t, b)
 	b.Update("l")
-	out := b.View()
+	out := plain(b.View())
 	if !strings.Contains(out, "before:") || !strings.Contains(out, "after:") {
 		t.Errorf("confirm view should show before/after lines:\n%s", out)
 	}
@@ -398,7 +398,7 @@ func TestBacklinksErrorLineRendered(t *testing.T) {
 	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 100, 30)
 	b.SetError("mention no longer found in Beta")
-	out := b.View()
+	out := plain(b.View())
 	if !strings.Contains(out, "mention no longer found in Beta") {
 		t.Errorf("error message should render in the panel:\n%s", out)
 	}
@@ -415,7 +415,7 @@ func TestBacklinksHintShowsLinkifyOnUnlinkedRow(t *testing.T) {
 	quietTerm(t)
 	b := NewBacklinks(loadFixture(t), "Hub", unlinkedFixture(), 100, 30)
 	selectFirstUnlinked(t, b)
-	if !strings.Contains(b.View(), "l linkify") {
-		t.Errorf("hint should advertise linkify when an unlinked row is selected:\n%s", b.View())
+	if !strings.Contains(plain(b.View()), "l linkify") {
+		t.Errorf("hint should advertise linkify when an unlinked row is selected:\n%s", plain(b.View()))
 	}
 }

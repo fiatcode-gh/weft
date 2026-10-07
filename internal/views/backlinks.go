@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
 )
@@ -220,7 +220,7 @@ func (b *Backlinks) View() string {
 	default:
 		sb.WriteString(styleFaint.Render(clamp(b.hintText(), inner)))
 	}
-	return styleBorder.Width(inner + 4).Render(sb.String())
+	return renderBordered(inner+4, sb.String())
 }
 
 // hintText returns the footer key legend, advertising linkify only when the

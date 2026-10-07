@@ -4,24 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
 )
 
-func setupTintTest(t *testing.T) {
-	// Force ANSI color output for consistent tint tests.
-	// Save the original profile so other tests are not affected.
-	origProfile := lipgloss.ColorProfile()
-	// NOTE: lipgloss.SetColorProfile is process-global. Tests in this file must
-	// not call t.Parallel — concurrent mutation would corrupt sibling tests
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() {
-		lipgloss.SetColorProfile(origProfile)
-	})
-}
-
 func TestTintLineNormalUnchanged(t *testing.T) {
-	setupTintTest(t)
 	in := "just a plain paragraph"
 	if got := tintLine(in); got != in {
 		t.Fatalf("normal line should be unchanged; got %q", got)
@@ -29,7 +15,6 @@ func TestTintLineNormalUnchanged(t *testing.T) {
 }
 
 func TestTintLineHeadingIsBold(t *testing.T) {
-	setupTintTest(t)
 	got := tintLine("# Heading")
 	want := lipgloss.NewStyle().Bold(true).Render("# Heading")
 	if got != want {
@@ -38,7 +23,6 @@ func TestTintLineHeadingIsBold(t *testing.T) {
 }
 
 func TestTintLineBlockquoteIsFaint(t *testing.T) {
-	setupTintTest(t)
 	got := tintLine("> a quote")
 	want := lipgloss.NewStyle().Faint(true).Render("> a quote")
 	if got != want {
@@ -47,7 +31,6 @@ func TestTintLineBlockquoteIsFaint(t *testing.T) {
 }
 
 func TestTintLineCodeFenceIsFaint(t *testing.T) {
-	setupTintTest(t)
 	got := tintLine("```go")
 	want := lipgloss.NewStyle().Faint(true).Render("```go")
 	if got != want {
@@ -56,7 +39,6 @@ func TestTintLineCodeFenceIsFaint(t *testing.T) {
 }
 
 func TestTintLineWikiLinkTinted(t *testing.T) {
-	setupTintTest(t)
 	got := tintLine("see [[Foo Bar]] now")
 	link := lipgloss.NewStyle().Foreground(colorHighlight).Render("[[Foo Bar]]")
 	if !strings.Contains(got, link) {
@@ -68,7 +50,6 @@ func TestTintLineWikiLinkTinted(t *testing.T) {
 }
 
 func TestTintLineTaskMarkerColored(t *testing.T) {
-	setupTintTest(t)
 	got := tintLine("- TODO buy milk")
 	marker := editorMarkerTint["TODO"].Render("TODO")
 	if !strings.Contains(got, marker) {
@@ -80,7 +61,6 @@ func TestTintLineTaskMarkerColored(t *testing.T) {
 }
 
 func TestTintLineHeadingWithLinkComposes(t *testing.T) {
-	setupTintTest(t)
 	got := tintLine("# See [[Foo]]")
 	// The link span must be both bold (heading base) and link-colored.
 	want := lipgloss.NewStyle().Foreground(colorHighlight).Bold(true).Render("[[Foo]]")
@@ -90,7 +70,6 @@ func TestTintLineHeadingWithLinkComposes(t *testing.T) {
 }
 
 func TestTintViewSkipsRowsWithSGR(t *testing.T) {
-	setupTintTest(t)
 	cursorRow := lipgloss.NewStyle().Background(lipgloss.Color("0")).Render("# Heading on cursor row")
 	in := "# normal heading\n" + cursorRow
 	out := tintView(in)

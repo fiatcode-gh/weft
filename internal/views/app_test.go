@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/edit"
 )
@@ -137,8 +137,8 @@ func TestAppBacklinkUnlinkedEnterHighlights(t *testing.T) {
 	a.Update(key("b"))
 	// The backlinks panel for "Topic": no linked refs, one unlinked (Note).
 	// Move to the first selectable row and accept.
-	a.Update(tea.KeyMsg{Type: tea.KeyDown})
-	a.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if a.page.Page() != "Note" {
 		t.Fatalf("enter on the unlinked ref should navigate to Note; got %q", a.page.Page())
 	}
@@ -187,10 +187,10 @@ func TestAppLinkifyWritesAndRefreshes(t *testing.T) {
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	a.page = NewPageView(idx, "Topic", 80, 24)
 
-	a.Update(key("b"))                      // open backlinks for Topic
-	a.Update(tea.KeyMsg{Type: tea.KeyDown}) // move onto the unlinked Note row
-	a.Update(key("l"))                      // open the confirm
-	a.Update(key("y"))                      // confirm the write
+	a.Update(key("b"))                           // open backlinks for Topic
+	a.Update(tea.KeyPressMsg{Code: tea.KeyDown}) // move onto the unlinked Note row
+	a.Update(key("l"))                           // open the confirm
+	a.Update(key("y"))                           // confirm the write
 
 	got, err := os.ReadFile(notePath)
 	if err != nil {
@@ -228,7 +228,7 @@ func TestAppLinkifyMentionGoneShowsError(t *testing.T) {
 	a.page = NewPageView(idx, "Topic", 80, 24)
 
 	a.Update(key("b"))
-	a.Update(tea.KeyMsg{Type: tea.KeyDown})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	a.Update(key("l"))
 	// The mention vanishes from the file between detection and confirm.
 	if err := os.WriteFile(notePath, []byte("- nothing here now\n"), 0o644); err != nil {
@@ -284,7 +284,7 @@ func TestAppLinkifyFileChangedBetweenReadAndWrite(t *testing.T) {
 	}
 
 	a.Update(key("b"))
-	a.Update(tea.KeyMsg{Type: tea.KeyDown})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	a.Update(key("l"))
 	a.Update(key("y"))
 
@@ -339,7 +339,7 @@ func TestReindexPreservesScrollPosition(t *testing.T) {
 	}
 
 	// act — R reindex, driven synchronously
-	_, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("R")})
+	_, cmd := a.Update(key("R"))
 	drainCmds(t, a, cmd) // deliver the batch's indexLoadedMsg
 
 	// assert
@@ -366,13 +366,13 @@ func TestEditorDiscardExitPreservesScrollPosition(t *testing.T) {
 		a.page.LineDown()
 	}
 	want := a.page.Offset()
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	a.Update(key("e"))
 	if a.editor == nil {
 		t.Fatal("precondition: editor did not open")
 	}
 
 	// act — clean esc discards without confirm and rebuilds the page view
-	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 
 	// assert
 	if a.editor != nil {

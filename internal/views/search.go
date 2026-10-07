@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
 	"github.com/fiatcode-gh/weft/v2/internal/search"
@@ -274,7 +274,7 @@ func (s *SearchView) View() string {
 	b.WriteString(styleFaint.Render(clamp("↑/↓ select · enter search/open · esc cancel", inner)))
 	// Width includes horizontal padding (2 cells each side) but excludes the
 	// border, so adding 4 keeps the text area at exactly `inner` cells.
-	return styleBorder.Width(inner + 4).Render(b.String())
+	return renderBordered(inner+4, b.String())
 }
 
 func shortPath(p string) string {
