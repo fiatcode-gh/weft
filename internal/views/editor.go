@@ -119,8 +119,52 @@ func newEditorTextarea() textarea.Model {
 	styles := textarea.DefaultDarkStyles()
 	styles.Focused.Prompt = lipgloss.NewStyle()
 	styles.Blurred.Prompt = lipgloss.NewStyle()
+	styles.Cursor.Color = nil // plain reverse-video cursor, as in Bubbles v1
 	ta.SetStyles(styles)
+	ta.KeyMap = editorKeyMap()
 	return ta
+}
+
+// editorKeyMap is the Bubbles v2 textarea keymap cut back to the v1
+// bindings: v2's selection, select-all, copy, ctrl+arrow word moves,
+// ctrl+backspace/delete and its own paging stay off until editor-core.
+func editorKeyMap() textarea.KeyMap {
+	km := textarea.DefaultKeyMap()
+	km.WordForward.SetKeys("alt+right", "alt+f")
+	km.WordBackward.SetKeys("alt+left", "alt+b")
+	km.DeleteWordBackward.SetKeys("alt+backspace", "ctrl+w")
+	km.DeleteWordForward.SetKeys("alt+delete", "alt+d")
+	km.PageUp.SetEnabled(false)
+	km.PageDown.SetEnabled(false)
+	km.SelectCharacterForward.SetEnabled(false)
+	km.SelectCharacterBackward.SetEnabled(false)
+	km.SelectWordForward.SetEnabled(false)
+	km.SelectWordBackward.SetEnabled(false)
+	km.SelectLineUp.SetEnabled(false)
+	km.SelectLineDown.SetEnabled(false)
+	km.SelectAll.SetEnabled(false)
+	km.CopySelection.SetEnabled(false)
+	return km
+}
+
+// Paste inserts bracketed-paste text while editing. The clash and exit
+// prompts ignore it, as they ignored a pasted key under Bubble Tea v1.
+func (e *EditorView) Paste(msg tea.PasteMsg) tea.Cmd {
+	e.notice = ""
+	if e.mode != editing {
+		return nil
+	}
+	return e.forward(msg)
+}
+
+// forward hands msg to the textarea and refreshes completion; only a
+// message that changed the buffer may open the strip.
+func (e *EditorView) forward(msg tea.Msg) tea.Cmd {
+	prev := e.ta.Value()
+	var cmd tea.Cmd
+	e.ta, cmd = e.ta.Update(msg)
+	e.refreshCompleter(e.ta.Value() != prev)
+	return cmd
 }
 
 // moveCursorTo puts the cursor on logical line row (clamped) at column col
@@ -506,13 +550,7 @@ func (e *EditorView) Update(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
 		return EditorResult{}, nil
 	}
 
-	var cmd tea.Cmd
-	prev := e.ta.Value()
-	e.ta, cmd = e.ta.Update(msg)
-	// allowOpen only when the key actually edited the buffer — a bare caret move
-	// must not pop the completion strip open (it stays a typing affordance).
-	e.refreshCompleter(e.ta.Value() != prev)
-	return EditorResult{}, cmd
+	return EditorResult{}, e.forward(msg)
 }
 
 // scrollPage moves the cursor by one viewport-height of lines by feeding the

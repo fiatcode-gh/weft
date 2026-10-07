@@ -619,6 +619,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.editor.SetSize(m.Width, m.Height)
 		}
 		return a, nil
+	case tea.PasteMsg:
+		// Bubble Tea v1 delivered a bracketed paste as one key whose String()
+		// ("[text]") matched no binding: only the editor's textarea took it.
+		a.hint = ""
+		if a.page != nil && a.editor != nil {
+			return a, a.editor.Paste(m)
+		}
+		return a, nil
 	case tea.KeyPressMsg:
 		key := m.String()
 		a.hint = ""
