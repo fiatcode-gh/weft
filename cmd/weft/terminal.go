@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"os"
 
 	tea "charm.land/bubbletea/v2"
@@ -31,7 +32,9 @@ var probeSequences = [][]byte{
 // (size, raw mode). Bubble Tea writes each frame or query in one Write
 // (pinned by TestProgramOptionsSilenceTerminalProbes), so a sequence is
 // never split across calls. Frames without a probe pass through without
-// allocating.
+// allocating. WriteString and ReadFrom, which the embedded file would
+// otherwise promote and which io.WriteString and io.Copy prefer over Write,
+// are routed through Write so no path skips the filter.
 type quietStdout struct{ *os.File }
 
 func (q quietStdout) Write(p []byte) (int, error) {
@@ -45,6 +48,14 @@ func (q quietStdout) Write(p []byte) (int, error) {
 		return 0, err
 	}
 	return len(p), nil
+}
+
+func (q quietStdout) WriteString(s string) (int, error) { return q.Write([]byte(s)) }
+
+// ReadFrom copies through Write; hiding it behind a bare io.Writer keeps
+// io.Copy from picking ReadFrom again.
+func (q quietStdout) ReadFrom(r io.Reader) (int64, error) {
+	return io.Copy(struct{ io.Writer }{q}, r)
 }
 
 // programOptions wires weft's Bubble Tea program to out (the terminal).

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -48,6 +49,38 @@ func TestQuietStdoutDropsProbeSequences(t *testing.T) {
 	}
 	if got := string(readAll(t, f)); got != want.String() {
 		t.Fatalf("file = %q, want %q", got, want.String())
+	}
+}
+
+// *os.File also offers WriteString and ReadFrom, which io.WriteString and
+// io.Copy prefer over Write; neither may carry a probe past the filter.
+func TestQuietStdoutFiltersEveryWritePath(t *testing.T) {
+	in := "a-" + string(probeSequences[0]) + "b-" + string(probeSequences[len(probeSequences)-1]) + "\x1b[94mtext\x1b[m"
+	want := "a-b-\x1b[94mtext\x1b[m"
+	tests := []struct {
+		name  string
+		write func(q quietStdout) (int64, error)
+	}{
+		{"io.WriteString", func(q quietStdout) (int64, error) {
+			n, err := io.WriteString(q, in)
+			return int64(n), err
+		}},
+		{"io.Copy", func(q quietStdout) (int64, error) {
+			// a Reader without WriteTo, so io.Copy goes through q.ReadFrom
+			return io.Copy(q, struct{ io.Reader }{strings.NewReader(in)})
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f := tempOut(t)
+			n, err := tc.write(quietStdout{f})
+			if err != nil || n != int64(len(in)) {
+				t.Fatalf("wrote (%d, %v), want (%d, nil)", n, err, len(in))
+			}
+			if got := string(readAll(t, f)); got != want {
+				t.Fatalf("file = %q, want %q", got, want)
+			}
+		})
 	}
 }
 
