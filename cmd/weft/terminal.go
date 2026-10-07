@@ -16,7 +16,8 @@ import (
 // the shell when weft quits first, and the kitty push / modifyOtherKeys
 // switch the terminal to an enhanced key encoding the contract keeps off.
 // Dropping all of them keeps weft's terminal traffic what it was under
-// Bubble Tea v1. editor-core owns revisiting the kitty entries.
+// Bubble Tea v1. Decision (editor-core): kitty keyboard and modifyOtherKeys
+// stay off; every editor key is legacy-encodable.
 var probeSequences = [][]byte{
 	[]byte(ansi.RequestModeSynchronizedOutput),
 	[]byte(ansi.RequestModeUnicodeCore),

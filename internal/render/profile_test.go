@@ -13,8 +13,8 @@ func TestColorProfile(t *testing.T) {
 		env  map[string]string
 		want colorprofile.Profile
 	}{
-		{"NO_COLOR=1 beats truecolor", map[string]string{"NO_COLOR": "1", "TTY_FORCE": "1", "TERM": "xterm-256color", "COLORTERM": "truecolor"}, colorprofile.NoTTY},
-		{"any non-empty NO_COLOR", map[string]string{"NO_COLOR": "yes", "TTY_FORCE": "1", "TERM": "xterm-256color"}, colorprofile.NoTTY},
+		{"NO_COLOR=1 beats truecolor", map[string]string{"NO_COLOR": "1", "TTY_FORCE": "1", "TERM": "xterm-256color", "COLORTERM": "truecolor"}, colorprofile.Ascii},
+		{"any non-empty NO_COLOR", map[string]string{"NO_COLOR": "yes", "TTY_FORCE": "1", "TERM": "xterm-256color"}, colorprofile.Ascii},
 		{"256-colour terminal", map[string]string{"TTY_FORCE": "1", "TERM": "xterm-256color"}, colorprofile.TrueColor},
 		{"16-colour terminal", map[string]string{"TTY_FORCE": "1", "TERM": "xterm"}, colorprofile.TrueColor},
 		{"dumb terminal", map[string]string{"TTY_FORCE": "1", "TERM": "dumb"}, colorprofile.NoTTY},

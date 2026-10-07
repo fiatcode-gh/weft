@@ -1,6 +1,11 @@
 package render
 
-import "charm.land/glamour/v2/ansi"
+import (
+	"reflect"
+
+	"charm.land/glamour/v2/ansi"
+	"charm.land/glamour/v2/styles"
+)
 
 // terminalStyleConfig is weft's default Glamour style, drawing the rendered
 // markdown body from the user's own terminal palette instead of Glamour's
@@ -12,7 +17,7 @@ import "charm.land/glamour/v2/ansi"
 //   - Lip Gloss-rendered colors (everything outside CodeBlock.Chroma) are bare
 //     ANSI 0-15 index strings, which map to the terminal palette.
 //   - Chroma (code-fence) colors are #rrggbb hex anchors: chroma parses colors
-//     as hex RGB, and the terminal16 formatter (see page.go) downsamples them
+//     as hex RGB, and the terminal16 formatter (see theme.go) downsamples them
 //     to the terminal's 16-color palette.
 var terminalStyleConfig = ansi.StyleConfig{
 	Document: ansi.StyleBlock{
@@ -98,7 +103,7 @@ var terminalStyleConfig = ansi.StyleConfig{
 		},
 		// Chroma colors are hex anchors, NOT ANSI indices: chroma parses color
 		// strings as hex RGB (strconv.ParseUint base 16). The terminal16
-		// formatter (see page.go) downsamples these anchors to the terminal's
+		// formatter (see theme.go) downsamples these anchors to the terminal's
 		// 16-color palette, so syntax highlighting honors the terminal theme.
 		Chroma: &ansi.Chroma{
 			Text:                ansi.StylePrimitive{},
@@ -138,3 +143,37 @@ var terminalStyleConfig = ansi.StyleConfig{
 func strPtr(s string) *string { return &s }
 func boolPtr(b bool) *bool    { return &b }
 func uintPtr(u uint) *uint    { return &u }
+
+// noColorStyleConfig is weft's style under NO_COLOR: Glamour's ASCII layout
+// (margins, "# " heading prefixes, "*"/"**"/"~~" delimiters, no syntax
+// highlighting) plus every text attribute terminalStyleConfig sets on the same
+// element — bold headings, italic emphasis, underlined links and so on —
+// but no colour. Bubble Tea's Ascii colour profile (see ColorProfile) drops
+// colour and keeps attributes, so this is what NO_COLOR asks for
+// (no-color.org). Guarded by TestNoColorStyleConfig.
+var noColorStyleConfig = withAttributes(styles.ASCIIStyleConfig, terminalStyleConfig)
+
+// withAttributes returns layout with the text attributes of from copied onto
+// every StylePrimitive; colours and everything else stay layout's.
+func withAttributes(layout, from ansi.StyleConfig) ansi.StyleConfig {
+	copyAttributes(reflect.ValueOf(&layout).Elem(), reflect.ValueOf(from))
+	return layout
+}
+
+// copyAttributes walks dst and src in lockstep (same type) and, on every
+// ansi.StylePrimitive, copies the attribute pointers src sets. Pointer fields
+// (CodeBlock.Chroma) are not followed: highlighting is colour.
+func copyAttributes(dst, src reflect.Value) {
+	switch {
+	case dst.Type() == reflect.TypeFor[ansi.StylePrimitive]():
+		for _, name := range []string{"Underline", "Bold", "Italic", "CrossedOut", "Faint", "Inverse", "Blink"} {
+			if f := src.FieldByName(name); !f.IsNil() {
+				dst.FieldByName(name).Set(f)
+			}
+		}
+	case dst.Kind() == reflect.Struct:
+		for i := range dst.NumField() {
+			copyAttributes(dst.Field(i), src.Field(i))
+		}
+	}
+}

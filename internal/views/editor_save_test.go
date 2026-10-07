@@ -108,7 +108,7 @@ func TestEditorSaveMergesOutsideAppend(t *testing.T) {
 
 func TestEditorSaveBothAppendAtEnd(t *testing.T) {
 	a, path := openJournal(t)
-	a.editor.ta.SetValue("- one\n- two\n- three\n- mine\n")
+	setText(a.editor, "- one\n- two\n- three\n- mine\n")
 	appendTo(t, path, "- agent\n")
 
 	a.Update(ctrlS)
@@ -155,8 +155,8 @@ func TestEditorSaveBothAppendToEmptyJournal(t *testing.T) {
 	if got := a.editor.Content(); got != want {
 		t.Errorf("buffer = %q, want %q", got, want)
 	}
-	if a.editor.ta.Line() != 0 {
-		t.Errorf("cursor row = %d, want 0", a.editor.ta.Line())
+	if cursorPos(a.editor).Line != 0 {
+		t.Errorf("cursor row = %d, want 0", cursorPos(a.editor).Line)
 	}
 }
 
@@ -173,10 +173,10 @@ func TestEditorSaveMergeKeepsCursorOnSameText(t *testing.T) {
 	if a.editor.mode != editing {
 		t.Fatalf("mode = %v, want editing", a.editor.mode)
 	}
-	if got := a.editor.ta.Line(); got != 5 {
+	if got := cursorPos(a.editor).Line; got != 5 {
 		t.Errorf("cursor row = %d, want 5", got)
 	}
-	if before, _ := a.editor.cursorLineSplit(); before != "X" {
+	if before, _ := a.editor.cursorSplit(); before != "X" {
 		t.Errorf("text before cursor = %q, want %q", before, "X")
 	}
 }
@@ -314,19 +314,29 @@ func TestEditorSaveAndExitMergeExits(t *testing.T) {
 	}
 }
 
-func TestEditorSaveUnloadableMergeIsClash(t *testing.T) {
-	a, path := openJournal(t)
-	typeApp(a, "X")
-	appendTo(t, path, "\tindented\n")
-	theirs := readFile(t, path)
+// Any text merges and loads now: tabs and CRLF terminators survive a merged
+// save byte for byte. (v1 sent an unloadable merge to the clash prompt.)
+func TestEditorSaveMergesCRLFAndTabs(t *testing.T) {
+	for _, tc := range []struct{ name, outside string }{
+		{"tab-indented line", "\tindented\n"},
+		{"CRLF terminator", "- four\r\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, path := openJournal(t)
+			typeApp(a, "X")
+			appendTo(t, path, tc.outside)
 
-	a.Update(ctrlS)
+			a.Update(ctrlS)
 
-	if a.editor.mode != confirmingClash {
-		t.Fatalf("mode = %v, want confirmingClash", a.editor.mode)
-	}
-	if got := readFile(t, path); got != theirs {
-		t.Errorf("file = %q, want untouched %q", got, theirs)
+			want := "X- one\n- two\n- three\n" + tc.outside
+			if got := readFile(t, path); got != want {
+				t.Errorf("file = %q, want %q", got, want)
+			}
+			if a.editor.mode != editing || a.editor.Content() != want || a.editor.dirty() {
+				t.Errorf("mode=%v content=%q dirty=%v, want editing, merged text, clean",
+					a.editor.mode, a.editor.Content(), a.editor.dirty())
+			}
+		})
 	}
 }
 
@@ -562,25 +572,27 @@ func TestClashOverwriteAfterFurtherChangeRefuses(t *testing.T) {
 	}
 }
 
-func TestClashUnloadableTheirsOffersNoReload(t *testing.T) {
+// The reload is offered whatever theirs holds: a tab no longer makes it
+// unloadable (v1 refused with "can't load it here").
+func TestClashReloadOffersAnyContent(t *testing.T) {
 	a, path := openJournal(t)
 	typeApp(a, "X")
-	writeOutside(t, path, "- ONE\tx\n- two\n- three\n")
+	theirs := "- ONE\tx\n- two\n- three\n"
+	writeOutside(t, path, theirs)
 	a.Update(ctrlS)
 	if a.editor.mode != confirmingClash {
 		t.Fatalf("mode = %v, want confirmingClash", a.editor.mode)
 	}
+	if v := plain(a.editor.View()); !strings.Contains(v, "[r]") || strings.Contains(v, "can't load") {
+		t.Fatalf("clash prompt %q must offer reload", v)
+	}
 
 	a.Update(key("r"))
 
-	v := plain(a.editor.View())
-	if a.editor.mode != confirmingClash || !strings.Contains(v, "can't load it here") || strings.Contains(v, "[r]") {
-		t.Fatalf("mode=%v view=%q, want clash prompt without reload", a.editor.mode, v)
+	if a.editor.mode != editing || a.editor.Content() != theirs || a.editor.dirty() {
+		t.Errorf("mode=%v content=%q dirty=%v, want editing on theirs, clean", a.editor.mode, a.editor.Content(), a.editor.dirty())
 	}
-
-	a.Update(key("o"))
-
-	if got, want := readFile(t, path), "X- one\n- two\n- three\n"; got != want {
-		t.Errorf("file = %q, want %q", got, want)
+	if !a.editor.buf.Undo() || a.editor.Content() != "X- one\n- two\n- three\n" {
+		t.Errorf("reload must be one undo step back to mine; content %q", a.editor.Content())
 	}
 }

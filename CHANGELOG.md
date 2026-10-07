@@ -6,15 +6,38 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Breaking
+
+- `Ctrl+C` now copies in the in-app editor and never quits or leaves it. Migration: leave with `Esc`.
+- `Tab` / `Shift+Tab` on a bullet indent / de-indent it together with its children. Migration: select the lines first to indent only them.
+- `Ctrl+A` selects all in the editor. Migration: use `Home` for the line start.
+- Saving keeps the file's final-newline state instead of always ending with one. Migration: add or remove the last newline yourself.
+- `Ctrl+F` opens find in the editor. Migration: use `→` to move right.
+- `Ctrl+V` pastes what was copied inside weft, not the system clipboard. Migration: use the terminal's paste (`Ctrl+Shift+V` or similar) for the system clipboard.
+- Under `NO_COLOR` every screen now shows bold, italic, underline, strikethrough, faint and reverse video; only colour is dropped. Migration: use `TERM=dumb` for fully unstyled output.
+
+### Added
+
+- Undo and redo in the in-app editor (`Ctrl+Z`, `Ctrl+Y`).
+- Selection with `Shift` plus the arrow, `Home`/`End`, `PgUp`/`PgDn` and word-move keys, and `Ctrl+A` for select all.
+- Copy, cut and paste (`Ctrl+C`, `Ctrl+X`, `Ctrl+V`); copies also reach the system clipboard through OSC 52. With nothing selected they act on the whole line.
+- Find and replace in the editor (`Ctrl+F`): next and previous match, replace, replace all.
+- Moving a bullet with its children with `Alt+↑` / `Alt+↓`, and `Ctrl+←` / `Ctrl+→` word moves.
+- The editor is coloured like the read view: same styles, and `WEFT_STYLE` and `NO_COLOR` apply to it too.
+- `e` and `Esc` keep the line you are on at the same screen row between the read view and the editor. The editor now shows the read view's faint rule row above its status line, so both windows are the same height.
+- Any markdown file opens in the in-app editor (CRLF, tabs, more than 10000 lines) and saves byte-for-byte; the `E`/`$EDITOR` refusal hint is gone.
+- Under `NO_COLOR` the read view's selected link shows in reverse video.
+
 ### Changed
 
 - weft now runs on the current Charm libraries (Bubble Tea v2, Lip Gloss v2, Bubbles v2, Glamour v2). Keys, views, colours and the terminal traffic are unchanged apart from the items below.
 - A word or URL wider than the page column now wraps onto the next row instead of running past the right margin. A `[[link]]` wider than the column stays on one row, cut at the screen edge, with blank space below where its wrap would have gone. Markdown tables lay out slightly differently (column widths and the header rule).
 - With `TERM=dumb` or no `TERM`, the page body is now drawn without colour, like the rest of the screen.
-- Typing and paging in the in-app editor are slower on very long pages: about 0.03 s per key and up to 0.05 s per page at 1000 lines, 0.25 s per key and up to 0.5 s per page at 10000. Normal-sized pages are unaffected.
+- The in-app editor shows your terminal's own cursor instead of drawing one.
 
 ### Fixed
 
+- `Enter` at the very start of a bullet line no longer produces `- - text`; it breaks the line plainly.
 - Saving in the in-app editor (`Ctrl+S`, or save from the exit prompt) no longer overwrites changes made to the file outside weft while it was open, for example an agent appending to today's journal. Changes on separate lines are merged, and so are lines both sides added at the same spot, such as you and an agent both appending to a journal (yours first); the status line says so. Overlapping or adjacent changes, a page that appeared on disk while being drafted, or a deleted file stop the save and ask: overwrite, reload (not for a deleted file) or keep editing (`Esc`). The comparison is by content, so a touched modification time alone is not a change.
 - Linkifying a mention no longer writes when the file changed between weft reading and writing it. The backlinks panel says so; try again.
 - Keys that reach weft together — fast typing, an input method, `tmux send-keys` — now each count. Before, a run of characters that arrived at once was dropped, so a picker or search query typed that way stayed empty.

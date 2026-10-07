@@ -14,6 +14,7 @@ import (
 
 	"github.com/fiatcode-gh/weft/v2/internal/edit"
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/merge"
 	"github.com/fiatcode-gh/weft/v2/internal/search"
 	syncpkg "github.com/fiatcode-gh/weft/v2/internal/sync"
 )
@@ -71,6 +72,8 @@ type App struct {
 	// editor is the full-screen in-app editor, or nil when not editing.
 	// When non-nil it owns all keys and the whole screen.
 	editor *EditorView
+	// clip is the copy register the editor shares across sessions.
+	clip register
 
 	// active is the overlay layered over the page, or nil when the page has
 	// focus. Set when an open-overlay key is pressed; cleared by terminal outcomes.
@@ -110,6 +113,10 @@ type App struct {
 	// linkify paths; injected so tests can simulate a change between read and
 	// write, like statusProbe.
 	readSnapshot func(path string) (edit.Snapshot, error)
+
+	// pendingPlace is where the read view puts the line the editor's cursor
+	// was on, set on a saved exit and consumed by the reindex that follows.
+	pendingPlace *Anchor
 
 	// Browser-style page history. hist[histIdx] is the entry currently on
 	// screen. histIdx == -1 before the first page is shown.
@@ -438,16 +445,54 @@ func (a *App) enterEditor() tea.Cmd {
 		return a.setHint("cannot read: " + err.Error())
 	}
 	content, isNew := snap.Content, !snap.Exists
-	anchor := 0
-	if line, ok := a.page.AnchorSourceLine(); ok {
-		anchor = line + leadingTrimmedLines(content)
+	at, ok := a.page.ReadingAnchor()
+	if !ok {
+		at = Anchor{0, 0, 1}
 	}
-	e := NewEditorView(a.idx, name, path, content, isNew, a.width, a.height, anchor)
-	if e.LoadDiverged() {
-		return a.setHint("in-app editor would alter this file (CRLF, tabs, or >10000 lines) — press E to edit externally")
+	at.Line += leadingTrimmedLines(content)
+	a.editor = NewEditorView(a.idx, name, path, content, isNew, a.width, a.height, at, &a.clip)
+	return nil
+}
+
+// exitPlacement computes where the read view must put the editor's cursor
+// line when the editor closes. It reads the file once: that content is what
+// the read view will show, so the cursor line is mapped onto it when the buffer
+// differs, then shifted past the leading blank lines the read view trims.
+// place is false when there is nothing to place (a page with no file); keep
+// reports that an unsaved exit can reuse the page on screen as is.
+func (a *App) exitPlacement(saved bool) (at Anchor, place, keep bool) {
+	e := a.editor
+	at = e.ExitAnchor()
+	snap, err := a.readSnapshot(e.path)
+	if err != nil {
+		snap = e.disk
 	}
-	a.editor = e
-	return a.editor.Focus()
+	if !snap.Exists {
+		return at, false, false
+	}
+	shown := snap.Content
+	if !e.buf.EqualString(shown) {
+		cur := e.Content()
+		r := merge.Text(cur, cur, shown)
+		if r.Conflict || at.Line >= len(r.MineLine) {
+			last := strings.Count(strings.TrimSuffix(shown, "\n"), "\n")
+			at.Line = min(at.Line, last)
+		} else {
+			at.Line = r.MineLine[at.Line]
+		}
+	}
+	at.Line = max(0, at.Line-leadingTrimmedLines(shown))
+	keep = !saved && a.page.body == strings.TrimSpace(shown)+"\n"
+	return at, true, keep
+}
+
+// applyPendingPlace moves the page on screen to the anchor an editor exit left
+// behind, once the page has been rebuilt.
+func (a *App) applyPendingPlace() {
+	if a.pendingPlace != nil && a.page != nil {
+		a.page.PlaceAnchor(*a.pendingPlace)
+	}
+	a.pendingPlace = nil
 }
 
 // unlinkedRefs finds bare-text mentions of `name` elsewhere in the graph that
@@ -527,6 +572,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// tell the user via a hint. The working page stays on
 				// screen; the boot path (a.page == nil) still surfaces
 				// the splash so the user can retry.
+				a.applyPendingPlace()
 				return a, a.setHint("reindex failed: " + m.err.Error())
 			}
 			a.loadErr = m.err
@@ -541,6 +587,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			off, cur := a.page.Offset(), a.page.Cursor()
 			a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
 			a.page.Restore(off, cur)
+			a.applyPendingPlace()
 		} else {
 			a.tryInitPage()
 		}
@@ -621,7 +668,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 	case tea.PasteMsg:
 		// Bubble Tea v1 delivered a bracketed paste as one key whose String()
-		// ("[text]") matched no binding: only the editor's textarea took it.
+		// ("[text]") matched no binding: only the editor took it.
 		a.hint = ""
 		if a.page != nil && a.editor != nil {
 			return a, a.editor.Paste(m)
@@ -644,28 +691,40 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		if a.editor != nil {
-			res, taCmd := a.editor.Update(m)
-			cmds := []tea.Cmd{taCmd}
+			res, editorCmd := a.editor.Update(m)
+			cmds := []tea.Cmd{editorCmd}
 			outcome := saveWritten // meaningful only when res.Save
 			if res.Save {
 				if outcome = a.saveEditor(res.Exit); outcome == saveBlocked {
-					return a, taCmd // stays in the editor: clash prompt or error shown
+					return a, nil // stays in the editor: clash prompt or error shown
 				}
 			}
 			if res.Overwrite && !a.overwriteEditor() {
-				return a, taCmd
+				return a, nil
 			}
 			if res.Exit {
 				saved := a.editor.saved
+				at, place, keep := a.exitPlacement(saved)
 				a.editor = nil
-				if saved {
+				switch {
+				case saved:
 					// Reindex picks up the saved file; its indexLoadedMsg
-					// then refreshes the indicator.
+					// then places the anchor and refreshes the indicator.
+					if place {
+						a.pendingPlace = &at
+					}
 					cmds = append(cmds, a.buildIndexCmd())
-				} else {
+				case keep:
+					// The page on screen already shows this content: keep it
+					// and its row map and just move it.
+					a.page.PlaceAnchor(at)
+				default:
 					off, cur := a.page.Offset(), a.page.Cursor()
 					a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
 					a.page.Restore(off, cur)
+					if place {
+						a.page.PlaceAnchor(at)
+					}
 				}
 				if res.Save && outcome == saveMerged {
 					cmds = append(cmds, a.setHint(mergedNotice))
@@ -825,6 +884,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (a *App) View() tea.View {
 	v := tea.NewView(a.frame())
 	v.AltScreen = true
+	if a.editor != nil {
+		v.Cursor = a.editor.Cursor()
+	}
 	return v
 }
 
@@ -895,12 +957,18 @@ func (a *App) statusBar() string {
 		leftBudget = 1
 	}
 	left = clamp(left, leftBudget)
-	rule := styleFaint.Render(strings.Repeat("─", width))
+	rule := ruleRow(width)
 	gap := width - lipgloss.Width(left) - rightW
 	if gap < 1 {
 		gap = 1
 	}
 	return rule + "\n" + left + strings.Repeat(" ", gap) + right
+}
+
+// ruleRow is the faint horizontal rule above the bottom status line, shared by
+// the read view's status bar and the editor so both keep the same rows.
+func ruleRow(width int) string {
+	return styleFaint.Render(strings.Repeat("─", max(0, width)))
 }
 
 // blockIfSyncing gates the graph-mutating entry points while the async git

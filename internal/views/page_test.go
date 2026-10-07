@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
@@ -38,7 +40,8 @@ func TestPageViewRendersActiveLinkCursor(t *testing.T) {
 	// snapshot without forcing a colour profile. Width 77 is unique to this
 	// test: the glamour renderer is width-cached process-wide.
 
-	// arrange
+	// arrange — the default style, whatever the environment says
+	t.Setenv("NO_COLOR", "")
 	idx := loadFixture(t)
 	pv := NewPageView(idx, "Alpha", 77, 24)
 	pv.CycleLink(+1)
@@ -48,6 +51,26 @@ func TestPageViewRendersActiveLinkCursor(t *testing.T) {
 
 	// act + assert
 	teatest.RequireEqualOutput(t, []byte(pv.View()))
+}
+
+// Without colour the cursor link must still stand out: reverse video.
+func TestPageViewLinkCursorVisibleUnderNoColor(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	_, idx := writeGraph(t, map[string]string{"pages/Solo.md": "- see [[Target]]\n"})
+	pv := NewPageView(idx, "Solo", 80, 24)
+	pv.CycleLink(+1)
+	if pv.Cursor() != 0 {
+		t.Fatalf("precondition: cursor should sit on the link, got %d", pv.Cursor())
+	}
+
+	rows := frameCells(pv.View(), 80, colorprofile.Ascii)
+
+	for _, c := range cellsShowing(t, rows, "Target") {
+		if c.Style.Attrs&uv.AttrReverse == 0 {
+			t.Errorf("cursor cell %q is not reverse video: %q", c.Content, c.Style.String())
+		}
+	}
+	assertNoColour(t, rows, "page")
 }
 
 // A page whose file disappears mid-session must degrade to an error: line on
@@ -486,25 +509,32 @@ func TestPageViewAnchorFollowsScroll(t *testing.T) {
 	}
 	k := topRowLine(t, p)
 
-	line, ok := p.AnchorSourceLine()
+	at, ok := p.ReadingAnchor()
 
-	if !ok || line != k+4 {
-		t.Fatalf("AnchorSourceLine = (%d, %v), want (%d, true)", line, ok, k+4)
+	if !ok || at.Line != k+4 || at.RowInLine != 0 || at.ScreenRow != 0 {
+		t.Fatalf("ReadingAnchor = (%+v, %v), want line %d on screen row 0", at, ok, k+4)
 	}
-	if line == p.Offset() {
-		t.Fatalf("row and line must diverge; both %d", line)
+	if at.Line == p.Offset() {
+		t.Fatalf("row and line must diverge; both %d", at.Line)
 	}
 }
 
-func TestPageViewAnchorAtTopIsNoAnchor(t *testing.T) {
+func TestPageViewAnchorAtTopNeedsNoMap(t *testing.T) {
 	quietTerm(t)
 	_, idx := writeGraph(t, map[string]string{
 		"pages/A.md": anchorLongPage("- head\n  :LOGBOOK:\n  CLOCK: x\n  :END:\n"),
 	})
 	p := NewPageView(idx, "A", 80, 10)
 
-	if line, ok := p.AnchorSourceLine(); line != 0 || ok {
-		t.Fatalf("AnchorSourceLine = (%d, %v), want (0, false)", line, ok)
+	orig := sourceRowsFor
+	t.Cleanup(func() { sourceRowsFor = orig })
+	sourceRowsFor = func(string, int, string) ([]int, []bool) {
+		t.Fatal("row map computed at the top of the page")
+		return nil, nil
+	}
+	// A list-first page shows line 0 on read row 2.
+	if at, ok := p.ReadingAnchor(); !ok || at != (Anchor{0, 0, 2}) {
+		t.Fatalf("ReadingAnchor = (%+v, %v), want ({0 0 2}, true)", at, ok)
 	}
 }
 
@@ -520,10 +550,10 @@ func TestPageViewAnchorPrefersVisibleLinkCursor(t *testing.T) {
 		t.Fatalf("offset=%d cursor=%d, want 0,0", p.Offset(), p.Cursor())
 	}
 
-	line, ok := p.AnchorSourceLine()
+	at, ok := p.ReadingAnchor()
 
-	if !ok || line != 3 {
-		t.Fatalf("AnchorSourceLine = (%d, %v), want (3, true)", line, ok)
+	if !ok || at != (Anchor{3, 0, 5}) {
+		t.Fatalf("ReadingAnchor = (%+v, %v), want ({3 0 5}, true)", at, ok)
 	}
 }
 
@@ -538,10 +568,10 @@ func TestPageViewAnchorIgnoresOffscreenLinkCursor(t *testing.T) {
 	scrollDown(p, 20)
 	k := topRowLine(t, p)
 
-	line, ok := p.AnchorSourceLine()
+	at, ok := p.ReadingAnchor()
 
-	if !ok || line != k+1 {
-		t.Fatalf("AnchorSourceLine = (%d, %v), want (%d, true)", line, ok, k+1)
+	if !ok || at.Line != k+1 {
+		t.Fatalf("ReadingAnchor = (%+v, %v), want line %d", at, ok, k+1)
 	}
 }
 
@@ -571,24 +601,24 @@ func TestPageViewAnchorPrefersVisibleLinkCursorWhenScrolled(t *testing.T) {
 	}
 	top := topRowLine(t, p)
 
-	line, ok := p.AnchorSourceLine()
+	at, ok := p.ReadingAnchor()
 
-	if !ok || line != 30 {
-		t.Fatalf("AnchorSourceLine = (%d, %v), want (30, true); top row's line is %d", line, ok, top)
+	if !ok || at.Line != 30 || at.ScreenRow != row-p.Offset() {
+		t.Fatalf("ReadingAnchor = (%+v, %v), want line 30 on screen row %d; top row's line is %d", at, ok, row-p.Offset(), top)
 	}
 }
 
-func TestPageViewAnchorWithoutRowMapIsNoAnchor(t *testing.T) {
+func TestPageViewAnchorWithoutRowMapIsNotOK(t *testing.T) {
 	quietTerm(t)
 	orig := sourceRowsFor
 	t.Cleanup(func() { sourceRowsFor = orig })
-	sourceRowsFor = func(string, int, string) []int { return nil }
+	sourceRowsFor = func(string, int, string) ([]int, []bool) { return nil, nil }
 	_, idx := writeGraph(t, map[string]string{"pages/A.md": anchorLongPage("")})
 	p := NewPageView(idx, "A", 80, 10)
 	scrollDown(p, 20)
 
-	if line, ok := p.AnchorSourceLine(); line != 0 || ok {
-		t.Fatalf("AnchorSourceLine = (%d, %v), want (0, false)", line, ok)
+	if at, ok := p.ReadingAnchor(); ok || at != (Anchor{}) {
+		t.Fatalf("ReadingAnchor = (%+v, %v), want (zero, false)", at, ok)
 	}
 }
 
@@ -597,29 +627,124 @@ func TestPageViewAnchorComputesMapOncePerLoadAndOnlyWhenNeeded(t *testing.T) {
 	orig := sourceRowsFor
 	t.Cleanup(func() { sourceRowsFor = orig })
 	calls := 0
-	sourceRowsFor = func(body string, width int, emphasis string) []int {
+	sourceRowsFor = func(body string, width int, emphasis string) ([]int, []bool) {
 		calls++
 		return orig(body, width, emphasis)
 	}
 	_, idx := writeGraph(t, map[string]string{"pages/A.md": anchorLongPage("")})
 	p := NewPageView(idx, "A", 80, 10)
 
-	p.AnchorSourceLine() // unscrolled, no cursor: no map needed
+	p.ReadingAnchor() // unscrolled, no cursor: no map needed
 	if calls != 0 {
 		t.Fatalf("map computed %d times for an unscrolled page, want 0", calls)
 	}
 	scrollDown(p, 20)
-	p.AnchorSourceLine()
-	p.AnchorSourceLine()
+	p.ReadingAnchor()
+	p.ReadingAnchor()
 	if calls != 1 {
 		t.Fatalf("map computed %d times, want 1", calls)
 	}
 	p.SetPage("A") // cache hit reload must still know its body
 	scrollDown(p, 20)
-	if line, ok := p.AnchorSourceLine(); !ok || line == 0 {
-		t.Fatalf("AnchorSourceLine after cache-hit reload = (%d, %v)", line, ok)
+	if at, ok := p.ReadingAnchor(); !ok || at.Line == 0 {
+		t.Fatalf("ReadingAnchor after cache-hit reload = (%+v, %v)", at, ok)
 	}
 	if calls != 2 {
 		t.Fatalf("map computed %d times after reload, want 2", calls)
+	}
+}
+
+// placePage is 60 bullets "- L<n>", the n=20 one wrapped over several rows
+// at width 40, with a hidden :LOGBOOK: block (lines 31-33) after L30.
+func placePage() string {
+	var b strings.Builder
+	for n := range 60 {
+		switch n {
+		case 20:
+			b.WriteString("- L20 wrapped alpha beta gamma delta epsilon zeta eta theta iota kappa lambda\n")
+		case 31:
+			b.WriteString("  :LOGBOOK:\n  CLOCK: x\n  :END:\n")
+			fmt.Fprintf(&b, "- L%d\n", n)
+		default:
+			fmt.Fprintf(&b, "- L%d\n", n)
+		}
+	}
+	return b.String()
+}
+
+func TestPlaceAnchor(t *testing.T) {
+	quietTerm(t)
+	_, idx := writeGraph(t, map[string]string{"pages/A.md": placePage()})
+	view := func(p *PageView) []string { return strings.Split(plain(p.vp.View()), "\n") }
+	rowIndex := func(p *PageView, sub string) int {
+		for i, r := range p.styledRows(0, p.vp.TotalLineCount()) {
+			if strings.Contains(plain(r), sub) {
+				return i
+			}
+		}
+		t.Fatalf("no rendered row holds %q", sub)
+		return -1
+	}
+	tests := []struct {
+		name string
+		at   Anchor
+		// check receives the page after placement.
+		check func(t *testing.T, p *PageView)
+	}{
+		{"wrapped continuation row on screen row 5", Anchor{Line: 20, RowInLine: 1, ScreenRow: 5}, func(t *testing.T, p *PageView) {
+			want := plain(p.styledRows(rowIndex(p, "L20")+1, rowIndex(p, "L20")+2)[0])
+			if got := view(p)[5]; got != want {
+				t.Errorf("screen row 5 = %q, want the second row of the wrapped bullet %q", got, want)
+			}
+		}},
+		{"hidden line falls to the next visible line", Anchor{Line: 32, ScreenRow: 3}, func(t *testing.T, p *PageView) {
+			if got := view(p)[3]; !strings.Contains(got, "L31") {
+				t.Errorf("screen row 3 = %q, want L31", got)
+			}
+		}},
+		{"past the end lands on the last line", Anchor{Line: 9999, ScreenRow: 3}, func(t *testing.T, p *PageView) {
+			rows := view(p)
+			if !p.vp.AtBottom() || !strings.Contains(strings.Join(rows, "\n"), "L59") {
+				t.Errorf("want the last line L59 at the bottom, offset %d, view:\n%s", p.Offset(), strings.Join(rows, "\n"))
+			}
+		}},
+		{"near the top clamps to offset 0", Anchor{Line: 1, ScreenRow: 6}, func(t *testing.T, p *PageView) {
+			if p.Offset() != 0 {
+				t.Errorf("offset = %d, want 0", p.Offset())
+			}
+		}},
+		{"near the bottom clamps to the max offset", Anchor{Line: 58, ScreenRow: 0}, func(t *testing.T, p *PageView) {
+			if !p.vp.AtBottom() {
+				t.Errorf("offset = %d, want the max offset", p.Offset())
+			}
+		}},
+		{"screen row below the read window keeps the line visible", Anchor{Line: 30, ScreenRow: 40}, func(t *testing.T, p *PageView) {
+			if got := view(p)[p.vp.Height()-1]; !strings.Contains(got, "L30") {
+				t.Errorf("last window row = %q, want L30", got)
+			}
+		}},
+		{"wrapped row past its last row clamps to the last row", Anchor{Line: 20, RowInLine: 99, ScreenRow: 4}, func(t *testing.T, p *PageView) {
+			first := rowIndex(p, "L20")
+			n := 0
+			for _, r := range p.sourceRows()[first:] {
+				if r != 20 {
+					break
+				}
+				n++
+			}
+			if got := p.Offset() + 4; got != first+n-1 {
+				t.Errorf("screen row 4 is rendered row %d, want the wrapped bullet's last row %d", got, first+n-1)
+			}
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewPageView(idx, "A", 40, 12)
+			p.PlaceAnchor(tt.at)
+			if p.Cursor() != -1 {
+				t.Errorf("link cursor = %d, want it untouched", p.Cursor())
+			}
+			tt.check(t, p)
+		})
 	}
 }

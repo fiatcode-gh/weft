@@ -43,13 +43,15 @@ handoff.
 - **The anchor goes on the editor's top row.** The bubbles v1.0.0 textarea
   scrolls only as far as needed to show the cursor, so the anchor first landed
   on the bottom row and the editor showed the screen above the reading
-  position.
+  position. *Superseded by `editor-core.md`: the anchor line now keeps the
+  screen row it had in the read view, in both directions.*
 
 ## Traps
 
 - The textarea's viewport has no lines until its first `View()`, and
   `repositionView` cannot scroll an empty viewport. Construction-time scrolling
-  needs a render first.
+  needs a render first. *No longer applies: the textarea is gone
+  (`editor-core.md`).*
 - Unusual markdown (reference-label line endings, raw HTML blocks, wrapped
   table cells) can map a few rows to a neighbouring line. Alignment keeps it in
   range; it never panics.

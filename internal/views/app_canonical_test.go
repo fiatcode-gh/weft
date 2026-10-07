@@ -51,22 +51,3 @@ func TestEnterEditorOnCaseMismatchedTargetOpensExistingFile(t *testing.T) {
 		t.Error("existing content not loaded into the editor")
 	}
 }
-
-func TestEnterEditorRefusesFileTheTextareaWouldAlter(t *testing.T) {
-	// arrange: a CRLF file — the sanitizer would double every line break.
-	a := bootApp(t, bootConfig{files: map[string]string{
-		"pages/Crlf.md": "a\r\nb\r\n",
-	}})
-	a.navigate("Crlf")
-
-	// act
-	_ = a.enterEditor()
-
-	// assert: refused, with a hint pointing at the $EDITOR handoff.
-	if a.editor != nil {
-		t.Fatal("editor opened on a file it would corrupt")
-	}
-	if !strings.Contains(a.hint, "would alter") || !strings.Contains(a.hint, "edit externally") {
-		t.Errorf("hint = %q, want a pointer to E / $EDITOR", a.hint)
-	}
-}

@@ -142,7 +142,7 @@ func TestLinkCompleterAllowOpenGate(t *testing.T) {
 // the strip must render exactly as many rows as rows() reserved, for any
 // label length. A label too long for the box's wrap width would spill onto a
 // second line, growing the strip past the height EditorView shrank the
-// textarea by.
+// text window by.
 func TestStripHeightMatchesRowsBudget(t *testing.T) {
 	quietTerm(t)
 	cases := []struct {

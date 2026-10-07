@@ -5,6 +5,9 @@ import (
 	"regexp"
 	"strconv"
 	"testing"
+
+	"charm.land/glamour/v2/ansi"
+	"charm.land/glamour/v2/styles"
 )
 
 // collectStyleColors walks v recursively and sorts every non-nil *string field
@@ -72,65 +75,78 @@ func TestTerminalStyleConfigColors(t *testing.T) {
 	}
 }
 
-func TestSelectStyle(t *testing.T) {
-	cases := []struct {
-		name    string
-		noColor string
-		weftS   string
-		want    styleSelection
-	}{
-		{"defaults to terminal palette", "", "", styleSelection{terminal: true}},
-		{"NO_COLOR forces notty", "1", "", styleSelection{name: "notty"}},
-		{"WEFT_STYLE selects named", "", "dracula", styleSelection{name: "dracula"}},
-		{"NO_COLOR beats WEFT_STYLE", "1", "dracula", styleSelection{name: "notty"}},
+var styleAttrFields = []string{"Underline", "Bold", "Italic", "CrossedOut", "Faint", "Inverse", "Blink"}
+
+// TestNoColorStyleConfig pins noColorStyleConfig to the ASCII layout plus exactly the terminal style's
+// attributes: no colour anywhere, nothing but attributes added, and no code
+// highlighting.
+func TestNoColorStyleConfig(t *testing.T) {
+	ascii := reflect.ValueOf(styles.ASCIIStyleConfig)
+	term := reflect.ValueOf(terminalStyleConfig)
+	got := reflect.ValueOf(noColorStyleConfig)
+	if got.Type() != ascii.Type() {
+		t.Fatalf("noColorStyleConfig has type %v", got.Type())
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			// arrange
-			t.Setenv("NO_COLOR", tc.noColor)
-			t.Setenv("WEFT_STYLE", tc.weftS)
+	attrSet := map[string]bool{}
+	for _, n := range styleAttrFields {
+		attrSet[n] = true
+	}
+	primitive := reflect.TypeFor[ansi.StylePrimitive]()
+	sawAttr := 0
 
-			// act
-			got := selectStyle()
-
-			// assert
-			if got != tc.want {
-				t.Errorf("selectStyle() = %+v, want %+v", got, tc.want)
+	var walk func(path string, got, ascii, term reflect.Value)
+	walk = func(path string, got, ascii, term reflect.Value) {
+		switch {
+		case got.Type() == primitive:
+			for i := 0; i < primitive.NumField(); i++ {
+				name := primitive.Field(i).Name
+				g, a, tm := got.Field(i), ascii.Field(i), term.Field(i)
+				p := path + "." + name
+				switch {
+				case name == "Color" || name == "BackgroundColor":
+					if !g.IsNil() {
+						t.Errorf("%s = %v, want nil (no colour)", p, g.Elem())
+					}
+				case attrSet[name]:
+					want := a
+					if !tm.IsNil() {
+						want = tm
+						sawAttr++
+					}
+					if !reflect.DeepEqual(g.Interface(), want.Interface()) {
+						t.Errorf("%s = %v, want %v", p, derefPtr(g), derefPtr(want))
+					}
+				default:
+					if !reflect.DeepEqual(g.Interface(), a.Interface()) {
+						t.Errorf("%s = %v, want ASCII's %v", p, g.Interface(), a.Interface())
+					}
+				}
 			}
-		})
+		case got.Kind() == reflect.Struct:
+			for i := 0; i < got.NumField(); i++ {
+				walk(path+"."+got.Type().Field(i).Name, got.Field(i), ascii.Field(i), term.Field(i))
+			}
+		case got.Type() == reflect.TypeFor[*ansi.Chroma]():
+			if !got.IsNil() {
+				t.Errorf("%s is set; NO_COLOR has no code highlighting", path)
+			}
+		default:
+			if !reflect.DeepEqual(got.Interface(), ascii.Interface()) {
+				t.Errorf("%s = %v, want ASCII's %v", path, got.Interface(), ascii.Interface())
+			}
+		}
+	}
+	walk("StyleConfig", got, ascii, term)
+
+	if sawAttr == 0 {
+		t.Fatal("walk found no attribute in the terminal config; the test is not reaching StylePrimitive values")
 	}
 }
 
-// TestStyleOptionsChromaFormatterScope guards the subtle invariant that the
-// terminal16 chroma formatter is pinned only on the default terminal-palette
-// path: a WEFT_STYLE user must keep their theme's full-fidelity formatter. The
-// default path returns two options (WithStyles + WithChromaFormatter); the
-// named-style and notty paths return one (WithStandardStyle only). The options
-// are opaque funcs, so count is the observable proxy for "formatter added".
-func TestStyleOptionsChromaFormatterScope(t *testing.T) {
-	cases := []struct {
-		name    string
-		noColor string
-		weftS   string
-		want    int
-	}{
-		{"default path adds terminal16 formatter", "", "", 2},
-		{"named style: no formatter override", "", "dracula", 1},
-		{"notty: no formatter override", "1", "", 1},
+// derefPtr renders a possibly-nil pointer value readably in failures.
+func derefPtr(v reflect.Value) any {
+	if v.IsNil() {
+		return nil
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			// arrange
-			t.Setenv("NO_COLOR", tc.noColor)
-			t.Setenv("WEFT_STYLE", tc.weftS)
-
-			// act
-			got := len(styleOptions())
-
-			// assert
-			if got != tc.want {
-				t.Errorf("len(styleOptions()) = %d, want %d", got, tc.want)
-			}
-		})
-	}
+	return v.Elem().Interface()
 }

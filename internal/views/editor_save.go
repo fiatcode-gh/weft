@@ -2,7 +2,6 @@ package views
 
 import (
 	"errors"
-	"strings"
 
 	"github.com/fiatcode-gh/weft/v2/internal/edit"
 	"github.com/fiatcode-gh/weft/v2/internal/merge"
@@ -45,21 +44,16 @@ func (a *App) saveEditor(exitAfter bool) saveOutcome {
 		e.showClash(theirs, exitAfter)
 		return saveBlocked
 	}
-	r := merge.Lines(mergeInput(e.disk.Content), mergeInput(mine), mergeInput(theirs.Content))
+	r := merge.Text(e.disk.Content, mine, theirs.Content)
 	if r.Conflict {
 		e.showClash(theirs, exitAfter)
 		return saveBlocked
 	}
-	text := normalizeContent(r.Text)
-	if !loadsFaithfully(text) {
-		e.showClash(theirs, exitAfter)
-		return saveBlocked
-	}
 	// Write before touching the buffer so a failed write leaves it intact.
-	if !a.writeEditor(theirs, text) {
+	if !a.writeEditor(theirs, r.Text) {
 		return saveBlocked
 	}
-	e.applyMerge(text, r.MineLine)
+	e.applyMerge(r.Text, r.MineLine)
 	return saveMerged
 }
 
@@ -87,15 +81,4 @@ func (a *App) writeEditor(seen edit.Snapshot, content string) bool {
 		a.editor.SetError(err.Error())
 	}
 	return false
-}
-
-// mergeInput normalizes a merge input: empty, or ending in exactly one
-// newline. Unlike normalizeContent a newline-only text is empty (zero lines),
-// so an empty file and an empty buffer agree.
-func mergeInput(s string) string {
-	t := strings.TrimRight(s, "\n")
-	if t == "" {
-		return ""
-	}
-	return t + "\n"
 }

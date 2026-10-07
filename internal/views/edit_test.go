@@ -33,9 +33,7 @@ func pressShiftE(t *testing.T, a *App) tea.Cmd {
 func TestE_EntersInAppEditor(t *testing.T) {
 	a := bootApp(t)
 	a.navigate("Alpha")
-	if cmd := pressE(t, a); cmd == nil {
-		t.Errorf("e should return the textarea focus cmd; got nil")
-	}
+	pressE(t, a)
 	if a.editor == nil {
 		t.Fatalf("e should open the in-app editor")
 	}
@@ -251,9 +249,7 @@ func TestDotKey_CreatesMissingTodayJournal_ThenEditReachable(t *testing.T) {
 	}
 
 	// Now `e` is reachable. Dispatching it should open the in-app editor.
-	if cmd := pressE(t, a); cmd == nil {
-		t.Errorf("after . created journal, e should open the editor (non-nil focus cmd); got nil")
-	}
+	pressE(t, a)
 	if a.editor == nil {
 		t.Errorf("after . created journal, e should open the in-app editor")
 	}
@@ -281,35 +277,6 @@ func TestShiftE_EnsureFileStillUsed(t *testing.T) {
 	// `E` on an existing Alpha.md should return a non-nil cmd.
 	if cmd := pressShiftE(t, a); cmd == nil {
 		t.Errorf("E on existing Alpha.md should return a non-nil cmd; got nil")
-	}
-}
-
-func TestNewEditorViewFlagsSanitizerDivergence(t *testing.T) {
-	// arrange
-	cases := []struct {
-		name    string
-		content string
-		want    bool
-	}{
-		{"clean", "- a\n- b\n", false},
-		{"no trailing newline", "- a", false},
-		{"empty new page", "", false},
-		{"crlf", "a\r\nb\r\n", true},
-		{"tab indent", "code:\n\tindented\n", true},
-		{"over textarea line cap", strings.Repeat("x\n", 10001), true},
-	}
-	for _, tc := range cases {
-		for _, anchor := range []int{0, 2} {
-			t.Run(fmt.Sprintf("%s/anchor %d", tc.name, anchor), func(t *testing.T) {
-				// act
-				e := NewEditorView(nil, "P", "unused.md", tc.content, false, 80, 24, anchor)
-
-				// assert
-				if got := e.LoadDiverged(); got != tc.want {
-					t.Errorf("LoadDiverged = %v, want %v", got, tc.want)
-				}
-			})
-		}
 	}
 }
 
@@ -350,11 +317,14 @@ func assertEditorOnReadTop(t *testing.T, raw string) {
 	if a.editor == nil {
 		t.Fatal("editor did not open")
 	}
-	line := a.editor.ta.Line()
+	line := cursorPos(a.editor).Line
 	if line == 0 {
 		t.Fatal("editor opened at line 0, want the reading position")
 	}
-	if got := strings.Split(a.editor.ta.Value(), "\n")[line]; got != want {
+	if cur := a.View().Cursor; cur == nil || cur.Y != 0 {
+		t.Fatalf("cursor %+v, want it on the top screen row", cur)
+	}
+	if got := strings.Split(text(a.editor), "\n")[line]; got != want {
 		t.Fatalf("editor cursor line = %q, want %q", got, want)
 	}
 	// The window must show the reading position, not just hold the cursor:
@@ -374,18 +344,118 @@ func TestE_OpensAtReadingPositionAfterLeadingBlankLines(t *testing.T) {
 	assertEditorOnReadTop(t, "\n\n\n"+bullets(80))
 }
 
-func TestE_OnUnscrolledPageOpensAtTop(t *testing.T) {
-	quietTerm(t)
-	dir, _ := writeGraph(t, map[string]string{"pages/Long.md": "\n\n- line 0\n- line 1\n"})
-	a := New(dir, "test")
-	a.Update(a.Init()())
-	a.Update(tea.WindowSizeMsg{Width: 80, Height: 12})
-	a.navigate("Long")
+// rowText is a frame row as compared across the read and edit views: trimmed,
+// with the read view's bullet glyph mapped back to source "- " and the wiki
+// link brackets (hidden syntax there) removed.
+func rowText(row string) string {
+	row = strings.NewReplacer("[[", "", "]]", "").Replace(strings.TrimSpace(row))
+	for _, glyph := range []string{"• ", "* "} {
+		if strings.HasPrefix(row, glyph) {
+			return "- " + strings.TrimPrefix(row, glyph)
+		}
+	}
+	return row
+}
+
+// assertEditorKeepsScreenRow presses e on a booted app and checks screen-row
+// parity: the anchor row the read view showed on screen row ScreenRow is on
+// the same screen row of the editor frame, with the same text, and the cursor
+// sits on it.
+func assertEditorKeepsScreenRow(t *testing.T, a *App) Anchor {
+	t.Helper()
+	at, ok := a.page.ReadingAnchor()
+	if !ok {
+		t.Fatal("no reading anchor")
+	}
+	read := strings.Split(appText(a), "\n")
 	pressE(t, a)
 	if a.editor == nil {
 		t.Fatal("editor did not open")
 	}
-	if got := a.editor.ta.Line(); got != 0 {
-		t.Fatalf("editor line = %d, want 0", got)
+	edit := strings.Split(appText(a), "\n")
+	if want, got := rowText(read[at.ScreenRow]), rowText(edit[at.ScreenRow]); got != want {
+		t.Errorf("screen row %d: editor shows %q, read view showed %q\nread:\n%s\nedit:\n%s",
+			at.ScreenRow, got, want, strings.Join(read, "\n"), strings.Join(edit, "\n"))
+	}
+	if cur := a.View().Cursor; cur == nil || cur.Y != at.ScreenRow {
+		t.Errorf("cursor %+v, want it on screen row %d", cur, at.ScreenRow)
+	}
+	return at
+}
+
+func bootPage(t *testing.T, files map[string]string, page string, width, height int) *App {
+	t.Helper()
+	quietTerm(t)
+	dir, _ := writeGraph(t, files)
+	a := New(dir, "test")
+	a.Update(a.Init()())
+	a.Update(tea.WindowSizeMsg{Width: width, Height: height})
+	a.navigate(page)
+	return a
+}
+
+// A list-first page shows line 0 on read row 2; the editor keeps it there and
+// puts the cursor on the first content line past the file's leading blanks.
+func TestE_OnUnscrolledPageKeepsScreenRow(t *testing.T) {
+	a := bootPage(t, map[string]string{"pages/Long.md": "\n\n- line 0\n- line 1\n"}, "Long", 80, 12)
+	at := assertEditorKeepsScreenRow(t, a)
+	if at != (Anchor{0, 0, 2}) {
+		t.Errorf("anchor = %+v, want {0 0 2}", at)
+	}
+	if got := cursorPos(a.editor).Line; got != 2 {
+		t.Fatalf("editor line = %d, want 2 (the first content line)", got)
+	}
+}
+
+func TestE_ScrolledIntoWrappedBulletKeepsScreenRow(t *testing.T) {
+	var b strings.Builder
+	for i := range 30 {
+		fmt.Fprintf(&b, "- %d %s\n", i, strings.Repeat("word ", 18))
+	}
+	a := bootPage(t, map[string]string{"pages/Long.md": b.String()}, "Long", 40, 12)
+	// Scroll until the top row is a continuation row of a wrapped bullet.
+	for range 25 {
+		a.page.LineDown()
+	}
+	if strings.HasPrefix(rowText(strings.Split(appText(a), "\n")[0]), "- ") {
+		a.page.LineDown()
+	}
+	at := assertEditorKeepsScreenRow(t, a)
+	if at.RowInLine == 0 {
+		t.Errorf("anchor %+v: want a continuation row of the wrapped bullet", at)
+	}
+}
+
+func TestE_VisibleLinkCursorKeepsScreenRow(t *testing.T) {
+	a := bootPage(t, map[string]string{
+		"pages/A.md": "- a\n- b\n- c\n- see [[B]]\n- d\n",
+		"pages/B.md": "- b\n",
+	}, "A", 80, 12)
+	a.page.CycleLink(+1)
+	at := assertEditorKeepsScreenRow(t, a)
+	if at.Line != 3 {
+		t.Errorf("anchor line = %d, want the link's line 3", at.Line)
+	}
+}
+
+func TestE_LeadingBlankLinesKeepScreenRow(t *testing.T) {
+	a := bootPage(t, map[string]string{"pages/Long.md": "\n\n\n" + bullets(80)}, "Long", 80, 12)
+	for range 30 {
+		a.page.LineDown()
+	}
+	at := assertEditorKeepsScreenRow(t, a)
+	if got := cursorPos(a.editor).Line; got != at.Line+3 {
+		t.Errorf("editor line = %d, want body line %d plus 3 leading blank lines", got, at.Line)
+	}
+}
+
+func TestE_LogbookAboveTopRowKeepsScreenRow(t *testing.T) {
+	a := bootPage(t, map[string]string{
+		"pages/A.md": anchorLongPage("- head\n  :LOGBOOK:\n  CLOCK: x\n  :END:\n"),
+	}, "A", 80, 10)
+	scrollDown(a.page, 20)
+	at := assertEditorKeepsScreenRow(t, a)
+	if at.ScreenRow != 0 {
+		t.Errorf("anchor %+v, want the top row", at)
 	}
 }
