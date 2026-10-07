@@ -2,19 +2,20 @@ package views
 
 import (
 	"strings"
+	"unicode"
 
-	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
+	"github.com/fiatcode-gh/weft/v2/internal/buffer"
 	"github.com/fiatcode-gh/weft/v2/internal/edit"
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/render"
 )
 
 // clashPrompt is the state behind the confirmingClash mode.
 type clashPrompt struct {
 	theirs     edit.Snapshot
-	reloadable bool // theirs exists and loads into the buffer unchanged
+	reloadable bool // theirs exists and can replace the buffer
 	exitAfter  bool // the prompt came from save-and-exit
 }
 
@@ -26,26 +27,24 @@ const (
 	confirmingClash
 )
 
-// editorInset is the left margin (in columns) applied to the whole editor
-// view so its text occupies the same horizontal box as the Glamour-rendered
-// read view, whose document margin is 2 columns. Without this,
-// switching from read to edit jumps the text flush-left.
-const editorInset = 2
+// register is weft's copy register: what the last copy or cut put in it and
+// whether it was taken as whole lines. The App owns one so it outlives editor
+// sessions; an editor opened without one keeps a private register.
+type register struct {
+	text     string
+	linewise bool
+}
 
-// editorTopMargin is the number of blank rows above the editor's text, matching
-// the leading blank line Glamour emits at the top of the read view. Without it,
-// the first line sits flush at row 0 and jumps up by a row on entering the editor.
-const editorTopMargin = 1
-
-// EditorView is weft's in-app raw-markdown editor: a full-screen mode
-// (not a centered overlay) that wraps bubbles/textarea. It owns the
-// edit/save/exit state machine; the App performs the actual disk write so
-// internal/edit stays the only writer.
+// EditorView is weft's in-app raw-markdown editor: a full-screen mode (not a
+// centered overlay) that edits a buffer.Buffer and draws its source lines
+// with the read view's styles. It owns the edit/save/exit state machine; the
+// App performs the actual disk write so internal/edit stays the only writer.
 type EditorView struct {
-	ta            textarea.Model
+	buf           *buffer.Buffer
+	reg           *register
 	path          string        // target file (may not exist yet)
 	pageName      string        // logical page name, for the status line
-	baseline      string        // content as last loaded/saved
+	baseline      string        // content as last loaded/saved, exactly
 	disk          edit.Snapshot // the file as weft last read or wrote it: the base for the save guard
 	saved         bool          // at least one successful save this session
 	mode          editorMode
@@ -54,7 +53,19 @@ type EditorView struct {
 	clash         clashPrompt
 	width, height int
 	completer     *linkCompleter
-	loadDiverged  bool // priming the textarea altered content — see LoadDiverged
+
+	theme    render.Theme
+	geo      render.Geometry
+	scanner  *render.Scanner
+	painter  *render.Painter
+	cache    map[int]*lineCache
+	top      viewPos // the display row at screen row 0
+	goalX    int     // remembered screen column for vertical moves
+	goalOK   bool    // goalX is current; cleared by every non-vertical key
+	dirtyVer int     // buffer version dirtyVal was computed at
+	dirtyVal bool
+	dirtyOK  bool
+	stats    struct{ wrapped, painted int } // work counters for the perf tests
 }
 
 // EditorResult is what EditorView.Update reports to the App.
@@ -65,172 +76,65 @@ type EditorResult struct {
 }
 
 // NewEditorView builds an editor for page `name` targeting `path`, primed
-// with `content` (empty for a not-yet-created page). isNew seeds disk.Exists:
-// whether the file existed at open time. idx is the graph index used for link
-// completion; pass nil to disable completion (e.g. in tests that don't
-// exercise it). anchorLine is the 0-based line of `content` to open the
-// cursor on, clamped into the buffer.
-func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, width, height, anchorLine int) *EditorView {
-	ta := newEditorTextarea()
-	ta.SetValue(content)
+// with `content` (empty for a not-yet-created page), exactly as it is on
+// disk. isNew seeds disk.Exists: whether the file existed at open time. idx is
+// the graph index used for link completion; pass nil to disable completion
+// (e.g. in tests that don't exercise it). at says where the cursor opens: the
+// row RowInLine of line at.Line (clamped into the buffer) is placed on screen
+// row at.ScreenRow. reg is the App's copy register; nil gives the editor a
+// private one.
+func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, width, height int, at Anchor, reg *register) *EditorView {
+	if reg == nil {
+		reg = &register{}
+	}
+	theme, _ := render.CurrentTheme() // on error: the notty theme it returned
 	e := &EditorView{
-		ta:        ta,
+		buf:       buffer.New(content),
+		reg:       reg,
 		path:      path,
 		pageName:  name,
 		baseline:  content,
 		disk:      edit.Snapshot{Content: content, Exists: !isNew},
-		width:     width,
-		height:    height,
 		completer: newLinkCompleter(idx),
+		theme:     theme,
+		scanner:   render.NewScanner(),
+		painter:   render.NewPainter(theme),
+		cache:     map[int]*lineCache{},
 	}
-	e.SetSize(width, height)
-	_ = e.ta.Focus() // blink cmd not needed here; the App calls Focus() again when it mounts the editor
-	// SetValue leaves the cursor at the end of the buffer. Move it to the
-	// anchor line, column 0. Clamped, so a stale anchor (file changed since the read view rendered) degrades instead of panicking.
-	anchorLine = clampInt(anchorLine, 0, e.ta.LineCount()-1)
-	e.moveCursorTo(anchorLine, 0)
-	if anchorLine > 0 {
-		e.scrollAnchorToTop(anchorLine)
-	}
-	e.baseline = e.Content()  // normalize so open-time dirty() is accurate
+	e.width, e.height = width, height
+	e.geo = render.NewGeometry(theme, width)
+	e.completer.maxVisible = clampInt(height-6, 1, maxCompleterRows)
+	e.place(at)
 	e.refreshCompleter(false) // opening a file must not pop the strip
-	// The textarea's input sanitizer can silently alter content on load —
-	// CRLF becomes doubled newlines, tabs become spaces, invalid UTF-8 is
-	// dropped, and a hard 10000-line cap truncates. baseline was captured
-	// post-mutation, so dirty() can't warn; saving would corrupt the file.
-	// Record the divergence so the App can refuse in-app editing.
-	e.loadDiverged = e.Content() != normalizeContent(content)
 	return e
 }
 
-// newEditorTextarea is the textarea configuration shared by the live editor
-// and loadsFaithfully, so the probe sanitizes exactly as the editor does.
-func newEditorTextarea() textarea.Model {
-	ta := textarea.New()
-	ta.CharLimit = 0 // no length cap
-	ta.MaxHeight = 0 // the default 99 blocks Enter once the buffer reaches 99 lines (a separate hard 10000-line insert cap remains — see loadDiverged)
-	ta.ShowLineNumbers = false
-	ta.Prompt = ""
-	// The empty prompt is still rendered through the prompt STYLE, which by
-	// default carries a foreground color — emitting an ANSI escape at the start
-	// of every row. tintView treats any row containing an escape as the cursor
-	// row and leaves it untinted, so a styled empty prompt would suppress all
-	// tinting. Neutralize the prompt style so non-cursor rows stay escape-free.
-	styles := textarea.DefaultDarkStyles()
-	styles.Focused.Prompt = lipgloss.NewStyle()
-	styles.Blurred.Prompt = lipgloss.NewStyle()
-	styles.Cursor.Color = nil // plain reverse-video cursor, as in Bubbles v1
-	ta.SetStyles(styles)
-	ta.KeyMap = editorKeyMap()
-	return ta
-}
-
-// editorKeyMap is the Bubbles v2 textarea keymap cut back to the v1
-// bindings: v2's selection, select-all, copy, ctrl+arrow word moves,
-// ctrl+backspace/delete and its own paging stay off until editor-core.
-func editorKeyMap() textarea.KeyMap {
-	km := textarea.DefaultKeyMap()
-	km.WordForward.SetKeys("alt+right", "alt+f")
-	km.WordBackward.SetKeys("alt+left", "alt+b")
-	km.DeleteWordBackward.SetKeys("alt+backspace", "ctrl+w")
-	km.DeleteWordForward.SetKeys("alt+delete", "alt+d")
-	km.PageUp.SetEnabled(false)
-	km.PageDown.SetEnabled(false)
-	km.SelectCharacterForward.SetEnabled(false)
-	km.SelectCharacterBackward.SetEnabled(false)
-	km.SelectWordForward.SetEnabled(false)
-	km.SelectWordBackward.SetEnabled(false)
-	km.SelectLineUp.SetEnabled(false)
-	km.SelectLineDown.SetEnabled(false)
-	km.SelectAll.SetEnabled(false)
-	km.CopySelection.SetEnabled(false)
-	return km
-}
-
-// Paste inserts bracketed-paste text while editing. The clash and exit
-// prompts ignore it, as they ignored a pasted key under Bubble Tea v1.
+// Paste inserts bracketed-paste text while editing as one undo group: line
+// breaks (CR, CRLF, LF) become the buffer's, other control characters are
+// dropped. The clash and exit prompts ignore it.
 func (e *EditorView) Paste(msg tea.PasteMsg) tea.Cmd {
 	e.notice = ""
 	if e.mode != editing {
 		return nil
 	}
-	return e.forward(msg)
+	e.buf.Break()
+	e.buf.Insert(cleanPaste(msg.Content))
+	e.goalOK = false
+	e.afterKey(true)
+	return nil
 }
 
-// forward hands msg to the textarea and refreshes completion; only a
-// message that changed the buffer may open the strip.
-func (e *EditorView) forward(msg tea.Msg) tea.Cmd {
-	prev := e.ta.Value()
-	var cmd tea.Cmd
-	e.ta, cmd = e.ta.Update(msg)
-	e.refreshCompleter(e.ta.Value() != prev)
-	return cmd
-}
-
-// moveCursorTo puts the cursor on logical line row (clamped) at column col
-// (clamped) in one pass over the buffer. Bubbles v2 repositions the viewport
-// on every CursorUp/CursorDown at a cost that grows with the cursor's row, so
-// walking the cursor line by line is quadratic in the buffer length. Instead
-// the buffer is rebuilt from row down, with the lines above it inserted at
-// the top: InsertString leaves the cursor at the start of row. The text is
-// the textarea's own (already sanitized and within the line cap), so the
-// rebuild leaves the content unchanged. SetValue resets the viewport to the
-// top; callers sync it.
-func (e *EditorView) moveCursorTo(row, col int) {
-	lines := strings.Split(e.ta.Value(), "\n")
-	row = clampInt(row, 0, len(lines)-1)
-	e.ta.SetValue(strings.Join(lines[row:], "\n"))
-	e.ta.MoveToBegin()
-	if row > 0 {
-		e.ta.InsertString(strings.Join(lines[:row], "\n") + "\n")
-	}
-	e.ta.SetCursorColumn(col)
-}
-
-// textWidth is the width the textarea is laid out at: the editor width less
-// the left inset.
-func (e *EditorView) textWidth() int { return max(1, e.width-editorInset) }
-
-// scrollAnchorToTop leaves the cursor at column 0 of anchorLine with that
-// line's first visual row at the top of the textarea window (or as high as
-// the buffer's end allows). The textarea only ever scrolls minimally to keep
-// the cursor visible, so left alone the anchor would park on the bottom row.
-// A probe textarea holding just the window's lines, at the same width, finds
-// how far down the cursor can park (a window's height of visual rows, or the
-// buffer's end). The real cursor goes there and the viewport syncs once; then
-// PageUp snaps the cursor to the window's top row in one move, or, when the
-// buffer ends inside the window, a few CursorUps walk back to the anchor.
-func (e *EditorView) scrollAnchorToTop(anchorLine int) {
-	h := e.ta.Height()
-	lines := strings.Split(e.ta.Value(), "\n")
-	probe := newEditorTextarea()
-	probe.SetWidth(e.textWidth())
-	probe.SetValue(strings.Join(lines[anchorLine:min(len(lines), anchorLine+h)], "\n"))
-	probe.MoveToBegin()
-	steps := 0
-	for range h - 1 {
-		line, row := probe.Line(), probe.LineInfo().RowOffset
-		probe.CursorDown()
-		if probe.Line() == line && probe.LineInfo().RowOffset == row {
-			break // end of buffer: no further visual row to move to
+// cleanPaste normalises pasted text: CRLF and CR become "\n", and every other
+// C0 control character and DEL is dropped (tabs stay).
+func cleanPaste(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	return strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' || (!unicode.IsControl(r)) {
+			return r
 		}
-		steps++
-	}
-	e.moveCursorTo(anchorLine+probe.Line(), probe.Column())
-	e.syncViewport()
-	if steps > 0 && steps == h-1 {
-		// The anchor's first row is now the window's top row: snap to it in one move.
-		// (A one-row window has no rows to climb: the cursor is on the top row
-		// already, and PageUp from there would move a whole page up.)
-		e.ta.PageUp()
-	} else {
-		// The buffer ends less than a window below the anchor (or the window is
-		// one row): at most h-2 moves.
-		for e.ta.Line() > anchorLine {
-			e.ta.CursorUp()
-		}
-	}
-	e.ta.CursorStart()
+		return -1
+	}, s)
 }
 
 // SetError records a message (e.g. a failed save) to show in the status
@@ -239,38 +143,32 @@ func (e *EditorView) scrollAnchorToTop(anchorLine int) {
 // app status bar, so a save error routed through the app hint is invisible.
 func (e *EditorView) SetError(msg string) { e.errMsg = msg }
 
-// Focus focuses the textarea and returns its (cursor-blink) command.
-func (e *EditorView) Focus() tea.Cmd { return e.ta.Focus() }
-
-// SetSize resizes the textarea, reserving rows for the status line and the
+// SetSize resizes the editor, reserving rows for the status line and the
 // active completion strip.
 func (e *EditorView) SetSize(w, h int) {
+	if w != e.width {
+		e.geo = render.NewGeometry(e.theme, w)
+		clear(e.cache)
+	}
 	e.width, e.height = w, h
-	e.layout()
+	e.completer.maxVisible = clampInt(h-6, 1, maxCompleterRows)
+	e.ensureVisible()
 }
 
 // dirty reports whether the buffer differs from the last loaded/saved
-// content. Both sides are compared in normalized form (Content()) so a
-// buffer that lacks a trailing newline doesn't read as dirty right after
-// a save, which writes the normalized form.
-func (e *EditorView) dirty() bool { return e.Content() != e.baseline }
+// content, byte for byte. The comparison is cached per buffer version.
+func (e *EditorView) dirty() bool {
+	if v := e.buf.Version(); !e.dirtyOK || v != e.dirtyVer {
+		e.dirtyVer, e.dirtyVal, e.dirtyOK = v, !e.buf.EqualString(e.baseline), true
+	}
+	return e.dirtyVal
+}
 
-// cursorLineSplit returns the current logical row's text split at the cursor.
-// The textarea exposes no rune-offset getter, but Line() gives the row and
-// LineInfo().StartColumn+ColumnOffset reconstructs the absolute rune column.
-func (e *EditorView) cursorLineSplit() (before, after string) {
-	lines := strings.Split(e.ta.Value(), "\n")
-	row := e.ta.Line()
-	if row < 0 || row >= len(lines) {
-		return "", ""
-	}
-	li := e.ta.LineInfo()
-	col := li.StartColumn + li.ColumnOffset
-	runes := []rune(lines[row])
-	if col > len(runes) {
-		col = len(runes)
-	}
-	return string(runes[:col]), string(runes[col:])
+// cursorSplit returns the cursor line's text before and after the cursor.
+func (e *EditorView) cursorSplit() (before, after string) {
+	c := e.buf.Cursor()
+	line := e.buf.Line(c.Line)
+	return line[:c.Col], line[c.Col:]
 }
 
 // refreshCompleter re-derives completion state from the cursor position and
@@ -278,118 +176,61 @@ func (e *EditorView) cursorLineSplit() (before, after string) {
 // that triggered this refresh edited the buffer; only an edit may open a closed
 // strip (see linkCompleter.refresh).
 func (e *EditorView) refreshCompleter(allowOpen bool) {
-	before, after := e.cursorLineSplit()
+	before, after := e.cursorSplit()
 	e.completer.refresh(before, after, allowOpen)
-	e.layout()
+	e.ensureVisible()
 }
 
-// acceptCompletion splices the selected candidate into the buffer. For an
-// existing page it deletes the typed partial (via backspaces, so the
-// textarea's own cursor tracking stays correct) and inserts "Name]]". For the
-// create row it keeps the typed name and only closes the link with "]]".
+// acceptCompletion splices the selected candidate into the buffer as one
+// edit. For an existing page it replaces the typed partial with "Name]]". For
+// the create row it keeps the typed name and only closes the link with "]]".
 func (e *EditorView) acceptCompletion() {
 	cand, ok := e.completer.selected()
 	if !ok {
 		return
 	}
+	cur := e.buf.Cursor()
 	if cand.create {
-		e.ta.InsertString("]]")
+		e.buf.ReplaceRange(buffer.Range{Start: cur, End: cur}, "]]")
 	} else {
-		for range []rune(e.completer.partial) {
-			e.ta, _ = e.ta.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
-		}
-		e.ta.InsertString(cand.name + "]]")
+		start := buffer.Pos{Line: cur.Line, Col: cur.Col - len(e.completer.partial)}
+		e.buf.ReplaceRange(buffer.Range{Start: start, End: cur}, cand.name+"]]")
 	}
-	e.refreshCompleter(false) // accepting inserts "]]" which closes the link
+	e.goalOK = false
+	e.afterKey(false)
 }
 
-// replaceCurrentLine rewrites the logical line the cursor is on: it deletes the
-// line's existing runes (backward from line end, exactly its rune length so the
-// trailing newline is untouched), inserts newText, then places the cursor at
-// column newCol. Used for empty-bullet termination and marker cycling.
-func (e *EditorView) replaceCurrentLine(newText string, newCol int) {
-	before, after := e.cursorLineSplit()
-	oldLen := len([]rune(before + after))
-	e.ta.CursorEnd()
-	for i := 0; i < oldLen; i++ {
-		e.ta, _ = e.ta.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
-	}
-	e.ta.InsertString(newText)
-	e.ta.SetCursorColumn(newCol)
-	e.syncViewport()
+// afterKey brings the view up to date after a key changed the buffer or the
+// cursor: the cursor stays on screen and completion follows it. edited
+// reports whether the key changed the text; only an edit may open the strip.
+func (e *EditorView) afterKey(edited bool) {
+	e.refreshCompleter(edited)
 }
 
-// syncViewport repositions the textarea viewport onto the cursor after an
-// intercept mutates the buffer without routing a message through ta.Update.
-// InsertString and SetCursorColumn never reposition; only Update, SetHeight and
-// cursor moves do. repositionMsg is the content-neutral message layout()
-// already uses for the same purpose.
-func (e *EditorView) syncViewport() { e.ta, _ = e.ta.Update(repositionMsg{}) }
-
-// repositionMsg is a content-neutral message handed to the textarea purely to
-// trigger its viewport reposition. The textarea ignores message types it
-// doesn't recognize, so sending this changes no buffer state; it just
-// re-centers the viewport on the cursor.
-type repositionMsg struct{}
-
-// layout sizes the textarea, reserving one row for the status line plus the
-// completion strip's rows while it is active.
-func (e *EditorView) layout() {
-	e.ta.SetWidth(e.textWidth())
-	// Cap the strip so it can't push the textarea/status off a short terminal:
-	// reserve the box chrome (4 rows), the status line (1), and ≥1 textarea row.
-	e.completer.maxVisible = clampInt(e.height-6-editorTopMargin, 1, maxCompleterRows)
-	h := e.height - 1 - editorTopMargin - e.completer.rows()
-	e.ta.SetHeight(max(1, h))
-	// Bubbles v2's SetWidth does not reposition the viewport, and the
-	// viewport still holds the old width's wrapped content, which SetHeight's
-	// own reposition clamps against. After a resize that wraps more lines
-	// the cursor line can sit below the window until the next keystroke.
-	// Poke Update with a content-neutral message to render at the new width
-	// and reposition; it's a no-op when the cursor is already visible
-	// (TestEditorResizeNarrowKeepsCursorVisible).
-	e.ta, _ = e.ta.Update(repositionMsg{})
-}
-
-// Content is the buffer normalized to end in exactly one newline.
-func (e *EditorView) Content() string {
-	return normalizeContent(e.ta.Value())
-}
-
-// normalizeContent makes s end in exactly one newline.
-func normalizeContent(s string) string {
-	return strings.TrimRight(s, "\n") + "\n"
-}
-
-// loadsFaithfully reports whether the editor's textarea holds s unaltered
-// (modulo trailing newlines): no tabs, CRLF, invalid UTF-8 or over-long text.
-func loadsFaithfully(s string) bool {
-	ta := newEditorTextarea()
-	ta.SetValue(s)
-	return normalizeContent(ta.Value()) == normalizeContent(s)
-}
-
-// LoadDiverged reports whether priming the textarea altered the loaded
-// content; a diverged buffer must never be written back over the file.
-func (e *EditorView) LoadDiverged() bool { return e.loadDiverged }
+// Content is the buffer's exact text.
+func (e *EditorView) Content() string { return e.buf.String() }
 
 // MarkSaved records a successful save: the given content becomes the new
 // clean baseline and the file now exists.
 func (e *EditorView) MarkSaved(content string) {
 	e.baseline = content
+	e.dirtyOK = false
 	e.disk = edit.Snapshot{Content: content, Exists: true}
 	e.saved = true
 	e.errMsg = ""
 }
 
-// replaceBuffer swaps the whole buffer for content and puts the cursor on
-// logical line `line` (clamped by the textarea) at absolute column col. It is
+// replaceBuffer swaps the whole buffer for content as one undo step and puts
+// the cursor at (line, col), clamped. The cursor keeps its screen row. It is
 // the shared buffer-swap for merge-on-save and reload; it does not touch
 // baseline or disk.
 func (e *EditorView) replaceBuffer(content string, line, col int) {
-	e.ta.SetValue(content)
-	e.moveCursorTo(line, col)
-	e.syncViewport()
+	sr := e.cursorScreenRow()
+	e.buf.Break()
+	e.buf.ReplaceAll(content)
+	e.buf.MoveTo(buffer.Pos{Line: line, Col: col}, false)
+	e.goalOK = false
+	e.scrollCursorTo(sr)
 	e.refreshCompleter(false)
 }
 
@@ -397,48 +238,27 @@ func (e *EditorView) replaceBuffer(content string, line, col int) {
 // cursor follows its mine-line through the merge, and the merged text becomes
 // the saved baseline.
 func (e *EditorView) applyMerge(text string, mineLine []int) {
-	row := clampInt(e.ta.Line(), 0, len(mineLine)-1)
-	_, col := e.cursorRowCol()
-	e.replaceBuffer(text, mineLine[row], col)
+	cur := e.buf.Cursor()
+	row := clampInt(cur.Line, 0, len(mineLine)-1)
+	e.replaceBuffer(text, mineLine[row], cur.Col)
 	e.MarkSaved(text)
 	e.notice = mergedNotice
-}
-
-// cursorRowCol returns the cursor's buffer row and absolute column.
-func (e *EditorView) cursorRowCol() (row, col int) {
-	li := e.ta.LineInfo()
-	return e.ta.Line(), li.StartColumn + li.ColumnOffset
 }
 
 // showClash opens the clash prompt for a disk state that cannot be merged.
 func (e *EditorView) showClash(theirs edit.Snapshot, exitAfter bool) {
 	e.clash = clashPrompt{
 		theirs:     theirs,
-		reloadable: theirs.Exists && loadsFaithfully(theirs.Content),
+		reloadable: theirs.Exists,
 		exitAfter:  exitAfter,
 	}
 	e.errMsg = "" // the clash prompt supersedes any earlier save error
 	e.mode = confirmingClash
 	e.completer.dismiss() // the prompt owns the keys
-	e.layout()
-}
-
-func (e *EditorView) View() string {
-	v := tintView(e.ta.View())
-	if strip := e.completer.View(e.textWidth()); strip != "" {
-		v += "\n" + strip
-	}
-	v += "\n" + e.statusLine()
-	// A leading blank row matches the read view's top margin (see editorTopMargin).
-	return strings.Repeat("\n", editorTopMargin) + indentBlock(v, editorInset)
+	e.ensureVisible()
 }
 
 // Update handles one key and reports whether the App should save/exit.
-// In editing mode every key except the intercepts (ctrl+s, esc/ctrl+c,
-// pgup/pgdown, the markdown helpers enter/ctrl+t/tab/shift+tab, and the
-// completion-strip keys while it is open) is forwarded to the textarea. The
-// returned tea.Cmd is the textarea's own (cursor blink) command, which the
-// App must propagate.
 func (e *EditorView) Update(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
 	e.notice = ""
 	if e.mode == confirmingClash {
@@ -448,9 +268,10 @@ func (e *EditorView) Update(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
 			return EditorResult{Overwrite: true, Exit: e.clash.exitAfter}, nil
 		case "r":
 			if e.clash.reloadable {
-				row, col := e.cursorRowCol()
-				e.replaceBuffer(e.clash.theirs.Content, row, col)
-				e.baseline = e.Content()
+				cur := e.buf.Cursor()
+				e.replaceBuffer(e.clash.theirs.Content, cur.Line, cur.Col)
+				e.baseline = e.clash.theirs.Content
+				e.dirtyOK = false
 				e.disk = e.clash.theirs
 				e.errMsg = ""
 				e.mode = editing
@@ -478,8 +299,9 @@ func (e *EditorView) Update(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
 		return EditorResult{}, nil // ignore everything else
 	}
 
+	key := msg.String()
 	if e.completer.active {
-		switch msg.String() {
+		switch key {
 		case keyUp:
 			e.completer.moveUp()
 			return EditorResult{}, nil
@@ -487,93 +309,117 @@ func (e *EditorView) Update(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
 			e.completer.moveDown()
 			return EditorResult{}, nil
 		case keyEnter, "tab":
+			e.buf.Break()
 			e.acceptCompletion()
 			return EditorResult{}, nil
-		case keyEsc, "ctrl+c":
+		case keyEsc:
 			e.completer.dismiss()
-			e.layout()
+			e.ensureVisible()
 			return EditorResult{}, nil
 		}
 	}
 
-	switch msg.String() {
+	switch key {
 	case "ctrl+s":
+		e.buf.Break()
 		return EditorResult{Save: true}, nil
-	case keyEsc, "ctrl+c":
+	case keyEsc:
+		e.buf.Break()
 		if e.dirty() {
 			e.mode = confirmingExit
 			return EditorResult{}, nil
 		}
 		return EditorResult{Exit: true}, nil
-	case "pgup":
-		e.scrollPage(-1)
-		e.refreshCompleter(false) // scrolling is navigation, not an edit
-		return EditorResult{}, nil
-	case "pgdown":
-		e.scrollPage(+1)
-		e.refreshCompleter(false) // scrolling is navigation, not an edit
-		return EditorResult{}, nil
-	case "enter":
-		before, after := e.cursorLineSplit()
-		line := before + after
-		if isEmptyBullet(line) {
-			e.replaceCurrentLine("", 0)
-			e.refreshCompleter(false)
-			return EditorResult{}, nil
-		}
-		if prefix, ok := bulletPrefix(line); ok {
-			e.ta.InsertString("\n" + prefix)
-			e.syncViewport()
-			e.refreshCompleter(false)
-			return EditorResult{}, nil
-		}
-		// Non-bullet: do not return — fall past the switch so the textarea
-		// inserts a normal newline below.
-	case "ctrl+t":
-		before, after := e.cursorLineSplit()
-		oldCol := len([]rune(before))
-		if newLine, newCol, ok := cycleMarkerLine(before+after, oldCol); ok {
-			e.replaceCurrentLine(newLine, newCol)
-			e.refreshCompleter(false)
-		}
-		return EditorResult{}, nil
-	case "tab":
-		before, after := e.cursorLineSplit()
-		oldCol := len([]rune(before))
-		e.replaceCurrentLine(indentLine(before+after), oldCol+2)
-		e.refreshCompleter(false)
-		return EditorResult{}, nil
-	case "shift+tab":
-		before, after := e.cursorLineSplit()
-		oldCol := len([]rune(before))
-		newLine, removed := dedentLine(before + after)
-		newCol := oldCol - removed
-		if newCol < 0 {
-			newCol = 0
-		}
-		e.replaceCurrentLine(newLine, newCol)
-		e.refreshCompleter(false)
-		return EditorResult{}, nil
 	}
 
-	return EditorResult{}, e.forward(msg)
+	before := e.buf.Version()
+	e.edit(key, msg.Text)
+	e.afterKey(e.buf.Version() != before)
+	return EditorResult{}, nil
 }
 
-// scrollPage moves the cursor by one viewport-height of visual rows (h-1, at
-// least one) with the textarea's own CursorDown/CursorUp. weft pages that way
-// so paging moves exactly as before, not through the textarea's PageUp/PageDown.
-// The moves are made directly, not as key messages: Bubbles v2 renders the
-// whole buffer on every Update, which made one page cost h full renders. A
-// direct move still repositions the viewport on its own, and View renders the
-// buffer itself, so nothing needs syncing afterwards.
-func (e *EditorView) scrollPage(dir int) {
-	for range max(1, e.ta.Height()-1) {
-		if dir < 0 {
-			e.ta.CursorUp()
-		} else {
-			e.ta.CursorDown()
-		}
+// edit applies one editing-mode key to the buffer. Keys that are not typing,
+// backspace or delete first close the undo group in progress; unbound chords
+// change nothing.
+func (e *EditorView) edit(key, text string) {
+	b := e.buf
+	switch key {
+	case keyBackspace, "ctrl+h":
+		b.Backspace()
+		e.goalOK = false
+		return
+	case "delete", "ctrl+d":
+		b.Delete()
+		e.goalOK = false
+		return
 	}
+	if text != "" && !strings.ContainsFunc(text, unicode.IsControl) && key != keyEnter && key != "tab" {
+		b.Type(text)
+		e.goalOK = false
+		return
+	}
+	b.Break()
+	cur := b.Cursor()
+	horizontal := func(p buffer.Pos) { b.MoveTo(p, false); e.goalOK = false }
+	switch key {
+	case keyEnter:
+		b.Newline()
+	case "left", "ctrl+b":
+		horizontal(b.Left(cur))
+	case "right":
+		horizontal(b.Right(cur))
+	case keyUp, "ctrl+p":
+		e.moveRows(-1, 1)
+		return
+	case keyDown, "ctrl+n":
+		e.moveRows(+1, 1)
+		return
+	case "pgup":
+		e.moveRows(-1, max(1, e.textHeight()-1))
+		return
+	case "pgdown":
+		e.moveRows(+1, max(1, e.textHeight()-1))
+		return
+	case "home":
+		horizontal(b.LineStart(cur))
+	case "end", "ctrl+e":
+		horizontal(b.LineEnd(cur))
+	case "alt+left", "alt+b", "ctrl+left":
+		horizontal(b.WordLeft(cur))
+	case "alt+right", "alt+f", "ctrl+right":
+		horizontal(b.WordRight(cur))
+	case "ctrl+home", "alt+<":
+		horizontal(buffer.Pos{})
+	case "ctrl+end", "alt+>":
+		horizontal(b.End())
+	case "alt+backspace", "ctrl+w":
+		b.DeleteWordBackward()
+	case "alt+delete", "alt+d":
+		b.DeleteWordForward()
+	case "ctrl+k":
+		b.DeleteToLineEnd()
+	case "ctrl+u":
+		b.DeleteToLineStart()
+	case "alt+c":
+		b.CaseWord(buffer.CaseCapitalize)
+	case "alt+l":
+		b.CaseWord(buffer.CaseLower)
+	case "alt+u":
+		b.CaseWord(buffer.CaseUpper)
+	case "ctrl+t":
+		b.CycleMarker()
+	case "tab":
+		b.Indent()
+	case "shift+tab":
+		b.Outdent()
+	case "alt+up":
+		b.MoveBlock(-1)
+	case "alt+down":
+		b.MoveBlock(+1)
+	default:
+		return // unbound chord: the group is closed, nothing else changes
+	}
+	e.goalOK = false
 }
 
 func (e *EditorView) statusLine() string {
@@ -588,8 +434,6 @@ func (e *EditorView) statusLine() string {
 		switch {
 		case !e.clash.theirs.Exists:
 			reason = "Deleted on disk."
-		case !e.clash.reloadable:
-			reason = "Changed on disk (can't load it here)."
 		}
 		s := styleFaint.Render(reason) + "  " +
 			styleTitle.Render("[o]") + styleFaint.Render("verwrite · ")

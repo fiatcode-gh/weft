@@ -71,6 +71,8 @@ type App struct {
 	// editor is the full-screen in-app editor, or nil when not editing.
 	// When non-nil it owns all keys and the whole screen.
 	editor *EditorView
+	// clip is the copy register the editor shares across sessions.
+	clip register
 
 	// active is the overlay layered over the page, or nil when the page has
 	// focus. Set when an open-overlay key is pressed; cleared by terminal outcomes.
@@ -438,16 +440,13 @@ func (a *App) enterEditor() tea.Cmd {
 		return a.setHint("cannot read: " + err.Error())
 	}
 	content, isNew := snap.Content, !snap.Exists
-	anchor := 0
-	if line, ok := a.page.AnchorSourceLine(); ok {
-		anchor = line + leadingTrimmedLines(content)
+	at, ok := a.page.ReadingAnchor()
+	if !ok {
+		at = Anchor{0, 0, 1}
 	}
-	e := NewEditorView(a.idx, name, path, content, isNew, a.width, a.height, anchor)
-	if e.LoadDiverged() {
-		return a.setHint("in-app editor would alter this file (CRLF, tabs, or >10000 lines) — press E to edit externally")
-	}
-	a.editor = e
-	return a.editor.Focus()
+	at.Line += leadingTrimmedLines(content)
+	a.editor = NewEditorView(a.idx, name, path, content, isNew, a.width, a.height, at, &a.clip)
+	return nil
 }
 
 // unlinkedRefs finds bare-text mentions of `name` elsewhere in the graph that
@@ -621,7 +620,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 	case tea.PasteMsg:
 		// Bubble Tea v1 delivered a bracketed paste as one key whose String()
-		// ("[text]") matched no binding: only the editor's textarea took it.
+		// ("[text]") matched no binding: only the editor took it.
 		a.hint = ""
 		if a.page != nil && a.editor != nil {
 			return a, a.editor.Paste(m)
@@ -644,16 +643,16 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		if a.editor != nil {
-			res, taCmd := a.editor.Update(m)
-			cmds := []tea.Cmd{taCmd}
+			res, _ := a.editor.Update(m)
+			var cmds []tea.Cmd
 			outcome := saveWritten // meaningful only when res.Save
 			if res.Save {
 				if outcome = a.saveEditor(res.Exit); outcome == saveBlocked {
-					return a, taCmd // stays in the editor: clash prompt or error shown
+					return a, nil // stays in the editor: clash prompt or error shown
 				}
 			}
 			if res.Overwrite && !a.overwriteEditor() {
-				return a, taCmd
+				return a, nil
 			}
 			if res.Exit {
 				saved := a.editor.saved
@@ -825,6 +824,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (a *App) View() tea.View {
 	v := tea.NewView(a.frame())
 	v.AltScreen = true
+	if a.editor != nil {
+		v.Cursor = a.editor.Cursor()
+	}
 	return v
 }
 

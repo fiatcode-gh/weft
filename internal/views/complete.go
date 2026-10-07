@@ -22,7 +22,7 @@ type linkCandidate struct {
 
 // linkCompleter is the pure logic behind the editor's live [[ completion. It
 // holds the page-name corpus and derives its active/partial/candidate state
-// from the text before the cursor (refresh). It never touches the textarea;
+// from the text before the cursor (refresh). It never touches the buffer;
 // EditorView translates between the two.
 type linkCompleter struct {
 	choices    []pickerChoice // deduped, mtime-sorted page names (reused from picker)
@@ -83,7 +83,7 @@ func closingAhead(after string) bool {
 
 // refresh re-derives the completer state from the text before and after the
 // cursor on the current logical row. It runs after every key forwarded to the
-// textarea. allowOpen reports whether that key edited the buffer: completion is
+// buffer. allowOpen reports whether that key edited the buffer: completion is
 // a typing affordance, so only an edit may transition the strip from closed to
 // open. A bare caret move (or file open, or page scroll) passes allowOpen=false
 // and therefore cannot pop the strip just because the cursor landed to the
@@ -167,7 +167,7 @@ func (c *linkCompleter) dismiss() {
 
 // rows is how many terminal rows the rendered strip occupies (candidates,
 // capped, plus the box border and vertical padding), or 0 when inactive.
-// EditorView uses this to shrink the textarea so the strip fits.
+// EditorView uses this to shrink the text window so the strip fits.
 func (c *linkCompleter) rows() int {
 	if !c.active || len(c.cands) == 0 {
 		return 0

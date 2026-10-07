@@ -10,6 +10,7 @@ import (
 
 	"charm.land/bubbles/v2/viewport"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
 	"github.com/fiatcode-gh/weft/v2/internal/render"
@@ -35,7 +36,7 @@ func RenderCount() int64 { return renderCount }
 // can inject render results. RenderWithEmphasis("") is identical to Render.
 var renderPage = render.RenderWithEmphasis
 
-// sourceRowsFor builds the row map behind AnchorSourceLine — a var so tests
+// sourceRowsFor builds the row map behind ReadingAnchor — a var so tests
 // can count calls or inject a missing map.
 var sourceRowsFor = render.SourceRows
 
@@ -158,7 +159,7 @@ func (p *PageView) scrollToCursor() {
 }
 
 // linkRow returns the styled row of link i, or false when i or the link's
-// offset is out of range. Shared by scrollToCursor and AnchorSourceLine so
+// offset is out of range. Shared by scrollToCursor and ReadingAnchor so
 // both agree on where a link sits.
 func (p *PageView) linkRow(i int) (int, bool) {
 	if i < 0 || i >= len(p.result.Links) {
@@ -171,26 +172,68 @@ func (p *PageView) linkRow(i int) (int, bool) {
 	return strings.Count(p.result.Styled[:l.Start], "\n"), true
 }
 
-// AnchorSourceLine reports the 0-based line of the rendered page body (the
-// TrimSpace'd body load renders) that the in-app editor should open on.
-// A link cursor whose row is inside the visible window wins; otherwise the
-// top visible row decides. ok is false — open at the top of the file — when
-// the view is at the top with no visible link cursor, or no row map can be
-// produced. The map is computed lazily, once per load, and only after an
-// anchor is known to be needed.
-func (p *PageView) AnchorSourceLine() (line int, ok bool) {
+// Anchor says where the in-app editor opens: row RowInLine of body line Line
+// (a row of the line as the editor wraps it) goes on screen row ScreenRow.
+type Anchor struct{ Line, RowInLine, ScreenRow int }
+
+// ReadingAnchor reports the row of the rendered page body (the TrimSpace'd body
+// load renders) the in-app editor should keep in place. A link cursor whose
+// row is inside the visible window wins; otherwise the first non-blank row of
+// the window decides. ok is false when a row map is needed and none can be
+// produced. A view at the top with no visible link cursor needs no map: the
+// first non-blank row is line 0. The map is computed lazily, once per load,
+// and only after an anchor is known to need it.
+func (p *PageView) ReadingAnchor() (Anchor, bool) {
 	top := p.vp.YOffset()
+	rows := p.styledRows(top, top+p.vp.Height())
 	row := top
+	linkVisible := false
 	if r, found := p.linkRow(p.cursor); found && r >= top && r <= top+p.vp.Height()-1 {
-		row = r
-	} else if top == 0 {
-		return 0, false
+		row, linkVisible = r, true
+	} else {
+		for i, s := range rows {
+			if strings.TrimSpace(ansi.Strip(s)) != "" {
+				row = top + i
+				break
+			}
+		}
 	}
-	rows := p.sourceRows()
-	if len(rows) == 0 {
-		return 0, false
+	if top == 0 && !linkVisible {
+		return Anchor{0, 0, row}, true
 	}
-	return rows[clampInt(row, 0, len(rows)-1)], true
+	lines := p.sourceRows()
+	if len(lines) == 0 {
+		return Anchor{}, false
+	}
+	row = clampInt(row, 0, len(lines)-1)
+	line := lines[row]
+	first := p.styledRows(0, len(lines))
+	f := row
+	for r := row - 1; r >= 0 && lines[r] == line; r-- {
+		if r < len(first) && strings.TrimSpace(ansi.Strip(first[r])) != "" {
+			f = r
+		}
+	}
+	return Anchor{Line: line, RowInLine: row - f, ScreenRow: row - top}, true
+}
+
+// styledRows returns rows [from, to) of the rendered page, fewer at its end.
+func (p *PageView) styledRows(from, to int) []string {
+	s := p.result.Styled
+	var out []string
+	for i := 0; i < to && s != ""; i++ {
+		n := strings.IndexByte(s, '\n')
+		row := s
+		if n >= 0 {
+			row, s = s[:n], s[n+1:]
+		} else {
+			s = ""
+		}
+		if i >= from {
+			out = append(out, row)
+		}
+	}
+	return out
 }
 
 // sourceRows returns the styled-row → body-line map for the loaded render,

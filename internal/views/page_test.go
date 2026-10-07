@@ -509,25 +509,29 @@ func TestPageViewAnchorFollowsScroll(t *testing.T) {
 	}
 	k := topRowLine(t, p)
 
-	line, ok := p.AnchorSourceLine()
+	at, ok := p.ReadingAnchor()
 
-	if !ok || line != k+4 {
-		t.Fatalf("AnchorSourceLine = (%d, %v), want (%d, true)", line, ok, k+4)
+	if !ok || at.Line != k+4 || at.RowInLine != 0 || at.ScreenRow != 0 {
+		t.Fatalf("ReadingAnchor = (%+v, %v), want line %d on screen row 0", at, ok, k+4)
 	}
-	if line == p.Offset() {
-		t.Fatalf("row and line must diverge; both %d", line)
+	if at.Line == p.Offset() {
+		t.Fatalf("row and line must diverge; both %d", at.Line)
 	}
 }
 
-func TestPageViewAnchorAtTopIsNoAnchor(t *testing.T) {
+func TestPageViewAnchorAtTopNeedsNoMap(t *testing.T) {
 	quietTerm(t)
 	_, idx := writeGraph(t, map[string]string{
 		"pages/A.md": anchorLongPage("- head\n  :LOGBOOK:\n  CLOCK: x\n  :END:\n"),
 	})
 	p := NewPageView(idx, "A", 80, 10)
 
-	if line, ok := p.AnchorSourceLine(); line != 0 || ok {
-		t.Fatalf("AnchorSourceLine = (%d, %v), want (0, false)", line, ok)
+	orig := sourceRowsFor
+	t.Cleanup(func() { sourceRowsFor = orig })
+	sourceRowsFor = func(string, int, string) []int { t.Fatal("row map computed at the top of the page"); return nil }
+	// A list-first page shows line 0 on read row 2.
+	if at, ok := p.ReadingAnchor(); !ok || at != (Anchor{0, 0, 2}) {
+		t.Fatalf("ReadingAnchor = (%+v, %v), want ({0 0 2}, true)", at, ok)
 	}
 }
 
@@ -543,10 +547,10 @@ func TestPageViewAnchorPrefersVisibleLinkCursor(t *testing.T) {
 		t.Fatalf("offset=%d cursor=%d, want 0,0", p.Offset(), p.Cursor())
 	}
 
-	line, ok := p.AnchorSourceLine()
+	at, ok := p.ReadingAnchor()
 
-	if !ok || line != 3 {
-		t.Fatalf("AnchorSourceLine = (%d, %v), want (3, true)", line, ok)
+	if !ok || at != (Anchor{3, 0, 5}) {
+		t.Fatalf("ReadingAnchor = (%+v, %v), want ({3 0 5}, true)", at, ok)
 	}
 }
 
@@ -561,10 +565,10 @@ func TestPageViewAnchorIgnoresOffscreenLinkCursor(t *testing.T) {
 	scrollDown(p, 20)
 	k := topRowLine(t, p)
 
-	line, ok := p.AnchorSourceLine()
+	at, ok := p.ReadingAnchor()
 
-	if !ok || line != k+1 {
-		t.Fatalf("AnchorSourceLine = (%d, %v), want (%d, true)", line, ok, k+1)
+	if !ok || at.Line != k+1 {
+		t.Fatalf("ReadingAnchor = (%+v, %v), want line %d", at, ok, k+1)
 	}
 }
 
@@ -594,14 +598,14 @@ func TestPageViewAnchorPrefersVisibleLinkCursorWhenScrolled(t *testing.T) {
 	}
 	top := topRowLine(t, p)
 
-	line, ok := p.AnchorSourceLine()
+	at, ok := p.ReadingAnchor()
 
-	if !ok || line != 30 {
-		t.Fatalf("AnchorSourceLine = (%d, %v), want (30, true); top row's line is %d", line, ok, top)
+	if !ok || at.Line != 30 || at.ScreenRow != row-p.Offset() {
+		t.Fatalf("ReadingAnchor = (%+v, %v), want line 30 on screen row %d; top row's line is %d", at, ok, row-p.Offset(), top)
 	}
 }
 
-func TestPageViewAnchorWithoutRowMapIsNoAnchor(t *testing.T) {
+func TestPageViewAnchorWithoutRowMapIsNotOK(t *testing.T) {
 	quietTerm(t)
 	orig := sourceRowsFor
 	t.Cleanup(func() { sourceRowsFor = orig })
@@ -610,8 +614,8 @@ func TestPageViewAnchorWithoutRowMapIsNoAnchor(t *testing.T) {
 	p := NewPageView(idx, "A", 80, 10)
 	scrollDown(p, 20)
 
-	if line, ok := p.AnchorSourceLine(); line != 0 || ok {
-		t.Fatalf("AnchorSourceLine = (%d, %v), want (0, false)", line, ok)
+	if at, ok := p.ReadingAnchor(); ok || at != (Anchor{}) {
+		t.Fatalf("ReadingAnchor = (%+v, %v), want (zero, false)", at, ok)
 	}
 }
 
@@ -627,20 +631,20 @@ func TestPageViewAnchorComputesMapOncePerLoadAndOnlyWhenNeeded(t *testing.T) {
 	_, idx := writeGraph(t, map[string]string{"pages/A.md": anchorLongPage("")})
 	p := NewPageView(idx, "A", 80, 10)
 
-	p.AnchorSourceLine() // unscrolled, no cursor: no map needed
+	p.ReadingAnchor() // unscrolled, no cursor: no map needed
 	if calls != 0 {
 		t.Fatalf("map computed %d times for an unscrolled page, want 0", calls)
 	}
 	scrollDown(p, 20)
-	p.AnchorSourceLine()
-	p.AnchorSourceLine()
+	p.ReadingAnchor()
+	p.ReadingAnchor()
 	if calls != 1 {
 		t.Fatalf("map computed %d times, want 1", calls)
 	}
 	p.SetPage("A") // cache hit reload must still know its body
 	scrollDown(p, 20)
-	if line, ok := p.AnchorSourceLine(); !ok || line == 0 {
-		t.Fatalf("AnchorSourceLine after cache-hit reload = (%d, %v)", line, ok)
+	if at, ok := p.ReadingAnchor(); !ok || at.Line == 0 {
+		t.Fatalf("ReadingAnchor after cache-hit reload = (%+v, %v)", at, ok)
 	}
 	if calls != 2 {
 		t.Fatalf("map computed %d times after reload, want 2", calls)
