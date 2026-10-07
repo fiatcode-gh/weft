@@ -35,10 +35,10 @@ type lineCache struct {
 }
 
 // textHeight is the number of text rows: the terminal height less the rule
-// row, the status line and the completion strip, at least one. With no strip
+// row, the status line, the completion strip and the find bar, at least one. With no strip
 // it is the read view's window, so switching views keeps every row in place.
 func (e *EditorView) textHeight() int {
-	return max(1, e.height-2-e.completer.rows())
+	return max(1, e.height-2-e.completer.rows()-e.findRows())
 }
 
 // syncBuffer tells the scanner and the cache about edits since the last call.
@@ -294,7 +294,8 @@ func (e *EditorView) drawRow(p viewPos) string {
 		e.stats.painted++
 	}
 	r := c.rows[p.row]
-	spans, lineBreak := c.spans, false
+	spans, curMatch := e.findOverlay(c.spans, p.line)
+	lineBreak := false
 	if sel, ok := e.buf.Selection(); ok && sel.Start.Line <= p.line && p.line <= sel.End.Line {
 		from, to := 0, len(c.text)
 		if p.line == sel.Start.Line {
@@ -305,6 +306,9 @@ func (e *EditorView) drawRow(p viewPos) string {
 		}
 		spans = render.Overlay(spans, from, to, selectionStyle)
 		lineBreak = p.line < sel.End.Line && p.row == len(c.rows)-1
+	}
+	if curMatch != nil {
+		spans = render.Overlay(spans, curMatch.Start.Col, curMatch.End.Col, currentMatchStyle)
 	}
 	s := render.DrawRow(c.text, c.info, r, spans)
 	if lineBreak {
@@ -319,13 +323,19 @@ func (e *EditorView) drawRow(p viewPos) string {
 // View renders the text window, the completion strip, the rule row and the
 // status line.
 func (e *EditorView) View() string {
+	e.findSync()
 	e.ensureVisible()
 	v := strings.Join(e.frameRows(), "\n")
 	pad := e.geo.Margin
 	if strip := e.completer.View(max(1, e.width-pad)); strip != "" {
 		v += "\n" + indentBlock(strip, pad)
 	}
-	return v + "\n" + ruleRow(e.width) + "\n" + indentBlock(e.statusLine(), pad)
+	v += "\n" + ruleRow(e.width)
+	if e.find != nil {
+		bar, _ := e.find.barView(max(1, e.width-pad))
+		v += "\n" + indentBlock(bar, pad)
+	}
+	return v + "\n" + indentBlock(e.statusLine(), pad)
 }
 
 // Cursor is where the terminal cursor goes, or nil while a prompt owns the keys.
@@ -333,7 +343,12 @@ func (e *EditorView) Cursor() *tea.Cursor {
 	if e.mode != editing {
 		return nil
 	}
+	e.findSync()
 	e.ensureVisible()
+	if f := e.find; f != nil {
+		_, x := f.barView(max(1, e.width-e.geo.Margin))
+		return tea.NewCursor(min(e.geo.Margin+x, max(0, e.width-1)), e.textHeight()+e.completer.rows()+1)
+	}
 	cur, x := e.cursorRow()
 	p := e.top
 	for y := range e.textHeight() {

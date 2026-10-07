@@ -53,6 +53,8 @@ type EditorView struct {
 	clash         clashPrompt
 	width, height int
 	completer     *linkCompleter
+	find          *findBar // nil while the find bar is closed
+	lastQuery     string   // the last find query of this editor session
 
 	theme    render.Theme
 	geo      render.Geometry
@@ -117,6 +119,10 @@ func (e *EditorView) Paste(msg tea.PasteMsg) tea.Cmd {
 	if e.mode != editing {
 		return nil
 	}
+	if e.find != nil {
+		e.pasteFind(msg.Content)
+		return nil
+	}
 	e.buf.Break()
 	e.buf.Insert(cleanPaste(msg.Content))
 	e.goalOK = false
@@ -176,6 +182,10 @@ func (e *EditorView) cursorSplit() (before, after string) {
 // that triggered this refresh edited the buffer; only an edit may open a closed
 // strip (see linkCompleter.refresh).
 func (e *EditorView) refreshCompleter(allowOpen bool) {
+	if e.find != nil { // the bar owns the keys; no strip over it
+		e.ensureVisible()
+		return
+	}
 	before, after := e.cursorSplit()
 	e.completer.refresh(before, after, allowOpen)
 	e.ensureVisible()
@@ -300,6 +310,11 @@ func (e *EditorView) Update(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
 	}
 
 	key := msg.String()
+	if e.find != nil {
+		if res, handled := e.updateFind(msg); handled {
+			return res, nil
+		}
+	}
 	if e.completer.active {
 		switch key {
 		case keyUp:
@@ -330,11 +345,15 @@ func (e *EditorView) Update(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
 			return EditorResult{}, nil
 		}
 		return EditorResult{Exit: true}, nil
+	case "ctrl+f":
+		e.openFind()
+		return EditorResult{}, nil
 	}
 
 	before := e.buf.Version()
 	cmd := e.edit(key, msg.Text)
 	e.afterKey(e.buf.Version() != before)
+	e.findSync()
 	return EditorResult{}, cmd
 }
 
@@ -521,7 +540,10 @@ func (e *EditorView) statusLine() string {
 		mark = " ●"
 	}
 	left := styleTitle.Render(e.pageName) + styleFaint.Render(" [edit]"+mark)
-	right := styleFaint.Render("^S save · esc exit")
+	right := styleFaint.Render("^S save · ^F find · esc exit")
+	if e.find != nil {
+		right = styleFaint.Render(e.find.hints())
+	}
 	if e.errMsg != "" {
 		right = styleTitle.Render("save failed: " + e.errMsg)
 	} else if e.notice != "" {

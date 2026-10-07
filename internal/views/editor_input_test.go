@@ -68,6 +68,7 @@ func TestEditorKeyTable(t *testing.T) {
 		{"ctrl+a selects all", ctrl('a'), 0, 6, fixture, 3, 0},
 		{"ctrl+x cuts the line", ctrl('x'), 0, 6, "second line\n- item\n", 0, 6},
 		{"ctrl+c copies and changes nothing", ctrl('c'), 0, 6, fixture, 0, 6},
+		{"ctrl+f opens find and edits nothing", ctrl('f'), 0, 6, fixture, 0, 6},
 		{"ctrl+z with nothing to undo", ctrl('z'), 0, 6, fixture, 0, 6},
 		{"ctrl+t cycles a marker", ctrl('t'), 2, 4, "alpha BeTa gamma\nsecond line\n- TODO item\n", 2, 9},
 	}
