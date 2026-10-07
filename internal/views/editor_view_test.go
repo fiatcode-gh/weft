@@ -176,6 +176,27 @@ func TestEditorViewAnchorNearEndStaysVisible(t *testing.T) {
 
 func key(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
 
+func TestLoadsFaithfully(t *testing.T) {
+	tooLong := strings.Repeat("x\n", 10001)
+	tests := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{"plain", "- x\n", true},
+		{"tab", "a\tb\n", false},
+		{"crlf", "a\r\nb\n", false},
+		{"too many lines", tooLong, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := loadsFaithfully(tt.in); got != tt.want {
+				t.Errorf("loadsFaithfully = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestEditorUpdate_CtrlSRequestsSaveStaysEditing(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 24, 0)

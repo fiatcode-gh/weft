@@ -44,7 +44,7 @@ func TestEnterEditorOnCaseMismatchedTargetOpensExistingFile(t *testing.T) {
 	if got := filepath.Base(a.editor.path); got != "Weft.md" {
 		t.Errorf("editor path = %q, want Weft.md", got)
 	}
-	if a.editor.isNew {
+	if !a.editor.disk.Exists {
 		t.Error("existing page treated as new")
 	}
 	if !strings.Contains(a.editor.Content(), "existing content") {

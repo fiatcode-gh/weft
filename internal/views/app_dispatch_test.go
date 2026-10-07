@@ -509,10 +509,10 @@ func TestEditBootstrapRebuildsPageView(t *testing.T) {
 
 // TestSaveFailureKeepsEditorAndBuffer pins the highest-consequence untested
 // flow in the Ctrl+S handler (app.go's tea.KeyMsg case, res.Save branch):
-// when edit.WriteFile fails, the in-app editor must stay open with the
+// when the guarded write (edit.WriteFileIfUnchanged) fails, the in-app editor must stay open with the
 // buffer intact and the error surfaced — never torn down and never losing
 // unsaved work. The save is made to fail deterministically by revoking
-// write permission on the page's directory, which makes WriteFile's
+// write permission on the page's directory, which makes writeFile's
 // os.CreateTemp(dir, ...) fail before anything is touched on disk.
 func TestSaveFailureKeepsEditorAndBuffer(t *testing.T) {
 	if os.Geteuid() == 0 {
@@ -536,7 +536,7 @@ func TestSaveFailureKeepsEditorAndBuffer(t *testing.T) {
 	content := a.editor.Content()
 
 	// Make the save fail: the page directory becomes read-only, so
-	// edit.WriteFile's temp-file creation in that directory fails.
+	// the guarded write's temp-file creation in that directory fails.
 	pages := filepath.Join(dir, "pages")
 	if err := os.Chmod(pages, 0o555); err != nil {
 		t.Fatal(err)

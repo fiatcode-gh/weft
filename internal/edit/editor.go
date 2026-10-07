@@ -79,9 +79,10 @@ func EnsureFile(path string) (created bool, err error) {
 // matching EnsureFile's bootstrap mode.
 const defaultFileMode os.FileMode = 0o644
 
-// WriteFile writes data to path atomically, creating the parent directory if
-// it does not yet exist. It is package edit's second write path (alongside
-// the EnsureFile bootstrap).
+// writeFile writes data to path atomically, creating the parent directory if
+// it does not yet exist. It is the unguarded primitive behind
+// WriteFileIfUnchanged, unexported so every replacing write goes through the
+// content guard; EnsureFile is the separate create-only bootstrap.
 //
 // The write goes to a temp file in the destination directory and is moved into
 // place with os.Rename, so a crash mid-write leaves the original intact rather
@@ -98,7 +99,7 @@ const defaultFileMode os.FileMode = 0o644
 // rename guarantees atomicity against a process crash, which is the failure
 // this protects against; durability against power loss is out of scope for a
 // local notes TUI.
-func WriteFile(path string, data []byte) error {
+func writeFile(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -131,6 +132,45 @@ func WriteFile(path string, data []byte) error {
 		return err
 	}
 	return os.Rename(tmpPath, path)
+}
+
+// Snapshot is a file's content as weft last read or wrote it. Comparable with ==.
+type Snapshot struct {
+	Content string
+	Exists  bool // false: no file at the path
+}
+
+// ErrChanged reports that a file no longer matches the Snapshot the caller
+// last saw, so a guarded write was refused.
+var ErrChanged = errors.New("file changed on disk")
+
+// ReadSnapshot reads path's current content. A missing file is not an error:
+// it yields the zero Snapshot. Any other failure (including a directory) is
+// returned.
+func ReadSnapshot(path string) (Snapshot, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return Snapshot{}, nil
+		}
+		return Snapshot{}, err
+	}
+	return Snapshot{Content: string(b), Exists: true}, nil
+}
+
+// WriteFileIfUnchanged re-reads path and writes data only if it still equals
+// seen, by content (mtime is never consulted). Otherwise it returns ErrChanged
+// and writes nothing. A write landing between the re-read and the rename is
+// not detected: that window is the accepted limit of this guard.
+func WriteFileIfUnchanged(path string, seen Snapshot, data []byte) error {
+	now, err := ReadSnapshot(path)
+	if err != nil {
+		return err
+	}
+	if now != seen {
+		return ErrChanged
+	}
+	return writeFile(path, data)
 }
 
 // SnapshotMtime returns the file's modification time, or time.Time{}

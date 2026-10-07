@@ -6,7 +6,10 @@ search, and edit a local graph of flat `.md` pages and journals linked by
 picker (with page-creation), ripgrep-backed search, backlinks, TODO dashboard.
 Within weft, graph files are written only through `internal/edit/`: the in-app
 editor (`e`) saves the displayed
-buffer on `Ctrl+S` and creates a page's file lazily on first save; `E` hands the
+buffer on `Ctrl+S` (the save compares the disk to the content the editor opened
+or last saved, by content; it three-way-merges non-overlapping changes using the
+pure `internal/merge`, otherwise shows an overwrite/reload/keep-editing prompt;
+linkify refuses to write a file that changed under it) and creates a page's file lazily on first save; `E` hands the
 file to `$EDITOR`. File creation for a new page is deferred until save, so
 opening then discarding never touches disk. `e` refuses to open a file whose
 content the in-app textarea would alter on load (CRLF line endings, tabs, or
@@ -59,8 +62,12 @@ an intentional UI change, run with `-update` and visually diff the golden before
 - `internal/edit/` — one of two deliberate disk-mutating surfaces (with
   `internal/sync/`). Resolves
   `$VISUAL` / `$EDITOR` / `vi`, snapshots file mtime, and exposes
-  `Resolve` / `EnsureFile` / `WriteFile` / `SnapshotMtime`. Invoked by the in-app editor (`e`,
-  saves on `Ctrl+S`) and by `App.editCurrent` for `$EDITOR` handoff (`E`).
+  `Resolve` / `EnsureFile` / `ReadSnapshot` / `WriteFileIfUnchanged` / `SnapshotMtime`.
+  Every replacing write is content-guarded: `writeFile` is unexported. Invoked by the in-app editor (`e`,
+  saves on `Ctrl+S`), by linkify in the backlinks panel, and by `App.editCurrent` for `$EDITOR` handoff (`E`).
+- `internal/merge/` — pure git-style three-way line merge (adjacent changes
+  conflict; both sides inserting at the same spot keeps mine then theirs) used by
+  the editor save. No disk access.
 - `internal/sync/` — git orchestration over `os/exec` (no `go-git`); the second
   deliberate disk-mutating surface. `Run` does commit → `pull --rebase` → push
   for the `S` keybind (async, reported via a status-bar hint, failure output

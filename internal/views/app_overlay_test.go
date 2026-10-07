@@ -213,8 +213,8 @@ func TestPickerCreate_OpensEditorOnNewPage(t *testing.T) {
 	if a.editor.pageName != "Zzz New Page" {
 		t.Errorf("editor page: got %q, want %q", a.editor.pageName, "Zzz New Page")
 	}
-	if !a.editor.isNew {
-		t.Errorf("a created page's editor should have isNew=true")
+	if a.editor.disk.Exists {
+		t.Errorf("a created page's editor should start with disk.Exists=false")
 	}
 	wantSuffix := filepath.Join("pages", "Zzz New Page.md")
 	if !strings.HasSuffix(a.editor.path, wantSuffix) {

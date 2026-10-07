@@ -9,6 +9,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/fiatcode-gh/weft/v2/internal/edit"
 )
 
 func TestTodayJournalNameUsesNowFunc(t *testing.T) {
@@ -250,6 +252,57 @@ func TestAppLinkifyMentionGoneShowsError(t *testing.T) {
 	got, _ := os.ReadFile(notePath)
 	if string(got) != "- nothing here now\n" {
 		t.Errorf("file must be untouched when the mention is gone; got %q", string(got))
+	}
+}
+
+func TestAppLinkifyFileChangedBetweenReadAndWrite(t *testing.T) {
+	quietTerm(t)
+	if _, err := exec.LookPath("rg"); err != nil {
+		t.Skip("rg not on PATH; install ripgrep to run this test")
+	}
+	tmp, idx := writeGraph(t, map[string]string{
+		"pages/Topic.md": "# Topic\n",
+		"pages/Note.md":  "- a bare Topic mention\n",
+	})
+	notePath := filepath.Join(tmp, "pages", "Note.md")
+	a := New(tmp, "test")
+	a.idx = idx
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	a.page = NewPageView(idx, "Topic", 80, 24)
+	const changed = "- a bare Topic mention\n- added meanwhile\n"
+	mutated := false
+	real := a.readSnapshot
+	a.readSnapshot = func(p string) (edit.Snapshot, error) {
+		s, err := real(p)
+		if p == notePath && !mutated {
+			mutated = true
+			if werr := os.WriteFile(p, []byte(changed), 0o644); werr != nil {
+				t.Error(werr)
+			}
+		}
+		return s, err
+	}
+
+	a.Update(key("b"))
+	a.Update(tea.KeyMsg{Type: tea.KeyDown})
+	a.Update(key("l"))
+	a.Update(key("y"))
+
+	got, err := os.ReadFile(notePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != changed {
+		t.Errorf("Note.md = %q, want the outside change untouched", got)
+	}
+	bl, ok := a.active.(*Backlinks)
+	if !ok {
+		t.Fatalf("panel should stay open on error; got %T", a.active)
+	}
+	for _, want := range []string{"linkify failed", "changed on disk", "try again"} {
+		if !strings.Contains(bl.errMsg, want) {
+			t.Errorf("errMsg = %q, want it to contain %q", bl.errMsg, want)
+		}
 	}
 }
 

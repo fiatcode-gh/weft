@@ -165,8 +165,8 @@ func TestEnsureFileNeverTruncatesExisting(t *testing.T) {
 }
 
 // seedFile writes an existing file at dir/name with the given content and an
-// explicit mode (chmod is umask-proof, unlike the WriteFile perm arg). It is
-// the shared arrange step for the overwrite-path WriteFile tests.
+// explicit mode (chmod is umask-proof, unlike the os.WriteFile perm arg). It is
+// the shared arrange step for the overwrite-path writeFile tests.
 func seedFile(t *testing.T, dir, name, content string, mode os.FileMode) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
@@ -213,18 +213,18 @@ func fileNames(t *testing.T, dir string) []string {
 	return names
 }
 
-func TestWriteFile(t *testing.T) {
+func TestWriteFileAtomic(t *testing.T) {
 	t.Run("writes content and creates parent dir", func(t *testing.T) {
 		// arrange
 		dir := t.TempDir()
 		path := filepath.Join(dir, "pages", "New Page.md")
 
 		// act
-		err := WriteFile(path, []byte("hello\n"))
+		err := writeFile(path, []byte("hello\n"))
 
 		// assert
 		if err != nil {
-			t.Fatalf("WriteFile: %v", err)
+			t.Fatalf("writeFile: %v", err)
 		}
 		if got := readBack(t, path); got != "hello\n" {
 			t.Errorf("content: got %q, want %q", got, "hello\n")
@@ -240,11 +240,11 @@ func TestWriteFile(t *testing.T) {
 		path := seedFile(t, dir, "p.md", "old\n", 0o644)
 
 		// act
-		err := WriteFile(path, []byte("new\n"))
+		err := writeFile(path, []byte("new\n"))
 
 		// assert
 		if err != nil {
-			t.Fatalf("WriteFile: %v", err)
+			t.Fatalf("writeFile: %v", err)
 		}
 		if got := readBack(t, path); got != "new\n" {
 			t.Errorf("content: got %q, want %q", got, "new\n")
@@ -259,11 +259,11 @@ func TestWriteFile(t *testing.T) {
 		path := seedFile(t, dir, "p.md", "old\n", 0o640)
 
 		// act
-		err := WriteFile(path, []byte("new\n"))
+		err := writeFile(path, []byte("new\n"))
 
 		// assert
 		if err != nil {
-			t.Fatalf("WriteFile: %v", err)
+			t.Fatalf("writeFile: %v", err)
 		}
 		if got := permOf(t, path); got != 0o640 {
 			t.Errorf("mode: got %v, want 0o640 (preserved)", got)
@@ -276,11 +276,11 @@ func TestWriteFile(t *testing.T) {
 		path := filepath.Join(dir, "p.md")
 
 		// act
-		err := WriteFile(path, []byte("data\n"))
+		err := writeFile(path, []byte("data\n"))
 
 		// assert
 		if err != nil {
-			t.Fatalf("WriteFile: %v", err)
+			t.Fatalf("writeFile: %v", err)
 		}
 		if got := fileNames(t, dir); len(got) != 1 || got[0] != "p.md" {
 			t.Errorf("dir entries: got %v, want [p.md] (temp cleaned up)", got)
@@ -302,11 +302,11 @@ func TestWriteFile(t *testing.T) {
 		t.Cleanup(func() { os.Chmod(dir, 0o700) }) // let t.TempDir clean up
 
 		// act
-		err := WriteFile(path, []byte("replacement\n"))
+		err := writeFile(path, []byte("replacement\n"))
 
 		// assert
 		if err == nil {
-			t.Fatal("WriteFile: want error writing into a read-only dir, got nil")
+			t.Fatal("writeFile: want error writing into a read-only dir, got nil")
 		}
 		if err := os.Chmod(dir, 0o700); err != nil {
 			t.Fatal(err)
@@ -370,6 +370,144 @@ func TestSnapshotMtime(t *testing.T) {
 		}
 		if !second.After(first) {
 			t.Errorf("want second > first; first=%v second=%v", first, second)
+		}
+	})
+}
+
+func TestReadSnapshot(t *testing.T) {
+	t.Run("existing file", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "a.md")
+		if err := os.WriteFile(path, []byte("hello\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		got, err := ReadSnapshot(path)
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := (Snapshot{Content: "hello\n", Exists: true}); got != want {
+			t.Errorf("got %+v, want %+v", got, want)
+		}
+	})
+	t.Run("missing file", func(t *testing.T) {
+		got, err := ReadSnapshot(filepath.Join(t.TempDir(), "nope.md"))
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != (Snapshot{}) {
+			t.Errorf("got %+v, want zero Snapshot", got)
+		}
+	})
+	t.Run("directory", func(t *testing.T) {
+		if _, err := ReadSnapshot(t.TempDir()); err == nil {
+			t.Error("reading a directory should return an error")
+		}
+	})
+}
+
+func TestWriteFileIfUnchanged(t *testing.T) {
+	t.Run("unchanged writes", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "a.md")
+		if err := os.WriteFile(path, []byte("old\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		seen, _ := ReadSnapshot(path)
+
+		err := WriteFileIfUnchanged(path, seen, []byte("new\n"))
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := os.ReadFile(path); string(got) != "new\n" {
+			t.Errorf("file = %q, want new content", got)
+		}
+	})
+	t.Run("content changed → ErrChanged, file untouched", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "a.md")
+		if err := os.WriteFile(path, []byte("old\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		seen, _ := ReadSnapshot(path)
+		if err := os.WriteFile(path, []byte("outside\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		err := WriteFileIfUnchanged(path, seen, []byte("new\n"))
+
+		if !errors.Is(err, ErrChanged) {
+			t.Fatalf("err = %v, want ErrChanged", err)
+		}
+		if got, _ := os.ReadFile(path); string(got) != "outside\n" {
+			t.Errorf("file = %q, want untouched", got)
+		}
+	})
+	t.Run("seen missing, file now exists → ErrChanged, untouched", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "a.md")
+		seen, _ := ReadSnapshot(path)
+		if err := os.WriteFile(path, []byte("appeared\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		err := WriteFileIfUnchanged(path, seen, []byte("new\n"))
+
+		if !errors.Is(err, ErrChanged) {
+			t.Fatalf("err = %v, want ErrChanged", err)
+		}
+		if got, _ := os.ReadFile(path); string(got) != "appeared\n" {
+			t.Errorf("file = %q, want untouched", got)
+		}
+	})
+	t.Run("seen existing, file deleted → ErrChanged, not recreated", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "a.md")
+		if err := os.WriteFile(path, []byte("old\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		seen, _ := ReadSnapshot(path)
+		if err := os.Remove(path); err != nil {
+			t.Fatal(err)
+		}
+
+		err := WriteFileIfUnchanged(path, seen, []byte("new\n"))
+
+		if !errors.Is(err, ErrChanged) {
+			t.Fatalf("err = %v, want ErrChanged", err)
+		}
+		if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+			t.Errorf("file must not be recreated; stat err = %v", statErr)
+		}
+	})
+	t.Run("seen missing and still missing → creates file and parent dir", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "sub", "a.md")
+
+		err := WriteFileIfUnchanged(path, Snapshot{}, []byte("new\n"))
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := os.ReadFile(path); string(got) != "new\n" {
+			t.Errorf("file = %q, want new content", got)
+		}
+	})
+	t.Run("mtime-only change still writes", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "a.md")
+		if err := os.WriteFile(path, []byte("old\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		seen, _ := ReadSnapshot(path)
+		later := time.Now().Add(time.Hour)
+		if err := os.Chtimes(path, later, later); err != nil {
+			t.Fatal(err)
+		}
+
+		err := WriteFileIfUnchanged(path, seen, []byte("new\n"))
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := os.ReadFile(path); string(got) != "new\n" {
+			t.Errorf("file = %q, want new content", got)
 		}
 	})
 }
