@@ -12,7 +12,7 @@ import "charm.land/glamour/v2/ansi"
 //   - Lip Gloss-rendered colors (everything outside CodeBlock.Chroma) are bare
 //     ANSI 0-15 index strings, which map to the terminal palette.
 //   - Chroma (code-fence) colors are #rrggbb hex anchors: chroma parses colors
-//     as hex RGB, and the terminal16 formatter (see page.go) downsamples them
+//     as hex RGB, and the terminal16 formatter (see theme.go) downsamples them
 //     to the terminal's 16-color palette.
 var terminalStyleConfig = ansi.StyleConfig{
 	Document: ansi.StyleBlock{
@@ -98,7 +98,7 @@ var terminalStyleConfig = ansi.StyleConfig{
 		},
 		// Chroma colors are hex anchors, NOT ANSI indices: chroma parses color
 		// strings as hex RGB (strconv.ParseUint base 16). The terminal16
-		// formatter (see page.go) downsamples these anchors to the terminal's
+		// formatter (see theme.go) downsamples these anchors to the terminal's
 		// 16-color palette, so syntax highlighting honors the terminal theme.
 		Chroma: &ansi.Chroma{
 			Text:                ansi.StylePrimitive{},

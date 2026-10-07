@@ -4,9 +4,11 @@ import "charm.land/lipgloss/v2"
 
 // Palette. Numeric ANSI colors so the TUI honors the user's terminal theme.
 //
-// NOTE: internal/render/page.go and the todos marker map (todos.go) duplicate
-// the task-marker colors 9/11/12/8. They are intentionally NOT unified across
-// the package boundary — see docs/superpowers/specs/2026-05-29-structural-cleanup-design.md
+// NOTE: the todos marker map (todos.go) duplicates the task-marker colors
+// 9/11/12/8 that internal/render.Theme owns (the read view and the editor
+// share that one Theme). The todos dashboard map is intentionally NOT
+// unified with it across the package boundary — see
+// docs/superpowers/specs/2026-05-29-structural-cleanup-design.md
 // (a shared theme package for ~4 constants would be premature).
 var (
 	colorHighlight = lipgloss.Color("12") // blue: links, positions, group headers, selection bg

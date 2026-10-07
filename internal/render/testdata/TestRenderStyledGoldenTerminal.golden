@@ -1,0 +1,33 @@
+
+  [30;46;1m [m[30;46;1mHeading[m[30;46;1m one[m[30;46;1m [m                                           
+                                                          
+  [36;1m## [m[36;1mHeading[m[36;1m two[m                                          
+                                                          
+  [36;1m### [m[36;1mHeading[m[36;1m three[m                                       
+                                                          
+  A paragraph with [1mbold[m, [3mitalic[m, [9mstruck[m, [33m code span [m, a   
+  [34;1mmarkdown link[m, a [4;94;4mW[m[4;94;4mi[m[4;94;4mk[m[4;94;4mi[m[94;4m [m[4;94;4mT[m[4;94;4ma[m[4;94;4mr[m[4;94;4mg[m[4;94;4me[m[4;94;4mt[m and an [4;94;4ma[m[4;94;4ml[m[4;94;4mi[m[4;94;4ma[m[4;94;4ms[m[4;94;4me[m[4;94;4md[m[94;4m [m[4;94;4ml[m[4;94;4mi[m[4;94;4mn[m[4;94;4mk[m in it. 
+                                                          
+  • [1;91mTODO[m top level task                                   
+    • [1;92mDONE[m nested task                                    
+      • [1;93mDOING[m third level with a long wrapping line that  
+        keeps going well past the sixty column width so it  
+        must wrap                                           
+      • plain third level bullet                          
+                                                          
+                                                          
+                                                          
+  │ [90ma block[m[90m quote [m[90mover two[m[90m lines[m[90m [m[90m [m[90m [m[90m [m[90m [m[90m [m[90m [m[90m [m[90m [m[90m [m[90m [m[90m [m[90m [m[90m [m[90m [m[90m [m[90m [m[90m [m[90m [m[90m [m[90m [m[90m [m[90m [m[90m [m[90m [m[90m [m[90m[m
+                                                          
+   a                          │ b                         
+  ────────────────────────────┼───────────────────────────
+   1                          │ 2                         
+  [90m[m                                                        
+  [90m--------[m                                                
+  [90m[m                                                        
+    [94mfunc[0m [96mmain[0m[37m()[0m [37m{[0m                                         
+    	[95mprintln[0m[37m([0m[92m"hi"[0m[37m)[0m                                         
+    [37m}[0m                                                     
+                                                          
+  • [1;94mLATER[m with logbook                                    
+

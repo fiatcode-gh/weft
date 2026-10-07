@@ -1,7 +1,6 @@
 package render
 
 import (
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -57,29 +56,13 @@ var (
 	queryOrEmbedRe = regexp.MustCompile(`(?i)^\s*\{\{(query|embed)\b`)
 )
 
-var linkStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Underline(true)
-
 // emphasisStyle highlights a searched/arrived-at term on the page. Reverse
-// video stands out from linkStyle and degrades to plain text under NO_COLOR.
+// video stands out from Theme.Link and degrades to plain text under NO_COLOR.
 var emphasisStyle = lipgloss.NewStyle().Reverse(true)
 
 type taskInfo struct {
 	marker string
 	open   bool
-}
-
-// taskMarkerStyles colour-codes the workflow markers that appear at the
-// start of Logseq bullets. Same palette as the todos dashboard so the page
-// view and the dashboard read consistently.
-var taskMarkerStyles = map[string]lipgloss.Style{
-	"TODO":      lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true),  // red
-	"DOING":     lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Bold(true), // yellow
-	"LATER":     lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Bold(true), // blue
-	"WAITING":   lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Bold(true),  // dim
-	"DONE":      lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true), // green
-	"CANCELED":  lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Strikethrough(true),
-	"CANCELLED": lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Strikethrough(true),
-	"NOW":       lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Bold(true), // magenta
 }
 
 // Private-use Unicode codepoints bracket each sentinel. They survive Glamour's
@@ -153,9 +136,16 @@ func decodeSentinelID(s string) (int, bool) {
 	return id, err == nil
 }
 
+// rendererKey is what a cached renderer was built for: a changed
+// WEFT_STYLE/NO_COLOR must never reuse a stale one.
+type rendererKey struct {
+	name  string
+	width int
+}
+
 var (
 	rendererMu    sync.Mutex
-	rendererCache = map[int]*glamour.TermRenderer{}
+	rendererCache = map[rendererKey]*glamour.TermRenderer{}
 )
 
 // glamourRender invokes the width-cached renderer. A var so tests can
@@ -170,47 +160,6 @@ var glamourRender = func(r *glamour.TermRenderer, in string) (string, error) {
 // they are stripped to keep the read view identical (no clickable links).
 var hyperlinkRe = regexp.MustCompile(`\x1b\]8;[^\x07\x1b]*(?:\x07|\x1b\\)`)
 
-// styleSelection is which Glamour style weft should render with. selectStyle
-// derives it from env vars only — never querying the terminal.
-type styleSelection struct {
-	terminal bool   // use terminalStyleConfig (weft's default; honors the terminal palette)
-	name     string // standard style name, meaningful only when !terminal
-}
-
-// selectStyle chooses the render style without any terminal IO. This is
-// deliberate: Glamour's WithAutoStyle issues OSC 11 background-colour queries
-// over stdin, which can leave stray reply bytes in the terminal's input
-// buffer. When weft is quit and immediately re-opened, the next session's
-// termenv reads those stale bytes, fails to parse them, and blocks for
-// seconds before timing out. Reading env vars sidesteps the problem.
-//
-// NO_COLOR wins over WEFT_STYLE.
-func selectStyle() styleSelection {
-	if noColor() {
-		return styleSelection{name: "notty"}
-	}
-	if s := os.Getenv("WEFT_STYLE"); s != "" {
-		return styleSelection{name: s}
-	}
-	return styleSelection{terminal: true}
-}
-
-// styleOptions turns the selection into Glamour renderer options. The default
-// (terminal-palette) path also pins chroma's terminal16 formatter, which
-// downsamples the Chroma block's hex anchors to the terminal's 16-color
-// palette. A named WEFT_STYLE keeps chroma's default formatter so that theme
-// renders at full fidelity.
-func styleOptions() []glamour.TermRendererOption {
-	sel := selectStyle()
-	if sel.terminal {
-		return []glamour.TermRendererOption{
-			glamour.WithStyles(terminalStyleConfig),
-			glamour.WithChromaFormatter("terminal16"),
-		}
-	}
-	return []glamour.TermRendererOption{glamour.WithStandardStyle(sel.name)}
-}
-
 // Warmup pre-builds the renderer cache so the first page render inside the
 // TUI doesn't pay chroma's syntax-highlighter init cost (~100ms).
 func Warmup() {
@@ -222,17 +171,25 @@ func Warmup() {
 // expensive to initialise; reusing a renderer per width drops per-page cost
 // from hundreds of milliseconds to a few.
 func rendererFor(width int) (*glamour.TermRenderer, error) {
-	rendererMu.Lock()
-	defer rendererMu.Unlock()
-	if r, ok := rendererCache[width]; ok {
-		return r, nil
-	}
-	opts := append(styleOptions(), glamour.WithWordWrap(width))
-	r, err := glamour.NewTermRenderer(opts...)
+	theme, err := CurrentTheme()
 	if err != nil {
 		return nil, err
 	}
-	rendererCache[width] = r
+	key := rendererKey{theme.Name, width}
+	rendererMu.Lock()
+	defer rendererMu.Unlock()
+	if r, ok := rendererCache[key]; ok {
+		return r, nil
+	}
+	r, err := glamour.NewTermRenderer(
+		glamour.WithStyles(theme.Config),
+		glamour.WithChromaFormatter(theme.Formatter),
+		glamour.WithWordWrap(width),
+	)
+	if err != nil {
+		return nil, err
+	}
+	rendererCache[key] = r
 	return r, nil
 }
 
@@ -555,13 +512,6 @@ func indentWrappedBullets(styled string) string {
 	return strings.Join(lines, "\n")
 }
 
-func renderTaskMarker(marker string) string {
-	if st, ok := taskMarkerStyles[marker]; ok {
-		return st.Render(marker)
-	}
-	return marker
-}
-
 // preprocessEmphasis wraps whole-word, case-insensitive occurrences of term in
 // emphasis sentinels (outside fences and inline code), returning the rewritten
 // body and the original matched substrings indexed by sentinel id (so casing is
@@ -656,6 +606,10 @@ func RenderWithEmphasis(body string, width int, emphasis string) (Result, error)
 	f := preprocess(body, emphasis)
 	wikiSubs, taskMarkers, emphSubs := f.wikiSubs, f.taskMarkers, f.emphSubs
 
+	theme, err := CurrentTheme()
+	if err != nil {
+		return Result{}, err
+	}
 	r, err := rendererFor(width)
 	if err != nil {
 		return Result{}, err
@@ -687,7 +641,7 @@ func RenderWithEmphasis(body string, width int, emphasis string) (Result, error)
 				out.WriteString(styled[m[0]:m[1]])
 				continue
 			}
-			rendered := linkStyle.Render(wikiSubs[id].display)
+			rendered := theme.Link.Render(wikiSubs[id].display)
 			start := out.Len()
 			out.WriteString(rendered)
 			links = append(links, Link{
@@ -705,7 +659,12 @@ func RenderWithEmphasis(body string, width int, emphasis string) (Result, error)
 			if taskMarkers[id].open {
 				tasks = append(tasks, out.Len())
 			}
-			out.WriteString(renderTaskMarker(taskMarkers[id].marker))
+			marker := taskMarkers[id].marker
+			if st, ok := theme.Markers[marker]; ok {
+				out.WriteString(st.Render(marker))
+			} else {
+				out.WriteString(marker)
+			}
 		case m[6] >= 0: // emphasis sentinel
 			id, ok := decodeSentinelID(styled[m[6]:m[7]])
 			if !ok || id >= len(emphSubs) {
