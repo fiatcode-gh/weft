@@ -528,7 +528,10 @@ func TestPageViewAnchorAtTopNeedsNoMap(t *testing.T) {
 
 	orig := sourceRowsFor
 	t.Cleanup(func() { sourceRowsFor = orig })
-	sourceRowsFor = func(string, int, string) []int { t.Fatal("row map computed at the top of the page"); return nil }
+	sourceRowsFor = func(string, int, string) ([]int, []bool) {
+		t.Fatal("row map computed at the top of the page")
+		return nil, nil
+	}
 	// A list-first page shows line 0 on read row 2.
 	if at, ok := p.ReadingAnchor(); !ok || at != (Anchor{0, 0, 2}) {
 		t.Fatalf("ReadingAnchor = (%+v, %v), want ({0 0 2}, true)", at, ok)
@@ -609,7 +612,7 @@ func TestPageViewAnchorWithoutRowMapIsNotOK(t *testing.T) {
 	quietTerm(t)
 	orig := sourceRowsFor
 	t.Cleanup(func() { sourceRowsFor = orig })
-	sourceRowsFor = func(string, int, string) []int { return nil }
+	sourceRowsFor = func(string, int, string) ([]int, []bool) { return nil, nil }
 	_, idx := writeGraph(t, map[string]string{"pages/A.md": anchorLongPage("")})
 	p := NewPageView(idx, "A", 80, 10)
 	scrollDown(p, 20)
@@ -624,7 +627,7 @@ func TestPageViewAnchorComputesMapOncePerLoadAndOnlyWhenNeeded(t *testing.T) {
 	orig := sourceRowsFor
 	t.Cleanup(func() { sourceRowsFor = orig })
 	calls := 0
-	sourceRowsFor = func(body string, width int, emphasis string) []int {
+	sourceRowsFor = func(body string, width int, emphasis string) ([]int, []bool) {
 		calls++
 		return orig(body, width, emphasis)
 	}

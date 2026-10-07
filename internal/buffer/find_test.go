@@ -5,14 +5,6 @@ import (
 	"testing"
 )
 
-func matchTexts(b *Buffer, rs []Range) []string {
-	var out []string
-	for _, r := range rs {
-		out = append(out, b.Text(r))
-	}
-	return out
-}
-
 func TestFindSmartCase(t *testing.T) {
 	b := New("alpha Alpha ALPHA")
 	for q, want := range map[string]int{"alpha": 3, "Alpha": 1, "ALPHA": 1} {

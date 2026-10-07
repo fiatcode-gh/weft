@@ -73,7 +73,7 @@ func checkRowsMatchReadView(t *testing.T, textOnlyForNested bool) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		rowMap := SourceRows(body, width, "")
+		rowMap, _ := SourceRows(body, width, "")
 		if rowMap == nil {
 			t.Fatal("SourceRows is nil")
 		}

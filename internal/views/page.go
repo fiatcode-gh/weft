@@ -55,7 +55,9 @@ type PageView struct {
 
 	body     string // body result was rendered from; "" when nothing rendered
 	rows     []int  // memoised render.SourceRows(body, ...), valid when rowsDone
+	rowOwn   []bool // rows[i]'s row is one of its line's own, not borrowed
 	rowsDone bool
+	noColor  bool // the style names no colours, so the link cursor needs reverse video
 }
 
 type cachedPage struct {
@@ -179,10 +181,13 @@ type Anchor struct{ Line, RowInLine, ScreenRow int }
 // ReadingAnchor reports the row of the rendered page body (the TrimSpace'd body
 // load renders) the in-app editor should keep in place. A link cursor whose
 // row is inside the visible window wins; otherwise the first non-blank row of
-// the window decides. ok is false when a row map is needed and none can be
-// produced. A view at the top with no visible link cursor needs no map: the
-// first non-blank row is line 0. The map is computed lazily, once per load,
-// and only after an anchor is known to need it.
+// the window that is one of its line's own decides, so a table's outer border
+// or a margin (rows no source line spells) never stands for the line below
+// it: the line under it is anchored on the screen row it really has. ok is
+// false when a row map is needed and none can be produced. A view at the top
+// with no visible link cursor needs no map: the first non-blank row is line
+// 0. The map is computed lazily, once per load, and only after an anchor is
+// known to need it.
 func (p *PageView) ReadingAnchor() (Anchor, bool) {
 	top := p.vp.YOffset()
 	rows := p.styledRows(top, top+p.vp.Height())
@@ -192,7 +197,7 @@ func (p *PageView) ReadingAnchor() (Anchor, bool) {
 		row, linkVisible = r, true
 	} else {
 		for i, s := range rows {
-			if strings.TrimSpace(ansi.Strip(s)) != "" {
+			if nonBlank(s) {
 				row = top + i
 				break
 			}
@@ -205,13 +210,24 @@ func (p *PageView) ReadingAnchor() (Anchor, bool) {
 	if len(lines) == 0 {
 		return Anchor{}, false
 	}
+	if !linkVisible {
+		for i := row - top; i < len(rows); i++ {
+			if nonBlank(rows[i]) && p.rowOwned(top+i) {
+				row = top + i
+				break
+			}
+		}
+	}
 	row = clampInt(row, 0, len(lines)-1)
 	line := lines[row]
 	first := p.styledRows(0, len(lines))
-	f := row
+	f, owned := row, p.rowOwned(row)
 	for r := row - 1; r >= 0 && lines[r] == line; r-- {
-		if r < len(first) && strings.TrimSpace(ansi.Strip(first[r])) != "" {
-			f = r
+		if r >= len(first) || !nonBlank(first[r]) {
+			continue
+		}
+		if p.rowOwned(r) || !owned {
+			f, owned = r, p.rowOwned(r)
 		}
 	}
 	return Anchor{Line: line, RowInLine: row - f, ScreenRow: row - top}, true
@@ -230,10 +246,23 @@ func (p *PageView) PlaceAnchor(a Anchor) {
 		return
 	}
 	styled := p.styledRows(0, len(lines))
-	first := map[int]int{} // body line → first non-blank row
+	first := map[int]int{} // body line → first non-blank row of its own
+	borrowed := map[int]int{}
 	for r, s := range styled {
-		if _, seen := first[lines[r]]; !seen && strings.TrimSpace(ansi.Strip(s)) != "" {
-			first[lines[r]] = r
+		if !nonBlank(s) {
+			continue
+		}
+		set := first
+		if !p.rowOwned(r) {
+			set = borrowed
+		}
+		if _, seen := set[lines[r]]; !seen {
+			set[lines[r]] = r
+		}
+	}
+	for l, r := range borrowed { // a line with only borrowed rows still has rows
+		if _, own := first[l]; !own {
+			first[l] = r
 		}
 	}
 	line, found := 0, false
@@ -260,6 +289,8 @@ func (p *PageView) PlaceAnchor(a Anchor) {
 	p.vp.SetYOffset(f + min(max(a.RowInLine, 0), n-1) - min(a.ScreenRow, p.vp.Height()-1))
 }
 
+func nonBlank(row string) bool { return strings.TrimSpace(ansi.Strip(row)) != "" }
+
 // styledRows returns rows [from, to) of the rendered page, fewer at its end.
 func (p *PageView) styledRows(from, to int) []string {
 	s := p.result.Styled
@@ -280,15 +311,21 @@ func (p *PageView) styledRows(from, to int) []string {
 }
 
 // sourceRows returns the styled-row → body-line map for the loaded render,
-// computing it on first use after each load.
+// computing it on first use after each load. rowOwned says whether a row is
+// one of its line's own (a letterless margin or border row only borrows the
+// line below it).
 func (p *PageView) sourceRows() []int {
 	if !p.rowsDone {
 		p.rowsDone = true
 		if p.body != "" {
-			p.rows = sourceRowsFor(p.body, p.width, p.emphasis)
+			p.rows, p.rowOwn = sourceRowsFor(p.body, p.width, p.emphasis)
 		}
 	}
 	return p.rows
+}
+
+func (p *PageView) rowOwned(row int) bool {
+	return row < 0 || row >= len(p.rowOwn) || p.rowOwn[row]
 }
 
 // FollowCursor returns the link target under the cursor, or "" if none.
@@ -408,7 +445,7 @@ func (p *PageView) View() string {
 	if p.cursor >= 0 && p.cursor < len(p.result.Links) {
 		l := p.result.Links[p.cursor]
 		cs := cursorStyle
-		if theme, _ := render.CurrentTheme(); theme.Name == "notty" {
+		if p.noColor {
 			// No colour to tell the cursor link apart: reverse video does.
 			cs = cs.Reverse(true)
 		}
@@ -421,7 +458,9 @@ func (p *PageView) View() string {
 func (p *PageView) load() {
 	p.err = nil
 	p.result = render.Result{}
-	p.body, p.rows, p.rowsDone = "", nil, false
+	p.body, p.rows, p.rowOwn, p.rowsDone = "", nil, nil, false
+	theme, _ := render.CurrentTheme()
+	p.noColor = theme.Name == "notty"
 	meta, ok := p.idx.Resolve(p.page)
 	if !ok {
 		return

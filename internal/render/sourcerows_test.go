@@ -2,6 +2,7 @@ package render
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -21,12 +22,18 @@ func sourceRowOf(t *testing.T, res Result, substr string) int {
 	return -1
 }
 
+// sourceRowsOnly is SourceRows' line map alone.
+func sourceRowsOnly(body string, width int, emphasis string) []int {
+	rows, _ := SourceRows(body, width, emphasis)
+	return rows
+}
+
 // mustSourceRows returns the real render of body plus its row map, failing when
 // the map is nil.
 func mustSourceRows(t *testing.T, body string, width int, emphasis string) (Result, []int) {
 	t.Helper()
 	res := mustRenderEmphasis(t, body, width, emphasis)
-	rows := SourceRows(body, width, emphasis)
+	rows, _ := SourceRows(body, width, emphasis)
 	if rows == nil {
 		t.Fatal("SourceRows is nil")
 	}
@@ -109,6 +116,75 @@ func TestSourceRowsTrackFencedCode(t *testing.T) {
 	}
 }
 
+// A row with no letters or digits belongs to its own source line when one
+// exists (a rule, a table's delimiter row, a "- ..." bullet) and to no line
+// otherwise (a margin), taking the line below it without being its own.
+func TestSourceRowsLetterlessRowsOwnTheirLine(t *testing.T) {
+	body := "para\n\n---\n\n| Name | Val |\n|------|-----|\n| a | 1 |\n\n- ...\n- after\n"
+	res := mustRender(t, body, 40)
+	rows, own := SourceRows(body, 40, "")
+	if len(rows) != strings.Count(res.Styled, "\n")+1 || len(own) != len(rows) {
+		t.Fatalf("len(rows) = %d, len(own) = %d, Styled has %d rows", len(rows), len(own), strings.Count(res.Styled, "\n")+1)
+	}
+	styled := strings.Split(res.Styled, "\n")
+	rowWhere := func(match func(string) bool) int {
+		for i, r := range styled {
+			if match(ansi.Strip(r)) {
+				return i
+			}
+		}
+		t.Fatalf("no matching row in:\n%s", ansi.Strip(res.Styled))
+		return -1
+	}
+	for _, tt := range []struct {
+		name string
+		row  int
+		line int
+	}{
+		{"rule", rowWhere(func(s string) bool {
+			return strings.Contains(s, "----") && !strings.Contains(s, "|") && !strings.Contains(s, "┼")
+		}), 2},
+		{"table header", sourceRowOf(t, res, "Name"), 4},
+		{"table delimiter", rowWhere(func(s string) bool { return strings.ContainsAny(s, "|┼") && !strings.ContainsAny(s, "NameVal1") }), 5},
+		{"dots bullet", sourceRowOf(t, res, "..."), 8},
+		{"after bullet", sourceRowOf(t, res, "after"), 9},
+	} {
+		if rows[tt.row] != tt.line || !own[tt.row] {
+			t.Errorf("%s (row %d) = line %d own %v, want line %d own true", tt.name, tt.row, rows[tt.row], own[tt.row], tt.line)
+		}
+	}
+	for i, r := range styled {
+		if strings.TrimSpace(ansi.Strip(r)) == "" && own[i] {
+			t.Errorf("blank row %d is reported as its own", i)
+		}
+	}
+}
+
+// A letterless row with no source line to pair with (a margin row the renderer
+// adds) is not its own, and the line count must match exactly to pair at all.
+func TestTaggedRowLinesLetterlessPairing(t *testing.T) {
+	tag := func(line int) string { return "x" + encodeRowTag(line) }
+	rows := []string{tag(0), "---", "+--+", tag(3), "---", tag(5)}
+	tests := []struct {
+		name      string
+		loose     []int
+		wantLines []int
+		wantOwn   []bool
+	}{
+		{"one line per gap row", []int{1, 2, 4}, []int{0, 1, 2, 3, 4, 5}, []bool{true, true, true, true, true, true}},
+		{"fewer lines than rows", []int{1, 4}, []int{0, 3, 3, 3, 4, 5}, []bool{true, false, false, true, true, true}},
+		{"more lines than rows", []int{1, 4, 4}, []int{0, 3, 3, 3, 5, 5}, []bool{true, false, false, true, false, true}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lines, own := taggedRowLines(rows, 9, tt.loose)
+			if !slices.Equal(lines, tt.wantLines) || !slices.Equal(own, tt.wantOwn) {
+				t.Errorf("lines %v own %v, want lines %v own %v", lines, own, tt.wantLines, tt.wantOwn)
+			}
+		})
+	}
+}
+
 func TestSourceRowsTrackWrappedBullet(t *testing.T) {
 	res, rows := mustSourceRows(t, "- This bullet has enough text that Glamour will wrap it across two lines for sure.\n- next\n", 40, "")
 	first, next := sourceRowOf(t, res, "This bullet"), sourceRowOf(t, res, "next")
@@ -160,7 +236,7 @@ func TestSourceRowsOnGlamourFallback(t *testing.T) {
 	}
 	body := "- a\n  :LOGBOOK:\n  x\n  :END:\n- b\n"
 	res := mustRender(t, body, 80)
-	rows := SourceRows(body, 80, "")
+	rows, own := SourceRows(body, 80, "")
 	want := []int{0, 4, 5}
 	if len(rows) != len(want) {
 		t.Fatalf("rows = %v, want %v", rows, want)
@@ -173,6 +249,11 @@ func TestSourceRowsOnGlamourFallback(t *testing.T) {
 	if got := strings.Count(res.Styled, "\n") + 1; len(rows) != got {
 		t.Errorf("len(rows) = %d, Styled has %d rows", len(rows), got)
 	}
+	for i, o := range own {
+		if !o {
+			t.Errorf("fallback row %d is not its own", i)
+		}
+	}
 }
 
 func TestSourceRowsNilWhenTaggedRenderFails(t *testing.T) {
@@ -184,8 +265,8 @@ func TestSourceRowsNilWhenTaggedRenderFails(t *testing.T) {
 		}
 		return orig(r, in)
 	}
-	if rows := SourceRows("- a\n- b\n", 80, ""); rows != nil {
-		t.Errorf("SourceRows = %v, want nil", rows)
+	if rows, own := SourceRows("- a\n- b\n", 80, ""); rows != nil || own != nil {
+		t.Errorf("SourceRows = %v, %v, want nil", rows, own)
 	}
 	res := mustRender(t, "- a\n- b\n", 80)
 	if res.FallbackErr != nil {
@@ -232,7 +313,8 @@ func TestTagSourceLinesKeepsGlamourLayout(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				got, err := glamourRender(r, tagSourceLines(body, src))
+				tagged, _ := tagSourceLines(body, src)
+				got, err := glamourRender(r, tagged)
 				if err != nil {
 					t.Fatal(err)
 				}

@@ -13,7 +13,7 @@ import (
 var (
 	styleRed  = uv.Style{Fg: ansi.Red}
 	styleBold = uv.Style{Attrs: uv.AttrBold}
-	styleUl   = uv.Style{Underline: uv.UnderlineStyleSingle}
+	styleUl   = uv.Style{Underline: uv.UnderlineSingle}
 )
 
 func TestDrawRowNeverEmitsRawControls(t *testing.T) {

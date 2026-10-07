@@ -1,7 +1,9 @@
 package render
 
 import (
+	"math"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -32,6 +34,14 @@ import (
 // link reference definitions) it is not placed, and when the two renders
 // still diverge, alignRows realigns the matching prefix and suffix and maps
 // the unmatched middle to the line where the divergence starts.
+//
+// A line with no letter, number or sentinel (a rule, a table's delimiter
+// row, a "- ..." bullet) gets no tag, so its row is tagless too. When a gap
+// between two tagged rows holds exactly as many letterless rows as there are
+// untagged source lines between the two tags, the rows are paired with those
+// lines in order and are the lines' own. Any other letterless row (a table's
+// outer border, a margin) belongs to no source line: it takes the line below
+// it, as a tagless row always did, but is reported as not its own.
 
 // rowTagDigits spells decimal digit d as rowTagDigits[d]: CSI-intermediate
 // bytes, so ESC + digits + 'z' parses as one zero-width escape for reflow
@@ -65,8 +75,11 @@ func decodeRowTag(digits string) int {
 }
 
 // tagSourceLines returns pre with one row tag per eligible line, tagging
-// line j with src[j].
-func tagSourceLines(pre string, src []int) string {
+// line j with src[j], and loose: the src values (ascending) of the non-blank
+// lines left untagged because they hold nothing to tag after, excluding fence
+// delimiters, bare ordered markers and link reference definitions, whose
+// rendering is not a row of their own.
+func tagSourceLines(pre string, src []int) (tagged string, loose []int) {
 	lines := strings.Split(pre, "\n")
 	var fence graph.FenceState
 	for j, line := range lines {
@@ -87,10 +100,12 @@ func tagSourceLines(pre string, src []int) string {
 		default:
 			if cut := rowTagCut(line); cut >= 0 {
 				lines[j] = line[:cut] + encodeRowTag(src[j]) + line[cut:]
+			} else {
+				loose = append(loose, src[j])
 			}
 		}
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, "\n"), loose
 }
 
 // rowTagCut is the byte offset just after the last rune that is a letter,
@@ -115,7 +130,7 @@ func rowTagCut(line string) int {
 			}
 		case r == '>' && angle:
 			angle = false
-		case dest == 0 && !angle && (unicode.IsLetter(r) || unicode.IsNumber(r) || unicode.Is(unicode.Co, r)):
+		case dest == 0 && !angle && isTextRune(r):
 			cut = i + size
 		}
 		prev = r
@@ -152,21 +167,27 @@ func preprocess(body, emphasis string) frontend {
 }
 
 // SourceRows maps each row of the Styled output that RenderWithEmphasis
-// produces for the same arguments to the 0-based line of body behind it.
-// Nil when the map cannot be produced; callers treat nil as "no map".
-func SourceRows(body string, width int, emphasis string) []int {
+// produces for the same arguments to the 0-based line of body behind it, and
+// reports for each row whether it is one of that line's own rows (own[i]) or
+// only borrows the line below it (a blank margin or a table's outer border).
+// Both are nil when the map cannot be produced; callers treat nil as "no map".
+func SourceRows(body string, width int, emphasis string) (lines []int, own []bool) {
 	f := preprocess(body, emphasis)
 	r, err := rendererFor(width)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	styled, err := glamourRender(r, f.pre)
 	if err != nil {
 		// Fallback: Styled is pre itself, one row per pre line.
 		if strings.Count(f.pre, "\n")+1 != len(f.src) {
-			return nil
+			return nil, nil
 		}
-		return f.src
+		own = make([]bool, len(f.src))
+		for i := range own {
+			own[i] = true
+		}
+		return f.src, own
 	}
 	return sourceRows(r, styled, f.pre, f.src)
 }
@@ -176,53 +197,96 @@ func SourceRows(body string, width int, emphasis string) []int {
 // strings.Count(pre, "\n")+1 != len(src) (defensive: a future preprocessing
 // pass that changed line count must degrade, not panic) or when the tagged
 // render fails.
-func sourceRows(r *glamour.TermRenderer, styled, pre string, src []int) []int {
+func sourceRows(r *glamour.TermRenderer, styled, pre string, src []int) (lines []int, own []bool) {
 	if strings.Count(pre, "\n")+1 != len(src) {
-		return nil
+		return nil, nil
 	}
-	tagged, err := glamourRender(r, tagSourceLines(pre, src))
+	tagSrc, loose := tagSourceLines(pre, src)
+	tagged, err := glamourRender(r, tagSrc)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	taggedRows := strings.Split(tagged, "\n")
-	lines := taggedRowLines(taggedRows, src[len(src)-1])
-	return alignRows(strings.Split(styled, "\n"), taggedRows, lines)
+	taggedLines, taggedOwn := taggedRowLines(taggedRows, src[len(src)-1], loose)
+	return alignRows(strings.Split(styled, "\n"), taggedRows, taggedLines, taggedOwn)
 }
 
-// taggedRowLines walks tagged rows bottom-up. A row takes the line of its
-// first tag; a tagless row takes the line of the nearest tagged row below it;
-// rows below the last tag take the last tag's line, and with no tags every
-// row is 0. Tags decoding above maxLine are ignored. len(result) == len(rows).
-func taggedRowLines(rows []string, maxLine int) []int {
-	own := make([]int, len(rows))
-	cur := 0
-	found := false
-	for i := len(rows) - 1; i >= 0; i-- {
-		own[i] = -1
-		for _, m := range rowTagRe.FindAllStringSubmatch(rows[i], -1) {
+// isTextRune is what a row tag can follow: a letter, a number or a sentinel.
+func isTextRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsNumber(r) || unicode.Is(unicode.Co, r)
+}
+
+// taggedRowLines maps tagged rows to lines. A row takes the line of its first
+// tag; a tagless row takes the line of the nearest tagged row below it; rows
+// below the last tag take the last tag's line, and with no tags every row is
+// 0. Tags decoding above maxLine are ignored. (A pairing, below, counts as a
+// tag.)
+//
+// own[i] is true for a tagged row and for a tagless row with text in it (an
+// early row of the wrapped line below). A letterless non-blank row is paired
+// with a line of loose (ascending, see tagSourceLines) as the package comment
+// says, and then takes that line and is its own; otherwise it, like a blank
+// row, is not. len(lines) == len(own) == len(rows).
+func taggedRowLines(rows []string, maxLine int, loose []int) (lines []int, own []bool) {
+	lines = make([]int, len(rows))
+	own = make([]bool, len(rows))
+	anchored := make([]bool, len(rows)) // the row's line is known, not borrowed
+	for i, row := range rows {
+		for _, m := range rowTagRe.FindAllStringSubmatch(row, -1) {
 			if n := decodeRowTag(m[1]); n <= maxLine {
-				own[i] = n
+				lines[i], anchored[i] = n, true
 				break
 			}
 		}
-		if own[i] >= 0 && !found {
-			cur, found = own[i], true
+		own[i] = anchored[i] || strings.IndexFunc(ansi.Strip(row), isTextRune) >= 0
+	}
+
+	// Letterless rows, collected per gap between tagged rows.
+	var letterless []int
+	above := -1
+	pair := func(below int) {
+		if lo, hi := sort.SearchInts(loose, above+1), sort.SearchInts(loose, below); above < below && hi-lo == len(letterless) {
+			for k, row := range letterless {
+				lines[row], own[row], anchored[row] = loose[lo+k], true, true
+			}
+		}
+		letterless = letterless[:0]
+	}
+	for i, row := range rows {
+		switch {
+		case anchored[i]:
+			pair(lines[i])
+			above = lines[i]
+		case !own[i] && strings.TrimSpace(ansi.Strip(row)) != "":
+			letterless = append(letterless, i)
 		}
 	}
-	out := make([]int, len(rows))
+	pair(math.MaxInt)
+
+	// Every other row takes the line of the nearest anchored row below it, and
+	// rows below the last anchored row take its line.
+	cur := 0
 	for i := len(rows) - 1; i >= 0; i-- {
-		if own[i] >= 0 {
-			cur = own[i]
+		if anchored[i] {
+			cur = lines[i]
+			break
 		}
-		out[i] = cur
 	}
-	return out
+	for i := len(rows) - 1; i >= 0; i-- {
+		if anchored[i] {
+			cur = lines[i]
+		} else {
+			lines[i] = cur
+		}
+	}
+	return lines, own
 }
 
 // alignRows maps real rows through tagged rows: common prefix p and suffix s
 // by ansi.Strip equality (p+s <= min(len(real), len(tagged))); unmatched
-// middle rows take lines[min(p, len(lines)-1)]. len(result) == len(real).
-func alignRows(real, tagged []string, lines []int) []int {
+// middle rows take lines[min(p, len(lines)-1)] and count as their own.
+// len(result) == len(real).
+func alignRows(real, tagged []string, lines []int, own []bool) (outLines []int, outOwn []bool) {
 	realPlain := make([]string, len(real))
 	for i, row := range real {
 		realPlain[i] = ansi.Strip(row)
@@ -240,17 +304,19 @@ func alignRows(real, tagged []string, lines []int) []int {
 	for p+s < limit && realPlain[len(real)-1-s] == taggedPlain[len(tagged)-1-s] {
 		s++
 	}
-	out := make([]int, len(real))
+	outLines = make([]int, len(real))
+	outOwn = make([]bool, len(real))
 	middle := lines[min(p, len(lines)-1)]
-	for i := range out {
+	for i := range outLines {
 		switch {
 		case i < p:
-			out[i] = lines[i]
+			outLines[i], outOwn[i] = lines[i], own[i]
 		case i >= len(real)-s:
-			out[i] = lines[len(tagged)-(len(real)-i)]
+			j := len(tagged) - (len(real) - i)
+			outLines[i], outOwn[i] = lines[j], own[j]
 		default:
-			out[i] = middle
+			outLines[i], outOwn[i] = middle, true
 		}
 	}
-	return out
+	return outLines, outOwn
 }

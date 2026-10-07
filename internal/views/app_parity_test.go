@@ -217,7 +217,7 @@ func TestEscReusesPageAndMap(t *testing.T) {
 	orig := sourceRowsFor
 	t.Cleanup(func() { sourceRowsFor = orig })
 	calls := 0
-	sourceRowsFor = func(body string, width int, emphasis string) []int {
+	sourceRowsFor = func(body string, width int, emphasis string) ([]int, []bool) {
 		calls++
 		return orig(body, width, emphasis)
 	}
@@ -572,7 +572,7 @@ func TestColourParityNoColor(t *testing.T) {
 				if st.Attrs&want.attrs != want.attrs {
 					t.Errorf("%s %s cell %d attrs %#x, want %#x set", side.name, sm.name, i, st.Attrs, want.attrs)
 				}
-				if want.ul && st.Underline == uv.UnderlineStyleNone {
+				if want.ul && st.Underline == uv.UnderlineNone {
 					t.Errorf("%s %s cell %d is not underlined", side.name, sm.name, i)
 				}
 			}

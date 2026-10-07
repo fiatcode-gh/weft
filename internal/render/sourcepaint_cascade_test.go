@@ -58,7 +58,7 @@ func TestToUVMapsEveryAttributeGlamourRenders(t *testing.T) {
 		{"crossed out", ansi.StylePrimitive{CrossedOut: yes}, uv.Style{Attrs: uv.AttrStrikethrough}},
 		{"inverse", ansi.StylePrimitive{Inverse: yes}, uv.Style{Attrs: uv.AttrReverse}},
 		{"blink", ansi.StylePrimitive{Blink: yes}, uv.Style{Attrs: uv.AttrBlink}},
-		{"underline", ansi.StylePrimitive{Underline: yes}, uv.Style{Underline: uv.UnderlineStyleSingle}},
+		{"underline", ansi.StylePrimitive{Underline: yes}, uv.Style{Underline: uv.UnderlineSingle}},
 		{"false attributes", ansi.StylePrimitive{Bold: boolPtr(false), Italic: boolPtr(false)}, uv.Style{}},
 		// Glamour's renderText ignores these; so does the editor.
 		{"faint ignored", ansi.StylePrimitive{Faint: yes}, uv.Style{}},

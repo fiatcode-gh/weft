@@ -50,6 +50,17 @@ func displayCells(line string) []cell {
 	return cells
 }
 
+// DisplayText is s as the editor draws it on one row starting at column 0:
+// tabs as spaces, control characters as carets, C1 code points and invalid
+// UTF-8 as U+FFFD. Its width is the width on screen.
+func DisplayText(s string) string {
+	var b strings.Builder
+	for _, c := range displayCells(s) {
+		b.WriteString(c.text)
+	}
+	return b.String()
+}
+
 // Geometry is how a theme and a width lay source lines out on screen.
 type Geometry struct {
 	Width       int

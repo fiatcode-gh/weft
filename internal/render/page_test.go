@@ -880,7 +880,7 @@ func TestRenderStripsHyperlinks(t *testing.T) {
 			t.Errorf("text %q missing from %q", want, plain)
 		}
 	}
-	if got, want := len(SourceRows(body, 80, "")), strings.Count(res.Styled, "\n")+1; got != want {
+	if got, want := len(sourceRowsOnly(body, 80, "")), strings.Count(res.Styled, "\n")+1; got != want {
 		t.Errorf("SourceRows = %d, styled rows = %d", got, want)
 	}
 }
@@ -919,7 +919,7 @@ func TestRenderOverWideSentinelLeavesNoPadRunes(t *testing.T) {
 			if i := strings.IndexAny(res.Styled, "\ue004\ue007\ue008"); i >= 0 {
 				t.Errorf("pad rune at byte %d in %q", i, res.Styled)
 			}
-			if got, want := len(SourceRows(tc.body, tc.width, tc.emphasis)), strings.Count(res.Styled, "\n")+1; got != want {
+			if got, want := len(sourceRowsOnly(tc.body, tc.width, tc.emphasis)), strings.Count(res.Styled, "\n")+1; got != want {
 				t.Errorf("SourceRows = %d, styled rows = %d", got, want)
 			}
 			tc.check(t, res)

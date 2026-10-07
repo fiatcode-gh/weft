@@ -96,7 +96,7 @@ func toUV(sp gansi.StylePrimitive) uv.Style {
 		s.Bg = realColor(lipgloss.Color(*sp.BackgroundColor))
 	}
 	if on(sp.Underline) {
-		s.Underline = uv.UnderlineStyleSingle
+		s.Underline = uv.UnderlineSingle
 	}
 	if on(sp.Bold) {
 		s.Attrs |= uv.AttrBold
@@ -142,7 +142,7 @@ func applyOverlay(s uv.Style, l lipgloss.Style) uv.Style {
 		s.Attrs |= uv.AttrItalic
 	}
 	if l.GetUnderline() {
-		s.Underline = uv.UnderlineStyleSingle
+		s.Underline = uv.UnderlineSingle
 	}
 	if l.GetStrikethrough() {
 		s.Attrs |= uv.AttrStrikethrough

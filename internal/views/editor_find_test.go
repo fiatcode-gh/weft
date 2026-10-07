@@ -4,6 +4,8 @@ import (
 	"image/color"
 	"strings"
 	"testing"
+	"unicode"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/colorprofile"
@@ -345,5 +347,44 @@ func TestFindKeepsMatchOnScreen(t *testing.T) {
 	rows := viewLines(e)[:e.textHeight()]
 	if !strings.Contains(strings.Join(rows, "\n"), "needle") {
 		t.Errorf("the match is not in the text window:\n%s", strings.Join(rows, "\n"))
+	}
+}
+
+// A selection seeds the query with the file's own bytes; ESC, other control
+// characters and invalid UTF-8 must not get into the bar, as typed and pasted
+// text can't.
+func TestFindSeedFromSelectionDropsControlBytes(t *testing.T) {
+	quietTerm(t)
+	e := editorAt(nil, "P", "/tmp/p.md", "a\x1b[31m\tb\xffc\n", false, 60, 12, 0)
+	e.buf.MoveTo(buffer.Pos{}, false)
+	e.buf.MoveTo(e.buf.LineEnd(buffer.Pos{}), true)
+	press(e, ctrl('f'))
+	if e.find == nil {
+		t.Fatal("find bar did not open")
+	}
+	if want := "a[31mbc"; e.find.query != want {
+		t.Errorf("query = %q, want %q", e.find.query, want)
+	}
+	if bar := barRow(e); strings.ContainsFunc(bar, unicode.IsControl) || !utf8.ValidString(bar) {
+		t.Errorf("bar row has raw control bytes or invalid UTF-8: %q", bar)
+	}
+}
+
+// The bar draws its fields as the editor draws text: tabs as spaces, control
+// and invalid bytes as carets and U+FFFD, and the terminal cursor after them.
+func TestFindBarDisplaysFieldsLikeTheEditor(t *testing.T) {
+	quietTerm(t)
+	f := &findBar{query: "a\tb\xff", repl: "c\x1bd", replaceShown: true, field: replaceField, cur: -1}
+	bar, x := f.barView(80)
+	got := ansi.Strip(bar)
+	if want := "Find: a   b\uFFFD  no matches  Replace: c^[d"; got != want {
+		t.Errorf("bar = %q, want %q", got, want)
+	}
+	if want := ansi.StringWidth(got); x != want {
+		t.Errorf("cursor column = %d, want %d (the end of the replace field)", x, want)
+	}
+	f.field = findField
+	if _, x := f.barView(80); x != ansi.StringWidth("Find: a   b\uFFFD") {
+		t.Errorf("find-field cursor column = %d, want %d", x, ansi.StringWidth("Find: a   b\uFFFD"))
 	}
 }

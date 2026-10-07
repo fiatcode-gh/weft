@@ -58,7 +58,7 @@ func (e *EditorView) openFind() {
 	if sel, ok := b.Selection(); ok {
 		f.origin = sel.Start
 		if sel.Start.Line == sel.End.Line {
-			f.query = b.Text(sel)
+			f.query = fieldInput(b.Text(sel))
 		}
 		b.MoveTo(sel.Start, false)
 	}
@@ -228,14 +228,19 @@ func (e *EditorView) updateFind(msg tea.KeyPressMsg) (res EditorResult, handled 
 func (e *EditorView) pasteFind(content string) {
 	f := e.find
 	line, _, _ := strings.Cut(cleanPaste(content), "\n")
-	line = strings.Map(func(r rune) rune {
+	*f.fieldText() += fieldInput(line)
+	e.findEdited()
+}
+
+// fieldInput is s as a find or replace field may hold it: invalid UTF-8 and
+// control characters dropped, so the bar never prints a raw byte of the file.
+func fieldInput(s string) string {
+	return strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) {
 			return -1
 		}
 		return r
-	}, line)
-	*f.fieldText() += line
-	e.findEdited()
+	}, strings.ToValidUTF8(s, ""))
 }
 
 // dropLastGrapheme removes the last user-perceived character of s.
@@ -293,7 +298,8 @@ func (f *findBar) barView(avail int) (string, int) {
 		fixed += 2 + ansi.StringWidth(replLabel)
 	}
 	room := max(2, avail-fixed)
-	fw, rw := ansi.StringWidth(f.query), ansi.StringWidth(f.repl)
+	query, repl := render.DisplayText(f.query), render.DisplayText(f.repl)
+	fw, rw := ansi.StringWidth(query), ansi.StringWidth(repl)
 	fRoom, rRoom := fw, rw
 	if !show {
 		fRoom = room
@@ -313,7 +319,7 @@ func (f *findBar) barView(avail int) (string, int) {
 		}
 		return styleFaint.Render(s)
 	}
-	q := tailFit(f.query, fRoom)
+	q := tailFit(query, fRoom)
 	var b strings.Builder
 	b.WriteString(label(findLabel, f.field == findField))
 	b.WriteString(q)
@@ -322,7 +328,7 @@ func (f *findBar) barView(avail int) (string, int) {
 	if !show {
 		return b.String(), x
 	}
-	r := tailFit(f.repl, rRoom)
+	r := tailFit(repl, rRoom)
 	b.WriteString("  ")
 	b.WriteString(label(replLabel, f.field == replaceField))
 	b.WriteString(r)
