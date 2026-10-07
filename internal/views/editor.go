@@ -218,11 +218,14 @@ func (e *EditorView) scrollAnchorToTop(anchorLine int) {
 	}
 	e.moveCursorTo(anchorLine+probe.Line(), probe.Column())
 	e.syncViewport()
-	if steps == h-1 {
+	if steps > 0 && steps == h-1 {
 		// The anchor's first row is now the window's top row: snap to it in one move.
+		// (A one-row window has no rows to climb: the cursor is on the top row
+		// already, and PageUp from there would move a whole page up.)
 		e.ta.PageUp()
 	} else {
-		// The buffer ends less than a window below the anchor: at most h-2 moves.
+		// The buffer ends less than a window below the anchor (or the window is
+		// one row): at most h-2 moves.
 		for e.ta.Line() > anchorLine {
 			e.ta.CursorUp()
 		}
@@ -338,10 +341,13 @@ func (e *EditorView) layout() {
 	e.completer.maxVisible = clampInt(e.height-6-editorTopMargin, 1, maxCompleterRows)
 	h := e.height - 1 - editorTopMargin - e.completer.rows()
 	e.ta.SetHeight(max(1, h))
-	// Bubbles v2's SetHeight repositions the viewport but SetWidth does not,
-	// so after a resize the cursor line can sit outside the visible window
-	// until the next keystroke. Poke Update with a content-neutral message to
-	// force a reposition; it's a no-op when the cursor is already visible.
+	// Bubbles v2's SetWidth does not reposition the viewport, and the
+	// viewport still holds the old width's wrapped content, which SetHeight's
+	// own reposition clamps against. After a resize that wraps more lines
+	// the cursor line can sit below the window until the next keystroke.
+	// Poke Update with a content-neutral message to render at the new width
+	// and reposition; it's a no-op when the cursor is already visible
+	// (TestEditorResizeNarrowKeepsCursorVisible).
 	e.ta, _ = e.ta.Update(repositionMsg{})
 }
 
@@ -553,18 +559,20 @@ func (e *EditorView) Update(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
 	return EditorResult{}, e.forward(msg)
 }
 
-// scrollPage moves the cursor by one viewport-height of lines by feeding the
-// textarea that many up/down keys, reusing its built-in line navigation and
-// viewport tracking. weft pages by feeding up/down keys so paging moves exactly
-// as before, not through the textarea's own PageUp/PageDown.
+// scrollPage moves the cursor by one viewport-height of visual rows (h-1, at
+// least one) with the textarea's own CursorDown/CursorUp. weft pages that way
+// so paging moves exactly as before, not through the textarea's PageUp/PageDown.
+// The moves are made directly, not as key messages: Bubbles v2 renders the
+// whole buffer on every Update, which made one page cost h full renders. A
+// direct move still repositions the viewport on its own, and View renders the
+// buffer itself, so nothing needs syncing afterwards.
 func (e *EditorView) scrollPage(dir int) {
-	steps := max(1, e.ta.Height()-1)
-	k := tea.KeyPressMsg{Code: tea.KeyDown}
-	if dir < 0 {
-		k = tea.KeyPressMsg{Code: tea.KeyUp}
-	}
-	for i := 0; i < steps; i++ {
-		e.ta, _ = e.ta.Update(k)
+	for range max(1, e.ta.Height()-1) {
+		if dir < 0 {
+			e.ta.CursorUp()
+		} else {
+			e.ta.CursorDown()
+		}
 	}
 }
 

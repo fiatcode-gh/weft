@@ -160,6 +160,28 @@ func TestEditorViewAnchorOnTopRow(t *testing.T) {
 	}
 }
 
+// With a one-row textarea the cursor is already on the top row, so the editor
+// must open on the anchor line itself, not a page above it (Bubbles v1 did).
+func TestEditorViewAnchorOnOneRowTextarea(t *testing.T) {
+	quietTerm(t)
+	for _, termHeight := range []int{2, 3} {
+		t.Run(fmt.Sprintf("terminal height %d", termHeight), func(t *testing.T) {
+			lines := fillerLines(20)
+			lines[5] = "ANCHORED LINE\n"
+			e := NewEditorView(nil, "Page", "/tmp/page.md", strings.Join(lines, ""), false, 80, termHeight, 5)
+			if h := e.ta.Height(); h != 1 {
+				t.Fatalf("textarea height = %d, want 1", h)
+			}
+			if r, c := e.cursorRowCol(); r != 5 || c != 0 {
+				t.Errorf("cursor = (%d,%d), want (5,0)", r, c)
+			}
+			if row := firstContentRow(t, e); !strings.Contains(row, "ANCHORED LINE") {
+				t.Errorf("first content row = %q, want the anchored line", row)
+			}
+		})
+	}
+}
+
 func TestEditorViewAnchorNearEndStaysVisible(t *testing.T) {
 	quietTerm(t)
 	lines := fillerLines(100)
@@ -518,12 +540,10 @@ func TestEditorCompletion_CursorStaysVisibleAtBottom(t *testing.T) {
 		}
 	}
 	// Mimic the Bubble Tea loop: a render primes the textarea viewport's
-	// content. The textarea only repositions its viewport inside Update, using
-	// content captured during the previous View — so without interleaved
-	// renders it can't scroll, just like in the real runtime.
-	_ = plain(e.View())
-	e.Update(key("x")) // edit at the bottom; reposition brings the line into view
-	_ = plain(e.View())
+	// content, which cursor moves clamp their scrolling against.
+	_ = e.View()
+	e.Update(key("x")) // edit at the bottom; Update repositions the viewport onto the cursor
+	_ = e.View()
 	if !strings.Contains(plain(e.View()), "EDITHERE") {
 		t.Fatalf("precondition: edited line should be visible before the strip opens")
 	}
@@ -531,7 +551,7 @@ func TestEditorCompletion_CursorStaysVisibleAtBottom(t *testing.T) {
 	// must not scroll out of view behind the strip.
 	for _, r := range "[[" {
 		e.Update(key(string(r)))
-		_ = plain(e.View())
+		_ = e.View()
 	}
 	if !e.completer.active {
 		t.Fatalf("completer should be active after typing [[")
@@ -541,11 +561,10 @@ func TestEditorCompletion_CursorStaysVisibleAtBottom(t *testing.T) {
 	}
 }
 
-// Regression: a plain terminal resize (completer never involved) must also
-// reposition the textarea viewport onto the cursor. SetHeight/SetWidth never
-// reposition (bubbles quirk: only Update does), so without an unconditional
-// poke in layout() the cursor line can scroll off-screen after a shrink and
-// stay hidden until the next keystroke.
+// A plain terminal resize (completer never involved) must keep the cursor on
+// screen. Bubbles v2's SetHeight repositions the viewport by itself, so this
+// shrink would be safe even without layout()'s poke; it guards that the
+// resize path keeps reaching a reposition at all.
 func TestEditorResizeKeepsCursorVisible(t *testing.T) {
 	// arrange — a buffer taller than the viewport, cursor moved to the last
 	// line, tall window so the cursor line renders comfortably.
@@ -561,7 +580,7 @@ func TestEditorResizeKeepsCursorVisible(t *testing.T) {
 	}
 	// Mimic the Bubble Tea loop: a render primes the textarea viewport's
 	// content, same technique as TestEditorCompletion_CursorStaysVisibleAtBottom.
-	_ = plain(e.View())
+	_ = e.View()
 
 	// act — shrink hard; no keypress afterwards.
 	e.SetSize(80, 8)
@@ -569,6 +588,34 @@ func TestEditorResizeKeepsCursorVisible(t *testing.T) {
 	// assert — the cursor's line must be inside the rendered window.
 	if !strings.Contains(plain(e.View()), "last-line") {
 		t.Fatal("cursor line scrolled out of view after resize")
+	}
+}
+
+// Narrowing the window makes lines wrap, so the buffer gets taller and the
+// cursor's visual row moves down. Bubbles v2's SetWidth does not reposition
+// the viewport, and the viewport still holds the old width's content until
+// something renders it, so SetHeight's own reposition clamps against that
+// stale content and leaves the cursor line below the window. layout()'s poke
+// (an Update that renders at the new width, then repositions) is what brings
+// it back; without a keypress afterwards nothing else would.
+func TestEditorResizeNarrowKeepsCursorVisible(t *testing.T) {
+	quietTerm(t)
+	long := strings.Repeat("word ", 20) // 100 columns: one row at 120, four at 30
+	content := strings.Repeat(long+"\n", 59) + "LAST-LINE " + long
+	e := NewEditorView(nil, "Note", "/tmp/n.md", content, false, 120, 14, 0)
+	for {
+		before := e.ta.Line()
+		e.ta.CursorDown()
+		if e.ta.Line() == before {
+			break
+		}
+	}
+	_ = e.View()
+
+	e.SetSize(30, 14) // narrower, same height; no keypress afterwards
+
+	if !strings.Contains(plain(e.View()), "LAST-LINE") {
+		t.Fatal("cursor line scrolled out of view after the window narrowed")
 	}
 }
 
@@ -764,7 +811,7 @@ func TestEditorRepositionsAfterContinuation(t *testing.T) {
 	e := NewEditorView(nil, "Note", "/tmp/n.md", sb.String(), false, 80, 24, 0)
 	// SetValue leaves the cursor at the end of ANCHOR and the viewport at the top.
 	e.ta.SetValue(sb.String())
-	_ = plain(e.View()) // prime the textarea viewport content; it is still scrolled to the top
+	_ = e.View() // prime the textarea viewport content; it is still scrolled to the top
 	if strings.Contains(plain(e.View()), "ANCHOR") {
 		t.Fatalf("precondition: the bottom bullet should be off-screen before Enter")
 	}
@@ -867,6 +914,6 @@ func BenchmarkEditorViewLargePage(b *testing.B) {
 	e := NewEditorView(nil, "Big", "/tmp/big.md", sb.String(), false, 80, 40, 0)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = plain(e.View())
+		_ = e.View()
 	}
 }
