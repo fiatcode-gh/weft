@@ -691,8 +691,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		if a.editor != nil {
-			res, _ := a.editor.Update(m)
-			var cmds []tea.Cmd
+			res, editorCmd := a.editor.Update(m)
+			cmds := []tea.Cmd{editorCmd}
 			outcome := saveWritten // meaningful only when res.Save
 			if res.Save {
 				if outcome = a.saveEditor(res.Exit); outcome == saveBlocked {

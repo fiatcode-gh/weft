@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/fiatcode-gh/weft/v2/internal/buffer"
 	"github.com/fiatcode-gh/weft/v2/internal/render"
@@ -216,8 +217,9 @@ func (e *EditorView) ExitAnchor() Anchor {
 
 // moveRows moves the cursor n display rows up (dir < 0) or down at the
 // remembered screen column. A single step off the first or last row goes to
-// the buffer start or end; a longer move (a page) clamps to that row.
-func (e *EditorView) moveRows(dir, n int) {
+// the buffer start or end; a longer move (a page) clamps to that row. With
+// extend the move grows the selection.
+func (e *EditorView) moveRows(dir, n int, extend bool) {
 	cur, x := e.cursorRow()
 	if !e.goalOK {
 		e.goalX, e.goalOK = x, true
@@ -241,14 +243,14 @@ func (e *EditorView) moveRows(dir, n int) {
 	if moved == 0 && n == 1 {
 		e.buf.Break()
 		if dir < 0 {
-			e.buf.MoveTo(buffer.Pos{}, false)
+			e.buf.MoveTo(buffer.Pos{}, extend)
 		} else {
-			e.buf.MoveTo(e.buf.End(), false)
+			e.buf.MoveTo(e.buf.End(), extend)
 		}
 		return
 	}
 	c := e.line(p.line)
-	e.buf.MoveTo(buffer.Pos{Line: p.line, Col: e.geo.OffsetAt(c.text, c.info, c.rows, p.row, e.goalX)}, false)
+	e.buf.MoveTo(buffer.Pos{Line: p.line, Col: e.geo.OffsetAt(c.text, c.info, c.rows, p.row, e.goalX)}, extend)
 }
 
 // frameRows draws the text window: textHeight rows, "" where blank.
@@ -277,7 +279,13 @@ func (e *EditorView) frameRows() []string {
 	return out
 }
 
-// drawRow draws one display row with row.Col's leading padding.
+// selectionStyle marks selected cells. Reverse is an attribute, so it stays
+// visible under NO_COLOR.
+var selectionStyle = uv.Style{Attrs: uv.AttrReverse}
+
+// drawRow draws one display row with row.Col's leading padding. Selected
+// bytes are drawn reversed; the row that ends a selected line adds one
+// reversed cell for the line break.
 func (e *EditorView) drawRow(p viewPos) string {
 	c := e.line(p.line)
 	if !c.painted {
@@ -286,7 +294,22 @@ func (e *EditorView) drawRow(p viewPos) string {
 		e.stats.painted++
 	}
 	r := c.rows[p.row]
-	s := render.DrawRow(c.text, c.info, r, c.spans)
+	spans, lineBreak := c.spans, false
+	if sel, ok := e.buf.Selection(); ok && sel.Start.Line <= p.line && p.line <= sel.End.Line {
+		from, to := 0, len(c.text)
+		if p.line == sel.Start.Line {
+			from = sel.Start.Col
+		}
+		if p.line == sel.End.Line {
+			to = sel.End.Col
+		}
+		spans = render.Overlay(spans, from, to, selectionStyle)
+		lineBreak = p.line < sel.End.Line && p.row == len(c.rows)-1
+	}
+	s := render.DrawRow(c.text, c.info, r, spans)
+	if lineBreak {
+		s += selectionStyle.Styled(" ")
+	}
 	if s == "" {
 		return ""
 	}

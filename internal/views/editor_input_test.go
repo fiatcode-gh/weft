@@ -65,6 +65,10 @@ func TestEditorKeyTable(t *testing.T) {
 		{"pgup clamps to the first row", named(tea.KeyPgUp), 1, 3, fixture, 0, 3},
 		{"tab indents a bullet", named(tea.KeyTab), 2, 4, "alpha BeTa gamma\nsecond line\n  - item\n", 2, 6},
 		{"shift+tab outdents", tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}, 2, 4, fixture, 2, 4},
+		{"ctrl+a selects all", ctrl('a'), 0, 6, fixture, 3, 0},
+		{"ctrl+x cuts the line", ctrl('x'), 0, 6, "second line\n- item\n", 0, 6},
+		{"ctrl+c copies and changes nothing", ctrl('c'), 0, 6, fixture, 0, 6},
+		{"ctrl+z with nothing to undo", ctrl('z'), 0, 6, fixture, 0, 6},
 		{"ctrl+t cycles a marker", ctrl('t'), 2, 4, "alpha BeTa gamma\nsecond line\n- TODO item\n", 2, 9},
 	}
 	for _, tc := range cases {
@@ -98,15 +102,12 @@ func TestEditorKeyTableSaveAndEscape(t *testing.T) {
 	}
 }
 
-// Chords with no binding change nothing. ctrl+c and ctrl+a lose their old
-// meanings (leave, line start) in this cutover; later tasks bind them.
+// Chords with no binding change nothing.
 func TestEditorUnboundChordsAreInert(t *testing.T) {
 	quietTerm(t)
 	chords := []tea.KeyPressMsg{
 		ctrl('g'),
 		ctrl('r'),
-		ctrl('c'),
-		ctrl('a'),
 		{Code: 'c', Mod: tea.ModCtrl | tea.ModShift},
 		{Code: tea.KeyBackspace, Mod: tea.ModCtrl},
 		{Code: tea.KeyDelete, Mod: tea.ModCtrl},

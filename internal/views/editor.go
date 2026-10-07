@@ -333,53 +333,87 @@ func (e *EditorView) Update(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
 	}
 
 	before := e.buf.Version()
-	e.edit(key, msg.Text)
+	cmd := e.edit(key, msg.Text)
 	e.afterKey(e.buf.Version() != before)
-	return EditorResult{}, nil
+	return EditorResult{}, cmd
 }
 
-// edit applies one editing-mode key to the buffer. Keys that are not typing,
+// extendKeys maps each selection chord to the movement key it extends from.
+var extendKeys = map[string]string{
+	"shift+left":       "left",
+	"shift+right":      "right",
+	"shift+up":         keyUp,
+	"shift+down":       keyDown,
+	"shift+home":       "home",
+	"shift+end":        "end",
+	"shift+pgup":       "pgup",
+	"shift+pgdown":     "pgdown",
+	"alt+shift+left":   "alt+left",
+	"alt+shift+right":  "alt+right",
+	"alt+shift+b":      "alt+b",
+	"alt+shift+f":      "alt+f",
+	"ctrl+shift+left":  "ctrl+left",
+	"ctrl+shift+right": "ctrl+right",
+	"ctrl+shift+home":  "ctrl+home",
+	"ctrl+shift+end":   "ctrl+end",
+}
+
+// edit applies one editing-mode key to the buffer and returns the command it
+// needs run (the clipboard write of a copy or cut). Keys that are not typing,
 // backspace or delete first close the undo group in progress; unbound chords
 // change nothing.
-func (e *EditorView) edit(key, text string) {
+func (e *EditorView) edit(key, text string) tea.Cmd {
 	b := e.buf
 	switch key {
 	case keyBackspace, "ctrl+h":
 		b.Backspace()
 		e.goalOK = false
-		return
+		return nil
 	case "delete", "ctrl+d":
 		b.Delete()
 		e.goalOK = false
-		return
+		return nil
 	}
 	if text != "" && !strings.ContainsFunc(text, unicode.IsControl) && key != keyEnter && key != "tab" {
 		b.Type(text)
 		e.goalOK = false
-		return
+		return nil
 	}
 	b.Break()
+	extend := false
+	if base, ok := extendKeys[key]; ok {
+		key, extend = base, true
+	}
 	cur := b.Cursor()
-	horizontal := func(p buffer.Pos) { b.MoveTo(p, false); e.goalOK = false }
+	horizontal := func(p buffer.Pos) { b.MoveTo(p, extend); e.goalOK = false }
+	sel, hasSel := b.Selection()
 	switch key {
 	case keyEnter:
 		b.Newline()
 	case "left", "ctrl+b":
-		horizontal(b.Left(cur))
+		if hasSel && !extend {
+			horizontal(sel.Start)
+		} else {
+			horizontal(b.Left(cur))
+		}
 	case "right":
-		horizontal(b.Right(cur))
+		if hasSel && !extend {
+			horizontal(sel.End)
+		} else {
+			horizontal(b.Right(cur))
+		}
 	case keyUp, "ctrl+p":
-		e.moveRows(-1, 1)
-		return
+		e.moveRows(-1, 1, extend)
+		return nil
 	case keyDown, "ctrl+n":
-		e.moveRows(+1, 1)
-		return
+		e.moveRows(+1, 1, extend)
+		return nil
 	case "pgup":
-		e.moveRows(-1, max(1, e.textHeight()-1))
-		return
+		e.moveRows(-1, max(1, e.textHeight()-1), extend)
+		return nil
 	case "pgdown":
-		e.moveRows(+1, max(1, e.textHeight()-1))
-		return
+		e.moveRows(+1, max(1, e.textHeight()-1), extend)
+		return nil
 	case "home":
 		horizontal(b.LineStart(cur))
 	case "end", "ctrl+e":
@@ -392,6 +426,27 @@ func (e *EditorView) edit(key, text string) {
 		horizontal(buffer.Pos{})
 	case "ctrl+end", "alt+>":
 		horizontal(b.End())
+	case "ctrl+a":
+		b.SelectAll()
+	case "ctrl+z":
+		e.history(b.Undo(), "nothing to undo")
+		return nil
+	case "ctrl+y":
+		e.history(b.Redo(), "nothing to redo")
+		return nil
+	case "ctrl+c":
+		text, linewise := b.Copy()
+		return e.toRegister(text, linewise, "copied")
+	case "ctrl+x":
+		text, linewise := b.Cut()
+		e.goalOK = false
+		return e.toRegister(text, linewise, "cut")
+	case "ctrl+v":
+		if e.reg.text == "" {
+			e.notice = "nothing copied yet"
+			return nil
+		}
+		b.Paste(e.reg.text, e.reg.linewise)
 	case "alt+backspace", "ctrl+w":
 		b.DeleteWordBackward()
 	case "alt+delete", "alt+d":
@@ -417,9 +472,28 @@ func (e *EditorView) edit(key, text string) {
 	case "alt+down":
 		b.MoveBlock(+1)
 	default:
-		return // unbound chord: the group is closed, nothing else changes
+		return nil // unbound chord: the group is closed, nothing else changes
 	}
 	e.goalOK = false
+	return nil
+}
+
+// history finishes an undo or redo: a refusal becomes the status notice, and
+// either way the cursor comes back on screen with a fresh goal column.
+func (e *EditorView) history(done bool, refusal string) {
+	if !done {
+		e.notice = refusal
+	}
+	e.goalOK = false
+	e.ensureVisible()
+}
+
+// toRegister stores a copy or cut in weft's register and hands the text to
+// the terminal's clipboard (OSC 52).
+func (e *EditorView) toRegister(text string, linewise bool, notice string) tea.Cmd {
+	*e.reg = register{text: text, linewise: linewise}
+	e.notice = notice
+	return tea.SetClipboard(text)
 }
 
 func (e *EditorView) statusLine() string {

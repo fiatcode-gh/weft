@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func tempOut(t *testing.T) *os.File {
@@ -114,14 +115,31 @@ func (stubModel) View() tea.View {
 	return v
 }
 
+// clipboardModel copies a fixed text to the terminal clipboard on start.
+type clipboardModel struct{ stubModel }
+
+func (clipboardModel) Init() tea.Cmd {
+	return tea.Batch(tea.SetClipboard("copied text"), stubModel{}.Init())
+}
+
+func (m clipboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	_, cmd := m.stubModel.Update(msg)
+	return m, cmd
+}
+
 func runStub(t *testing.T, opts ...tea.ProgramOption) {
+	t.Helper()
+	runModel(t, stubModel{}, opts...)
+}
+
+func runModel(t *testing.T, m tea.Model, opts ...tea.ProgramOption) {
 	t.Helper()
 	common := []tea.ProgramOption{
 		tea.WithInput(strings.NewReader("")),
 		tea.WithEnvironment([]string{"TERM=xterm-256color"}),
 		tea.WithWindowSize(80, 24),
 	}
-	if _, err := tea.NewProgram(stubModel{}, append(opts, common...)...).Run(); err != nil {
+	if _, err := tea.NewProgram(m, append(opts, common...)...).Run(); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -147,4 +165,17 @@ func TestProgramOptionsSilenceTerminalProbes(t *testing.T) {
 	if !bytes.Contains(out, []byte("\x1b[?1049h")) {
 		t.Errorf("alt-screen entry missing; frames no longer reach the terminal: %q", out)
 	}
+}
+
+// OSC 52 (what tea.SetClipboard writes) must pass quietStdout: the editor's
+// copy and cut reach the terminal clipboard through it.
+func TestProgramOptionsPassClipboard(t *testing.T) {
+	f := tempOut(t)
+	runModel(t, clipboardModel{}, programOptions(f)...)
+	want := ansi.SetSystemClipboard("copied text")
+	out := readAll(t, f)
+	if !bytes.Contains(out, []byte(want)) {
+		t.Errorf("OSC 52 %q did not reach the output", want)
+	}
+	t.Logf("OSC 52 on the wire: %q", want)
 }
