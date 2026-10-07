@@ -41,7 +41,9 @@ textarea, a `/v3` module path, a release.
 - **Accepted slowdown:** typing and paging on very long pages stay slower than
   v1 (about 0.03 s per key at 1000 lines), because the v2 textarea redraws the
   whole buffer per update. editor-core removes the textarea, so a workaround
-  here would be wasted.
+  here would be wasted. *Superseded by `editor-core.md`: the textarea, its
+  cursor-placement workaround and this slowdown are gone; a 10000-line page now
+  opens in about 7 ms and takes about 2 ms per key.*
 - **Glamour v2 hyperlinks are stripped**: clickable links would be a new
   feature.
 

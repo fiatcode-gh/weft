@@ -37,13 +37,18 @@ resolution, the `$EDITOR` hand-off, and git conflicts.
 - **Reload is not offered when the disk content cannot be loaded faithfully**
   (CRLF, tabs, over 10000 lines), matching the editor's refusal to open such
   files. From a clash reached through save-and-exit, overwrite saves and
-  exits; reload and keep editing stay in the editor.
+  exits; reload and keep editing stay in the editor. *Superseded in part by
+  `editor-core.md`: the editor now opens any file, so reload is offered
+  whenever the file exists.*
 
 ## Traps
 
 - An empty journal is `""` on disk but the editor's content is `"\n"`. Merge
   inputs go through `mergeInput`, which turns newline-only text into empty
   text; otherwise both sides appending to an empty journal would clash.
+  *Superseded by `editor-core.md`: the editor's content is now exact and
+  `merge.Text` merges the final newline as its own change, so `mergeInput` is
+  gone.*
 - The guard re-reads the file just before the rename. A write by another
   program between that read and the rename is not detected; weft cannot lock
   files.
