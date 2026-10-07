@@ -38,7 +38,7 @@ func perfContent(n int) string {
 
 const (
 	perfW, perfH  = 100, 40
-	perfWindowH   = perfH - 1 // text rows: the status line takes one
+	perfWindowH   = perfH - 2 // text rows: the rule row and the status line take two
 	perfOpenMS    = 56
 	perfKeyMS     = 26
 	perfPageMS    = 4

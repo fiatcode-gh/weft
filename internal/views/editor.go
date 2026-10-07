@@ -103,7 +103,7 @@ func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, wid
 	}
 	e.width, e.height = width, height
 	e.geo = render.NewGeometry(theme, width)
-	e.completer.maxVisible = clampInt(height-6, 1, maxCompleterRows)
+	e.completer.maxVisible = clampInt(height-7, 1, maxCompleterRows)
 	e.place(at)
 	e.refreshCompleter(false) // opening a file must not pop the strip
 	return e
@@ -143,15 +143,15 @@ func cleanPaste(s string) string {
 // app status bar, so a save error routed through the app hint is invisible.
 func (e *EditorView) SetError(msg string) { e.errMsg = msg }
 
-// SetSize resizes the editor, reserving rows for the status line and the
-// active completion strip.
+// SetSize resizes the editor, reserving rows for the rule, the status line and
+// the active completion strip.
 func (e *EditorView) SetSize(w, h int) {
 	if w != e.width {
 		e.geo = render.NewGeometry(e.theme, w)
 		clear(e.cache)
 	}
 	e.width, e.height = w, h
-	e.completer.maxVisible = clampInt(h-6, 1, maxCompleterRows)
+	e.completer.maxVisible = clampInt(h-7, 1, maxCompleterRows)
 	e.ensureVisible()
 }
 

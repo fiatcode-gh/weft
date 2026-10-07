@@ -250,7 +250,7 @@ func TestEditorPagingMoves(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			e := editorAt(nil, "P", "/tmp/p.md", tc.content, false, tc.w, tc.h-1, tc.anchor) // -1: the margin row is part of the window now, so h matches v1
+			e := editorAt(nil, "P", "/tmp/p.md", tc.content, false, tc.w, tc.h, tc.anchor) // the rule row and the status line leave h-2 text rows, as in v1
 			_ = e.View()
 			for range tc.right {
 				e.Update(tea.KeyPressMsg{Code: tea.KeyRight})

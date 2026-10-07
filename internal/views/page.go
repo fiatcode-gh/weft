@@ -221,8 +221,9 @@ func (p *PageView) ReadingAnchor() (Anchor, bool) {
 // row a.ScreenRow, the inverse of ReadingAnchor. A line the read view hides
 // has no rows: the nearest later line with rows stands in, else the nearest
 // earlier one. RowInLine clamps to the line's last row, ScreenRow to the last
-// row of the page window (the editor's window is two rows taller), and the
-// viewport clamps the offset. The link cursor is kept.
+// row of the page window, and the viewport clamps the offset. The editor's
+// window is the page's, so the ScreenRow clamp only guards a terminal too small
+// for the two to agree. The link cursor is kept.
 func (p *PageView) PlaceAnchor(a Anchor) {
 	lines := p.sourceRows()
 	if len(lines) == 0 {

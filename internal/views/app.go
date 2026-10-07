@@ -957,12 +957,18 @@ func (a *App) statusBar() string {
 		leftBudget = 1
 	}
 	left = clamp(left, leftBudget)
-	rule := styleFaint.Render(strings.Repeat("─", width))
+	rule := ruleRow(width)
 	gap := width - lipgloss.Width(left) - rightW
 	if gap < 1 {
 		gap = 1
 	}
 	return rule + "\n" + left + strings.Repeat(" ", gap) + right
+}
+
+// ruleRow is the faint horizontal rule above the bottom status line, shared by
+// the read view's status bar and the editor so both keep the same rows.
+func ruleRow(width int) string {
+	return styleFaint.Render(strings.Repeat("─", max(0, width)))
 }
 
 // blockIfSyncing gates the graph-mutating entry points while the async git

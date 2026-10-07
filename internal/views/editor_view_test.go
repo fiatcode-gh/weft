@@ -646,6 +646,9 @@ func TestEditorViewIsLeftInset(t *testing.T) {
 		if strings.TrimSpace(line) == "" {
 			continue // padding/blank rows need not be inset
 		}
+		if line == strings.Repeat("─", 40) {
+			continue // the rule row spans the width, as in the read view
+		}
 		if !strings.HasPrefix(line, "  ") {
 			t.Fatalf("line %d not inset by 2 spaces: %q", i, line)
 		}

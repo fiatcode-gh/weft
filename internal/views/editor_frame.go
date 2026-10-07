@@ -33,10 +33,11 @@ type lineCache struct {
 	painted bool
 }
 
-// textHeight is the number of text rows: the terminal height less the status
-// line and the completion strip, at least one.
+// textHeight is the number of text rows: the terminal height less the rule
+// row, the status line and the completion strip, at least one. With no strip
+// it is the read view's window, so switching views keeps every row in place.
 func (e *EditorView) textHeight() int {
-	return max(1, e.height-1-e.completer.rows())
+	return max(1, e.height-2-e.completer.rows())
 }
 
 // syncBuffer tells the scanner and the cache about edits since the last call.
@@ -292,7 +293,8 @@ func (e *EditorView) drawRow(p viewPos) string {
 	return strings.Repeat(" ", r.Col) + s
 }
 
-// View renders the text window, the completion strip and the status line.
+// View renders the text window, the completion strip, the rule row and the
+// status line.
 func (e *EditorView) View() string {
 	e.ensureVisible()
 	v := strings.Join(e.frameRows(), "\n")
@@ -300,7 +302,7 @@ func (e *EditorView) View() string {
 	if strip := e.completer.View(max(1, e.width-pad)); strip != "" {
 		v += "\n" + indentBlock(strip, pad)
 	}
-	return v + "\n" + indentBlock(e.statusLine(), pad)
+	return v + "\n" + ruleRow(e.width) + "\n" + indentBlock(e.statusLine(), pad)
 }
 
 // Cursor is where the terminal cursor goes, or nil while a prompt owns the keys.

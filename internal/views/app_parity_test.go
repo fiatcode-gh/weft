@@ -64,7 +64,7 @@ func TestEscKeepsScreenRow(t *testing.T) {
 		leading   string
 		toWrapped bool // move down onto the wrapped bullet's continuation row, else downs rows
 		downs     int
-		ups       int // moves back up afterwards, off the editor's last rows (the read window is two rows shorter)
+		ups       int // moves back up afterwards, so the cursor ends off the window's last row
 		exit      func(t *testing.T, a *App)
 	}{
 		{"clean after 7 rows down", "", false, 7, 0, func(t *testing.T, a *App) { a.Update(esc) }},
@@ -127,6 +127,53 @@ func TestEscKeepsScreenRow(t *testing.T) {
 				t.Errorf("read view screen row %d = %q, want the editor's cursor row %q", sr, got, want)
 			}
 		})
+	}
+}
+
+// TestEditorWindowMatchesReadWindow: the editor draws the read view's rule row
+// above its status line, so its text window is the read view's. A cursor on
+// the editor's last text row lands on the read view's last text row.
+func TestEditorWindowMatchesReadWindow(t *testing.T) {
+	quietTerm(t)
+	a := newApp(t, map[string]string{"pages/Long.md": escPage()}, 80, 30)
+	a.navigate("Long")
+	a.Update(key("e"))
+	if a.editor == nil {
+		t.Fatal("editor did not open")
+	}
+	lastEdit := a.editor.textHeight() - 1
+	for i := 0; i < 80 && a.editor.ExitAnchor().ScreenRow != lastEdit; i++ {
+		a.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	}
+	if sr := a.editor.ExitAnchor().ScreenRow; sr != lastEdit {
+		t.Fatalf("setup: cursor on screen row %d, want the editor's last text row %d", sr, lastEdit)
+	}
+	lastRead := a.height - 3 // H-2 text rows, then the rule and the status line
+	if lastEdit != lastRead {
+		t.Errorf("editor's last text row is %d, the read view's is %d", lastEdit, lastRead)
+	}
+	frame := frameLines(a)
+	if len(frame) != a.height {
+		t.Fatalf("editor frame has %d rows, want %d", len(frame), a.height)
+	}
+	if rule := frame[a.height-2]; rule != strings.Repeat("─", a.width) {
+		t.Errorf("editor's second-to-last row = %q, want the rule row", rule)
+	}
+	if status := frame[a.height-1]; !strings.Contains(status, "[edit]") {
+		t.Errorf("editor's last row = %q, want the status line", status)
+	}
+	want := glyphless(frame[lastEdit])
+	if want == "" {
+		t.Fatal("setup: the cursor row is blank")
+	}
+
+	a.Update(esc)
+
+	if a.editor != nil {
+		t.Fatal("editor did not close")
+	}
+	if got := glyphless(frameLines(a)[lastRead]); got != want {
+		t.Errorf("read view's last text row = %q, want the editor's cursor row %q", got, want)
 	}
 }
 
