@@ -6,10 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- weft now runs on the current Charm libraries (Bubble Tea v2, Lip Gloss v2, Bubbles v2, Glamour v2). Keys, views, colours and the terminal traffic are unchanged apart from the items below.
+- A word or URL wider than the page column now wraps onto the next row instead of running past the right margin. A `[[link]]` wider than the column stays on one row, cut at the screen edge, with blank space below where its wrap would have gone. Markdown tables lay out slightly differently (column widths and the header rule).
+- With `TERM=dumb` or no `TERM`, the page body is now drawn without colour, like the rest of the screen.
+- Typing in the in-app editor is slower on very long pages: about 0.03 s per key at 1000 lines and 0.25 s at 10000. Normal-sized pages are unaffected.
+
 ### Fixed
 
 - Saving in the in-app editor (`Ctrl+S`, or save from the exit prompt) no longer overwrites changes made to the file outside weft while it was open, for example an agent appending to today's journal. Changes on separate lines are merged, and so are lines both sides added at the same spot, such as you and an agent both appending to a journal (yours first); the status line says so. Overlapping or adjacent changes, a page that appeared on disk while being drafted, or a deleted file stop the save and ask: overwrite, reload (not for a deleted file) or keep editing (`Esc`). The comparison is by content, so a touched modification time alone is not a change.
 - Linkifying a mention no longer writes when the file changed between weft reading and writing it. The backlinks panel says so; try again.
+- Keys that reach weft together — fast typing, an input method, `tmux send-keys` — now each count. Before, a run of characters that arrived at once was dropped, so a picker or search query typed that way stayed empty.
 
 ## [2.5.1] - 2026-10-03
 
