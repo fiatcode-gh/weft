@@ -85,14 +85,10 @@ func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, wid
 	}
 	e.SetSize(width, height)
 	_ = e.ta.Focus() // blink cmd not needed here; the App calls Focus() again when it mounts the editor
-	// SetValue leaves the cursor at the end of the buffer. Walk it up to the
-	// anchor line — clamped, so a stale anchor (file changed since the read
-	// view rendered) degrades instead of panicking — and to column 0.
+	// SetValue leaves the cursor at the end of the buffer. Move it to the
+	// anchor line, column 0. Clamped, so a stale anchor (file changed since the read view rendered) degrades instead of panicking.
 	anchorLine = clampInt(anchorLine, 0, e.ta.LineCount()-1)
-	for e.ta.Line() > anchorLine {
-		e.ta.CursorUp()
-	}
-	e.ta.CursorStart()
+	e.moveCursorTo(anchorLine, 0)
 	if anchorLine > 0 {
 		e.scrollAnchorToTop(anchorLine)
 	}
@@ -127,26 +123,65 @@ func newEditorTextarea() textarea.Model {
 	return ta
 }
 
+// moveCursorTo puts the cursor on logical line row (clamped) at column col
+// (clamped) in one pass over the buffer. Bubbles v2 repositions the viewport
+// on every CursorUp/CursorDown at a cost that grows with the cursor's row, so
+// walking the cursor line by line is quadratic in the buffer length. Instead
+// the buffer is rebuilt from row down, with the lines above it inserted at
+// the top: InsertString leaves the cursor at the start of row. The text is
+// the textarea's own (already sanitized and within the line cap), so the
+// rebuild leaves the content unchanged. SetValue resets the viewport to the
+// top; callers sync it.
+func (e *EditorView) moveCursorTo(row, col int) {
+	lines := strings.Split(e.ta.Value(), "\n")
+	row = clampInt(row, 0, len(lines)-1)
+	e.ta.SetValue(strings.Join(lines[row:], "\n"))
+	e.ta.MoveToBegin()
+	if row > 0 {
+		e.ta.InsertString(strings.Join(lines[:row], "\n") + "\n")
+	}
+	e.ta.SetCursorColumn(col)
+}
+
+// textWidth is the width the textarea is laid out at: the editor width less
+// the left inset.
+func (e *EditorView) textWidth() int { return max(1, e.width-editorInset) }
+
 // scrollAnchorToTop leaves the cursor at column 0 of anchorLine with that
 // line's first visual row at the top of the textarea window (or as high as
 // the buffer's end allows). The textarea only ever scrolls minimally to keep
 // the cursor visible, so left alone the anchor would park on the bottom row.
-// Parking the cursor a window's height further down first, syncing the
-// viewport, then walking back up gives the same result as a top-aligned
-// scroll. The textarea's viewport also has no lines until its first View(),
-// hence the render before the sync.
+// A probe textarea holding just the window's lines, at the same width, finds
+// how far down the cursor can park (a window's height of visual rows, or the
+// buffer's end). The real cursor goes there and the viewport syncs once; then
+// PageUp snaps the cursor to the window's top row in one move, or, when the
+// buffer ends inside the window, a few CursorUps walk back to the anchor.
 func (e *EditorView) scrollAnchorToTop(anchorLine int) {
-	for range e.ta.Height() - 1 {
-		line, row := e.ta.Line(), e.ta.LineInfo().RowOffset
-		e.ta.CursorDown()
-		if e.ta.Line() == line && e.ta.LineInfo().RowOffset == row {
+	h := e.ta.Height()
+	lines := strings.Split(e.ta.Value(), "\n")
+	probe := newEditorTextarea()
+	probe.SetWidth(e.textWidth())
+	probe.SetValue(strings.Join(lines[anchorLine:min(len(lines), anchorLine+h)], "\n"))
+	probe.MoveToBegin()
+	steps := 0
+	for range h - 1 {
+		line, row := probe.Line(), probe.LineInfo().RowOffset
+		probe.CursorDown()
+		if probe.Line() == line && probe.LineInfo().RowOffset == row {
 			break // end of buffer: no further visual row to move to
 		}
+		steps++
 	}
-	_ = e.ta.View()
+	e.moveCursorTo(anchorLine+probe.Line(), probe.Column())
 	e.syncViewport()
-	for e.ta.Line() > anchorLine {
-		e.ta.CursorUp()
+	if steps == h-1 {
+		// The anchor's first row is now the window's top row: snap to it in one move.
+		e.ta.PageUp()
+	} else {
+		// The buffer ends less than a window below the anchor: at most h-2 moves.
+		for e.ta.Line() > anchorLine {
+			e.ta.CursorUp()
+		}
 	}
 	e.ta.CursorStart()
 }
@@ -253,7 +288,7 @@ type repositionMsg struct{}
 // layout sizes the textarea, reserving one row for the status line plus the
 // completion strip's rows while it is active.
 func (e *EditorView) layout() {
-	e.ta.SetWidth(max(1, e.width-editorInset))
+	e.ta.SetWidth(e.textWidth())
 	// Cap the strip so it can't push the textarea/status off a short terminal:
 	// reserve the box chrome (4 rows), the status line (1), and ≥1 textarea row.
 	e.completer.maxVisible = clampInt(e.height-6-editorTopMargin, 1, maxCompleterRows)
@@ -303,10 +338,7 @@ func (e *EditorView) MarkSaved(content string) {
 // baseline or disk.
 func (e *EditorView) replaceBuffer(content string, line, col int) {
 	e.ta.SetValue(content)
-	for e.ta.Line() > line {
-		e.ta.CursorUp()
-	}
-	e.ta.SetCursorColumn(col)
+	e.moveCursorTo(line, col)
 	e.syncViewport()
 	e.refreshCompleter(false)
 }
@@ -343,7 +375,7 @@ func (e *EditorView) showClash(theirs edit.Snapshot, exitAfter bool) {
 
 func (e *EditorView) View() string {
 	v := tintView(e.ta.View())
-	if strip := e.completer.View(max(1, e.width-editorInset)); strip != "" {
+	if strip := e.completer.View(e.textWidth()); strip != "" {
 		v += "\n" + strip
 	}
 	v += "\n" + e.statusLine()
