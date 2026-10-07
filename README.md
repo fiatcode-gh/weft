@@ -4,7 +4,7 @@ Journals are the warp — the continuous daily timeline you lay down. `[[wiki-li
 
 One linking primitive — `[[wiki-links]]`, no tags. Pages are flat markdown under `pages/` and `journals/`, with `___` for namespaces and no nested directories to manage. weft is a navigator, not an outliner: it renders your bullets, workflow markers, and links, but it never makes you tend the tree — no fold/unfold, no block refs, no zoom.
 
-Press `e` to edit the current page in a full-screen in-app editor (`Ctrl+S` saves, `Esc` exits with an unsaved-changes prompt). If the file changed on disk since you opened or last saved it, a save merges changes on separate lines (lines both sides added at the same spot are all kept, yours first), and otherwise asks whether to overwrite, reload or keep editing; `E` hands the file to your `$EDITOR`. While editing, typing `[[` opens a live, fuzzy-filtered page-name completion list — `↑`/`↓` to choose, `Enter` or `Tab` to insert `[[Page Name]]`, `Esc` to dismiss; an unmatched name shows a `＋ Create` row to insert a link to the not-yet-created page in one keystroke. `e` refuses to open a file whose content the textarea would alter on load (CRLF line endings, tabs, or more than 10000 lines), pointing you at `E`/`$EDITOR` instead via a status-bar hint. Press `.` to jump to today's journal.
+Press `e` to edit the current page in a full-screen in-app editor (`Ctrl+S` saves, `Esc` exits with an unsaved-changes prompt). It opens on the line you were reading, at the same screen row, and `Esc` brings you back the same way. The editor is coloured like the read view (same styles, `WEFT_STYLE` and `NO_COLOR` apply) and shows your terminal's own cursor. Any markdown file opens — CRLF, tabs, any length — and saves byte-for-byte, with the file's own line endings and final-newline state kept. If the file changed on disk since you opened or last saved it, a save merges changes on separate lines (lines both sides added at the same spot are all kept, yours first), and otherwise asks whether to overwrite, reload or keep editing; `E` hands the file to your `$EDITOR`. The editor has undo/redo, selection, copy/cut/paste (copies also go to the system clipboard through OSC 52), find and replace, and bullet-aware editing: `Enter` continues a bullet, `Tab`/`Shift+Tab` indent a bullet with its children, `Alt+↑/↓` move it, `Ctrl+T` cycles its workflow marker. Typing `[[` opens a live, fuzzy-filtered page-name completion list — `↑`/`↓` to choose, `Enter` or `Tab` to insert `[[Page Name]]`, `Esc` to dismiss; an unmatched name shows a `＋ Create` row to insert a link to the not-yet-created page in one keystroke. Press `.` to jump to today's journal.
 
 Press `S` to sync the graph with git without leaving weft — it commits any changes, `pull --rebase`s, then pushes, reporting progress in the status bar (`⟳ syncing…` → `✓ synced`). A `●` shows in the status bar whenever the graph has local changes that aren't committed or pushed yet, so you always know when a sync is due. Conflicts are left for you to resolve in a shell — weft never touches a conflicted tree.
 
@@ -91,6 +91,27 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | `Esc`      | close an overlay / leave editor     |
 | `q`        | quit (from page view)               |
 
+### In the editor
+
+| Key | Action |
+|-----|--------|
+| `Ctrl-S` | save (merges outside edits, asks on a clash) |
+| `Esc` | leave (prompts if unsaved; closes completion or find first) |
+| `Ctrl-Z` / `Ctrl-Y` | undo / redo |
+| `Shift`+arrows | select (also `Home`/`End`, `PgUp`/`PgDn`, word moves) |
+| `Ctrl-A` | select all |
+| `Ctrl-C` / `Ctrl-X` | copy / cut (the line when nothing is selected) |
+| `Ctrl-V` | paste what weft copied (use the terminal's paste for the system clipboard) |
+| `Alt-←` / `Alt-→` | word left / right (also `Ctrl-←/→`) |
+| `Home` / `End` | line start / end |
+| `PgUp` / `PgDn` | page up / down |
+| `Enter` | continue the bullet (an empty bullet ends it) |
+| `Tab` / `Shift-Tab` | indent / de-indent a bullet with its children (selected lines: only those) |
+| `Alt-↑` / `Alt-↓` | move the bullet with its children |
+| `Ctrl-T` | cycle TODO / DONE |
+| `[[` | page-name completion (`↑`/`↓`, `Enter`/`Tab`, `Esc`) |
+| `Ctrl-F` | find; `Enter`/`↓` next, `↑` previous, `Tab` find ↔ replace, `Enter` replace, `Ctrl-A` replace all (replace field), `Esc` close |
+
 ## What gets rendered
 
 - `[[wiki-links]]` are styled inline, navigable with `n`/`N`, and follow with `Enter`. Aliased links (`[[Target|alias]]`) show the alias.
@@ -105,7 +126,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 |-----------------|-----------------------------------------------------------------------------------|
 | `WEFT_GRAPH`   | Default graph path (overridden by `--graph`).                                     |
 | `WEFT_STYLE`   | Force a Glamour markdown style (`dark`, `light`, `ascii`, `notty`) instead of weft's default terminal-palette style, which follows your terminal's own colors. |
-| `NO_COLOR`      | Honoured: forces `notty` rendering, no ANSI styling anywhere.                     |
+| `NO_COLOR`      | Honoured: drops every colour; bold, italic, underline, strikethrough, faint and reverse video stay. Use `TERM=dumb` for fully unstyled output. |
 | `WEFT_DEBUG=1` | Mirror Bubble Tea events to `weft.log` under the user cache dir (`$XDG_CACHE_HOME/weft/weft.log`, or the OS equivalent via `os.UserCacheDir`; falls back to `./weft.log` only if the cache dir is unavailable). Useful when reporting bugs. |
 
 ## Scope

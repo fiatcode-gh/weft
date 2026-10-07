@@ -11,20 +11,14 @@ or last saved, by content; it three-way-merges non-overlapping changes using the
 pure `internal/merge`, otherwise shows an overwrite/reload/keep-editing prompt;
 linkify refuses to write a file that changed under it) and creates a page's file lazily on first save; `E` hands the
 file to `$EDITOR`. File creation for a new page is deferred until save, so
-opening then discarding never touches disk. `e` refuses to open a file whose
-content the in-app textarea would alter on load (CRLF line endings, tabs, or
-more than 10000 lines), showing a status-bar hint pointing at `E`/`$EDITOR`
-instead. While editing, typing `[[` opens a
+opening then discarding never touches disk. The editor edits an `internal/buffer/` `Buffer` (lines plus their own `\n`/`\r\n` terminators, so any file round-trips byte-for-byte; no size or content refusal) with undo/redo, selection, find/replace and the markdown structure ops. It is painted from source by `internal/render`'s source-row files in the colours of `render.Theme`, the one style definition the read view shares (so `WEFT_STYLE` and `NO_COLOR` apply to both), and shows the real terminal cursor. While editing, typing `[[` opens a
 live fuzzy completion list of page names (`↑`/`↓` to choose, `Enter`/`Tab` to
 insert `[[Page Name]]`, `Esc` to dismiss); an unmatched name offers a create row
-that inserts a link to the not-yet-created page without writing to disk. The in-app editor live-tints
-markdown (headings, blockquotes, code-fence delimiters, task markers, and
-`[[wiki-links]]`) and insets text to match the read view's left margin; the
-cursor's current row is shown as raw source.
+that inserts a link to the not-yet-created page without writing to disk.
 Enter continues a `- ` bullet at the same indent (empty bullet ends the list);
 `Ctrl+T` cycles the current bullet's workflow marker (plain → TODO → DONE);
-`Tab` / `Shift+Tab` indent / de-indent the current line by one 2-space level.
-The editor opens with the cursor on the source line matching the read view's top visible line (or the visible link cursor, when one is set).
+`Tab` / `Shift+Tab` indent / de-indent a bullet with its children; `Alt+↑/↓` move it.
+The editor opens with the cursor on the source line behind the read view's top visible line (or the visible link cursor) on the same screen row; `Esc` returns the same way.
 
 Press `S` to sync the graph to git — commit local changes, `pull --rebase`,
 then push — run asynchronously off the UI thread with the outcome in the status
@@ -62,8 +56,13 @@ an intentional UI change, run with `-update` and visually diff the golden before
 - `internal/graph/` — filesystem walk, page parsing, name resolution, index.
 - `internal/render/` — Glamour-based page rendering (wiki-link styling, hanging-indent,
   workflow-marker colouring, `:LOGBOOK:` stripping). Has a `Warmup()` paid before the
-  TUI takes the screen to avoid chroma init flicker. `ColorProfile` (NO_COLOR → no
-  styling; any colour terminal → TrueColor); Glamour v2 hyperlinks are stripped.
+  TUI takes the screen to avoid chroma init flicker. `theme.go` is the shared
+  `Theme`; `source*.go` scan, wrap and paint raw source lines for the editor
+  (`SourceLines`, `Scanner`, `Geometry`, `Painter`, `DrawRow`). `ColorProfile`
+  (NO_COLOR → `Ascii`: colours dropped, attributes kept; `TERM=dumb` → `NoTTY`;
+  any colour terminal → TrueColor); Glamour v2 hyperlinks are stripped.
+- `internal/buffer/` — the editor's text model (lines + terminators, cursor,
+  selection, undo/redo, find/replace, markdown structure ops). No UI imports.
 - `internal/edit/` — one of two deliberate disk-mutating surfaces (with
   `internal/sync/`). Resolves
   `$VISUAL` / `$EDITOR` / `vi`, snapshots file mtime, and exposes
@@ -102,6 +101,13 @@ an intentional UI change, run with `-update` and visually diff the golden before
   `plain()`/`appText()` (`internal/views/helpers_test.go`); `quietTerm` sets
   `NO_COLOR=1` only so Glamour uses the `notty` layout the goldens were recorded
   with. Tests that assert styling read raw output.
+- Tests that depend on the Glamour style re-exec in a fresh process
+  (`inFreshProcess`): Glamour registers its chroma style once per process.
+- Timing tests scale their limits with `raceFactor` (`-race` is slower).
+- Under `NO_COLOR` styling keeps attributes (`Ascii` profile), so a test that
+  asserts "no styling" must convert with the `NoTTY` profile explicitly. Run the
+  suite both with and without `NO_COLOR` set: `go test ./... -count=1` and
+  `NO_COLOR=1 go test ./... -count=1`.
 - `testdata/fake-editor.sh` is a POSIX shell script that stands in for a real
   editor in the App integration tests for the `E` key (`$EDITOR` handoff).
 
@@ -112,7 +118,7 @@ the user cache dir (`internal/views.DebugLogPath()`; falls back to `./weft.log`
 only if the cache dir is unavailable). The alt-screen swallows panics; tail the
 log to see what the model received.
 
-Smoke-run the TUI under `env -i` (the agent harness sets `NO_COLOR`, `CI` and `TERM=dumb`).
+Smoke-run the TUI under `env -i` (the agent harness sets `NO_COLOR`, `CI` and `TERM=dumb`); drive it with `tmux` (`new-session`, `send-keys`, `capture-pane -e -p -N`) against a copy of `testdata/fixture-graph`, never the real graph.
 
 ## Versioning
 

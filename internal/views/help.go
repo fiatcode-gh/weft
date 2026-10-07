@@ -44,7 +44,7 @@ var (
 const (
 	// helpKeyCol is the column descriptions start at, measured from the start
 	// of the key (after the 2-space row indent).
-	helpKeyCol = 10
+	helpKeyCol = 16
 	// helpColGutter is the blank gap between the two key columns.
 	helpColGutter = 3
 	// helpChrome is the horizontal cells the border + padding add (2 border +
@@ -89,17 +89,32 @@ var helpGroups = []helpGroup{
 	{"Edit", []helpRow{
 		{"e", "edit current page in-app"},
 		{"E", "edit current page in $EDITOR"},
+	}},
+	{"Editor", []helpRow{
 		{"ctrl-s", "save; merges outside edits, asks on a clash"},
-		{"pgup/pgdn", "page up / down (while editing)"},
-		{"enter", "continue list bullet (empty bullet ends it)"},
-		{"ctrl-t", "cycle TODO / DONE on the current bullet"},
-		{"tab", "indent the current line"},
-		{"shift-tab", "de-indent the current line"},
 		{"esc", "leave editor (prompts if unsaved)"},
-		{"[[", "start wiki-link; pick a page to complete"},
-		{"↑ / ↓", "choose completion (list open)"},
-		{"enter/tab", "insert selected link"},
-		{"esc", "dismiss completion list"},
+		{"ctrl-z / ctrl-y", "undo / redo"},
+		{"shift-arrows", "select (also home/end, pgup/pgdn, words)"},
+		{"ctrl-a", "select all"},
+		{"ctrl-c / ctrl-x", "copy / cut (line if nothing selected)"},
+		{"ctrl-v", "paste the last copy made here"},
+		{"alt-← / alt-→", "word left / right"},
+		{"home / end", "line start / end"},
+		{"pgup / pgdn", "page up / down"},
+		{"enter", "continue bullet (empty bullet ends it)"},
+		{"tab / shift-tab", "indent / de-indent with children"},
+		{"alt-↑ / alt-↓", "move bullet with children"},
+		{"ctrl-t", "cycle TODO / DONE on the current bullet"},
+		{"[[", "link completion (↑/↓, enter/tab, esc)"},
+	}},
+	{"Find", []helpRow{
+		{"ctrl-f", "open find"},
+		{"enter / ↓", "next match"},
+		{"↑", "previous match"},
+		{"tab", "switch find ↔ replace"},
+		{"enter", "replace (replace field)"},
+		{"ctrl-a", "replace all (replace field)"},
+		{"esc", "close find"},
 	}},
 	{"Maintain", []helpRow{
 		{"R", "rebuild index"},
