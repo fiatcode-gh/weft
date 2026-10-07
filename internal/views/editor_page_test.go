@@ -234,14 +234,15 @@ func TestEditorPagingMovesLikeV1(t *testing.T) {
 
 // TestEditorPagingIsLinear: Bubbles v2 renders the whole buffer on every
 // textarea Update, so paging by feeding the textarea h-1 key messages cost
-// about 5 s per page at 10000 lines (v1: 4 ms).
+// about 5 s per page at 10000 lines (v1: 4 ms). Only scrollPage is timed: the
+// per-key layout() render around it is the typing cost the CHANGELOG lists.
 func TestEditorPagingIsLinear(t *testing.T) {
 	quietTerm(t)
 	content := strings.Repeat("- some line of text\n", 10000)
 	e := NewEditorView(nil, "P", "/tmp/p.md", content, false, 80, 45, 0)
 
 	t0 := time.Now()
-	e.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
+	e.scrollPage(+1)
 	page := time.Since(t0)
 
 	if row, _ := e.cursorRowCol(); row != e.ta.Height()-1 {
@@ -249,6 +250,6 @@ func TestEditorPagingIsLinear(t *testing.T) {
 	}
 	const bound = time.Second
 	if page > bound {
-		t.Fatalf("one PgDn took %v at 10000 lines (bound %v)", page, bound)
+		t.Fatalf("one page down took %v at 10000 lines (bound %v)", page, bound)
 	}
 }

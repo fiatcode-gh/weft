@@ -52,10 +52,15 @@ func (q quietStdout) Write(p []byte) (int, error) {
 
 func (q quietStdout) WriteString(s string) (int, error) { return q.Write([]byte(s)) }
 
-// ReadFrom copies through Write; hiding it behind a bare io.Writer keeps
-// io.Copy from picking ReadFrom again.
+// ReadFrom reads r to the end and writes it in one Write, so a probe
+// sequence cannot straddle two chunks and slip past the filter.
 func (q quietStdout) ReadFrom(r io.Reader) (int64, error) {
-	return io.Copy(struct{ io.Writer }{q}, r)
+	b, err := io.ReadAll(r)
+	if err != nil {
+		return 0, err
+	}
+	n, err := q.Write(b)
+	return int64(n), err
 }
 
 // programOptions wires weft's Bubble Tea program to out (the terminal).

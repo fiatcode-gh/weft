@@ -11,7 +11,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - weft now runs on the current Charm libraries (Bubble Tea v2, Lip Gloss v2, Bubbles v2, Glamour v2). Keys, views, colours and the terminal traffic are unchanged apart from the items below.
 - A word or URL wider than the page column now wraps onto the next row instead of running past the right margin. A `[[link]]` wider than the column stays on one row, cut at the screen edge, with blank space below where its wrap would have gone. Markdown tables lay out slightly differently (column widths and the header rule).
 - With `TERM=dumb` or no `TERM`, the page body is now drawn without colour, like the rest of the screen.
-- Typing in the in-app editor is slower on very long pages: about 0.03 s per key at 1000 lines and 0.25 s at 10000. Normal-sized pages are unaffected.
+- Typing and paging in the in-app editor are slower on very long pages: about 0.03 s per key and up to 0.05 s per page at 1000 lines, 0.25 s per key and up to 0.5 s per page at 10000. Normal-sized pages are unaffected.
 
 ### Fixed
 
