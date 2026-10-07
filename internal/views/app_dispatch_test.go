@@ -229,7 +229,7 @@ func TestStatusBarTruncatesLongLeft(t *testing.T) {
 }
 
 // runewidthLen counts visible cells in a single line, ignoring nothing
-// (reads go through appText, which strips ANSI).
+// (callers strip ANSI first, with plain).
 func runewidthLen(s string) int {
 	n := 0
 	for range s {

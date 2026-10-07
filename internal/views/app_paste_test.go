@@ -26,7 +26,7 @@ func TestPasteInEditorPromptIsIgnored(t *testing.T) {
 	a := bootApp(t)
 	a.Update(key("e"))
 	a.Update(key("x"))
-	a.Update(key("esc"))
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if a.editor.mode != confirmingExit {
 		t.Fatalf("mode = %v, want confirmingExit", a.editor.mode)
 	}
