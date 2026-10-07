@@ -5,11 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/charmbracelet/x/exp/teatest"
-	"github.com/muesli/termenv"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 )
 
 func TestEditorView_LoadsContentAndTracksDirty(t *testing.T) {
@@ -126,7 +125,7 @@ func TestEditorViewAnchorKeepsCursorVisible(t *testing.T) {
 	if got := e.ta.Line(); got != 50 {
 		t.Fatalf("got row %d, want 50", got)
 	}
-	v := e.View()
+	v := plain(e.View())
 	if !strings.Contains(v, "ANCHORED LINE") {
 		t.Errorf("viewport does not show the anchored line:\n%s", v)
 	}
@@ -174,8 +173,6 @@ func TestEditorViewAnchorNearEndStaysVisible(t *testing.T) {
 	}
 }
 
-func key(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
-
 func TestLoadsFaithfully(t *testing.T) {
 	tooLong := strings.Repeat("x\n", 10001)
 	tests := []struct {
@@ -200,7 +197,7 @@ func TestLoadsFaithfully(t *testing.T) {
 func TestEditorUpdate_CtrlSRequestsSaveStaysEditing(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 24, 0)
-	res, _ := e.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	res, _ := e.Update(tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
 	if !res.Save || res.Exit {
 		t.Errorf("ctrl+s: got %+v, want {Save:true, Exit:false}", res)
 	}
@@ -212,7 +209,7 @@ func TestEditorUpdate_CtrlSRequestsSaveStaysEditing(t *testing.T) {
 func TestEditorUpdate_EscOnCleanExits(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 24, 0)
-	res, _ := e.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	res, _ := e.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if !res.Exit {
 		t.Errorf("esc on clean buffer should exit; got %+v", res)
 	}
@@ -223,7 +220,7 @@ func TestEditorUpdate_EscOnDirtyPromptsThenDiscard(t *testing.T) {
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 24, 0)
 	e.ta.SetValue("x\nmore\n") // make it dirty
 
-	res, _ := e.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	res, _ := e.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if res.Exit || res.Save {
 		t.Errorf("esc on dirty buffer should not exit yet; got %+v", res)
 	}
@@ -236,7 +233,7 @@ func TestEditorUpdate_EscOnDirtyPromptsThenDiscard(t *testing.T) {
 		t.Errorf("c should cancel back to editing; got %+v mode=%v", res, e.mode)
 	}
 
-	e.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	e.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	res, _ = e.Update(key("d"))
 	if !res.Exit || res.Save {
 		t.Errorf("d should exit without save; got %+v", res)
@@ -247,7 +244,7 @@ func TestEditorUpdate_ConfirmSaveExits(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 24, 0)
 	e.ta.SetValue("x\nmore\n")
-	e.Update(tea.KeyMsg{Type: tea.KeyEsc}) // -> confirmingExit
+	e.Update(tea.KeyPressMsg{Code: tea.KeyEsc}) // -> confirmingExit
 	res, _ := e.Update(key("s"))
 	if !res.Save || !res.Exit {
 		t.Errorf("s should save and exit; got %+v", res)
@@ -270,15 +267,15 @@ func TestEditorUpdate_TypingInsertsAndIsDirty(t *testing.T) {
 func TestEditorView_Golden(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "- first bullet\n- [[Beta]] link\n", false, 80, 12, 0)
-	teatest.RequireEqualOutput(t, []byte(e.View()))
+	teatest.RequireEqualOutput(t, []byte(plain(e.View())))
 }
 
 func TestEditorView_ConfirmGolden(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 12, 0)
 	e.ta.SetValue("x\nedited\n")
-	e.Update(tea.KeyMsg{Type: tea.KeyEsc}) // -> confirmingExit
-	teatest.RequireEqualOutput(t, []byte(e.View()))
+	e.Update(tea.KeyPressMsg{Code: tea.KeyEsc}) // -> confirmingExit
+	teatest.RequireEqualOutput(t, []byte(plain(e.View())))
 }
 
 func TestEditorUpdate_PageDownMovesCursor(t *testing.T) {
@@ -291,8 +288,8 @@ func TestEditorUpdate_PageDownMovesCursor(t *testing.T) {
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", sb.String(), false, 80, 10, 0)
 	// PageDown should not panic and should leave the buffer unchanged.
 	before := e.ta.Value()
-	e.Update(tea.KeyMsg{Type: tea.KeyPgDown})
-	e.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	e.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
+	e.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
 	if e.ta.Value() != before {
 		t.Errorf("paging must not modify the buffer")
 	}
@@ -305,8 +302,8 @@ func TestEditorUpdate_CtrlCCancelsConfirm(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 24, 0)
 	e.ta.SetValue("x\nmore\n")
-	e.Update(tea.KeyMsg{Type: tea.KeyEsc}) // -> confirmingExit
-	res, _ := e.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	e.Update(tea.KeyPressMsg{Code: tea.KeyEsc}) // -> confirmingExit
+	res, _ := e.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	if res.Exit || e.mode != editing {
 		t.Errorf("ctrl+c at confirm should cancel back to editing; got %+v mode=%v", res, e.mode)
 	}
@@ -316,8 +313,8 @@ func TestEditorView_SetErrorRendersInView(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 6, 0)
 	e.SetError("permission denied")
-	if !strings.Contains(e.View(), "permission denied") {
-		t.Errorf("editor view should show the save error; got:\n%s", e.View())
+	if !strings.Contains(plain(e.View()), "permission denied") {
+		t.Errorf("editor view should show the save error; got:\n%s", plain(e.View()))
 	}
 }
 
@@ -326,8 +323,8 @@ func TestEditorView_MarkSavedClearsError(t *testing.T) {
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 6, 0)
 	e.SetError("permission denied")
 	e.MarkSaved(e.Content())
-	if strings.Contains(e.View(), "permission denied") {
-		t.Errorf("a successful save should clear the error from the view; got:\n%s", e.View())
+	if strings.Contains(plain(e.View()), "permission denied") {
+		t.Errorf("a successful save should clear the error from the view; got:\n%s", plain(e.View()))
 	}
 }
 
@@ -338,7 +335,7 @@ func TestEditorView_CompletionGolden(t *testing.T) {
 	if !e.completer.active {
 		t.Fatalf("completer should be active for the golden")
 	}
-	teatest.RequireEqualOutput(t, []byte(e.View()))
+	teatest.RequireEqualOutput(t, []byte(plain(e.View())))
 }
 
 // typeRunes feeds each rune of s to the editor as an individual key press,
@@ -356,7 +353,7 @@ func TestEditorCompletion_EnterInsertsExistingLink(t *testing.T) {
 	if !e.completer.active {
 		t.Fatalf("completer should be active after typing [[Alp")
 	}
-	e.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	e.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if got := e.ta.Value(); got != "see [[Alpha]]" {
 		t.Errorf("after accept: got %q, want %q", got, "see [[Alpha]]")
 	}
@@ -369,7 +366,7 @@ func TestEditorCompletion_TabAlsoAccepts(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "", true, 80, 24, 0)
 	typeRunes(e, "[[Alp")
-	e.Update(tea.KeyMsg{Type: tea.KeyTab})
+	e.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	if got := e.ta.Value(); got != "[[Alpha]]" {
 		t.Errorf("tab accept: got %q, want %q", got, "[[Alpha]]")
 	}
@@ -379,7 +376,7 @@ func TestEditorCompletion_CreateRowInsertsTypedName(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "", true, 80, 24, 0)
 	typeRunes(e, "[[Zxqv")
-	e.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	e.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if got := e.ta.Value(); got != "[[Zxqv]]" {
 		t.Errorf("create accept: got %q, want %q", got, "[[Zxqv]]")
 	}
@@ -389,7 +386,7 @@ func TestEditorCompletion_EscDismissesKeepsBuffer(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "", true, 80, 24, 0)
 	typeRunes(e, "[[Alp")
-	res, _ := e.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	res, _ := e.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if res.Exit {
 		t.Errorf("esc while completing should not exit the editor")
 	}
@@ -406,7 +403,7 @@ func TestEditorCompletion_ArrowsStealOnlyWhenActive(t *testing.T) {
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "", true, 80, 24, 0)
 	typeRunes(e, "[[")
 	before := e.ta.Value()
-	e.Update(tea.KeyMsg{Type: tea.KeyDown})
+	e.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	if e.completer.sel != 1 {
 		t.Errorf("down should move the completer selection while active; sel=%d", e.completer.sel)
 	}
@@ -425,19 +422,19 @@ func TestEditorCompletion_KeyUpMovesAndClampsSelection(t *testing.T) {
 			e.completer.active, len(e.completer.cands))
 	}
 	before := e.ta.Value()
-	e.Update(tea.KeyMsg{Type: tea.KeyDown})
+	e.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	if e.completer.sel != 1 {
 		t.Fatalf("precondition: down should move the selection to 1; sel=%d", e.completer.sel)
 	}
 
 	// act
-	e.Update(tea.KeyMsg{Type: tea.KeyUp})
+	e.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 
 	// assert — up retreats, clamps at the top, and never edits the buffer
 	if e.completer.sel != 0 {
 		t.Errorf("up should move the selection back to 0; sel=%d", e.completer.sel)
 	}
-	e.Update(tea.KeyMsg{Type: tea.KeyUp})
+	e.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	if e.completer.sel != 0 {
 		t.Errorf("up at the first row must clamp to 0; sel=%d", e.completer.sel)
 	}
@@ -449,7 +446,7 @@ func TestEditorCompletion_KeyUpMovesAndClampsSelection(t *testing.T) {
 func TestEditorCompletion_NotActiveInsideClosedBrackets(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "[[]] tail\n", false, 80, 24, 0)
-	e.ta.SetCursor(2) // between the [[ and ]]
+	e.ta.SetCursorColumn(2) // between the [[ and ]]
 	e.refreshCompleter(true)
 	if e.completer.active {
 		t.Errorf("completer must not activate inside an already-closed [[ ]]")
@@ -459,7 +456,7 @@ func TestEditorCompletion_NotActiveInsideClosedBrackets(t *testing.T) {
 func TestEditorCompletion_NotActiveEditingExistingLink(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "[[Alpha]] rest\n", false, 80, 24, 0)
-	e.ta.SetCursor(4) // [[Al|pha]]
+	e.ta.SetCursorColumn(4) // [[Al|pha]]
 	e.refreshCompleter(true)
 	if e.completer.active {
 		t.Errorf("completer must not activate when editing inside an existing link")
@@ -469,9 +466,9 @@ func TestEditorCompletion_NotActiveEditingExistingLink(t *testing.T) {
 func TestEditorCompletion_MidLineAcceptKeepsTrailingText(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "ab", false, 80, 24, 0)
-	e.ta.SetCursor(1) // single row "ab"; cursor between a and b
+	e.ta.SetCursorColumn(1) // single row "ab"; cursor between a and b
 	typeRunes(e, "[[Alp")
-	e.Update(tea.KeyMsg{Type: tea.KeyEnter}) // accept
+	e.Update(tea.KeyPressMsg{Code: tea.KeyEnter}) // accept
 	if got := e.ta.Value(); got != "a[[Alpha]]b" {
 		t.Errorf("mid-line accept: got %q, want %q", got, "a[[Alpha]]b")
 	}
@@ -481,9 +478,9 @@ func TestEditorCompletion_AcceptOnSecondLine(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "first", false, 80, 24, 0)
 	e.ta.CursorEnd()
-	e.Update(tea.KeyMsg{Type: tea.KeyEnter}) // completer inactive -> newline, cursor to row 1
+	e.Update(tea.KeyPressMsg{Code: tea.KeyEnter}) // completer inactive -> newline, cursor to row 1
 	typeRunes(e, "see [[Alp")
-	e.Update(tea.KeyMsg{Type: tea.KeyEnter}) // accept
+	e.Update(tea.KeyPressMsg{Code: tea.KeyEnter}) // accept
 	if got := e.ta.Value(); got != "first\nsee [[Alpha]]" {
 		t.Errorf("second-line accept: got %q, want %q", got, "first\nsee [[Alpha]]")
 	}
@@ -496,7 +493,7 @@ func TestEditorCompletion_StripFitsSmallTerminal(t *testing.T) {
 	if !e.completer.active {
 		t.Fatalf("completer should be active")
 	}
-	lines := strings.Count(e.View(), "\n") + 1
+	lines := strings.Count(plain(e.View()), "\n") + 1
 	if lines > 12 {
 		t.Errorf("editor view is %d lines, exceeds terminal height 12", lines)
 	}
@@ -524,22 +521,22 @@ func TestEditorCompletion_CursorStaysVisibleAtBottom(t *testing.T) {
 	// content. The textarea only repositions its viewport inside Update, using
 	// content captured during the previous View — so without interleaved
 	// renders it can't scroll, just like in the real runtime.
-	_ = e.View()
+	_ = plain(e.View())
 	e.Update(key("x")) // edit at the bottom; reposition brings the line into view
-	_ = e.View()
-	if !strings.Contains(e.View(), "EDITHERE") {
+	_ = plain(e.View())
+	if !strings.Contains(plain(e.View()), "EDITHERE") {
 		t.Fatalf("precondition: edited line should be visible before the strip opens")
 	}
 	// Opening the completion strip shrinks the textarea; the line being edited
 	// must not scroll out of view behind the strip.
 	for _, r := range "[[" {
 		e.Update(key(string(r)))
-		_ = e.View()
+		_ = plain(e.View())
 	}
 	if !e.completer.active {
 		t.Fatalf("completer should be active after typing [[")
 	}
-	if !strings.Contains(e.View(), "EDITHERE") {
+	if !strings.Contains(plain(e.View()), "EDITHERE") {
 		t.Errorf("the line being edited must stay visible when the strip opens")
 	}
 }
@@ -564,13 +561,13 @@ func TestEditorResizeKeepsCursorVisible(t *testing.T) {
 	}
 	// Mimic the Bubble Tea loop: a render primes the textarea viewport's
 	// content, same technique as TestEditorCompletion_CursorStaysVisibleAtBottom.
-	_ = e.View()
+	_ = plain(e.View())
 
 	// act — shrink hard; no keypress afterwards.
 	e.SetSize(80, 8)
 
 	// assert — the cursor's line must be inside the rendered window.
-	if !strings.Contains(e.View(), "last-line") {
+	if !strings.Contains(plain(e.View()), "last-line") {
 		t.Fatal("cursor line scrolled out of view after resize")
 	}
 }
@@ -591,11 +588,11 @@ func TestEditorCompletion_OpeningFileDoesNotAutoOpen(t *testing.T) {
 func TestEditorCompletion_NavigationOntoUnclosedDoesNotOpen(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "- draft [[Alpha", false, 80, 24, 0)
-	e.Update(tea.KeyMsg{Type: tea.KeyHome}) // caret to col 0 — no [[ before it, strip closed
+	e.Update(tea.KeyPressMsg{Code: tea.KeyHome}) // caret to col 0 — no [[ before it, strip closed
 	if e.completer.active {
 		t.Fatalf("precondition: completer should be closed at line start")
 	}
-	e.Update(tea.KeyMsg{Type: tea.KeyEnd}) // caret back past the unclosed [[ — pure navigation
+	e.Update(tea.KeyPressMsg{Code: tea.KeyEnd}) // caret back past the unclosed [[ — pure navigation
 	if e.completer.active {
 		t.Errorf("navigating (End) onto an unclosed [[ must not open the completer; partial=%q", e.completer.partial)
 	}
@@ -604,9 +601,9 @@ func TestEditorCompletion_NavigationOntoUnclosedDoesNotOpen(t *testing.T) {
 func TestEditorCompletion_DismissThenNavStaysClosed(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "", true, 80, 24, 0)
-	typeRunes(e, "[[Alp")                    // strip opens
-	e.Update(tea.KeyMsg{Type: tea.KeyEsc})   // dismiss
-	e.Update(tea.KeyMsg{Type: tea.KeyRight}) // pure navigation, no buffer change
+	typeRunes(e, "[[Alp")                         // strip opens
+	e.Update(tea.KeyPressMsg{Code: tea.KeyEsc})   // dismiss
+	e.Update(tea.KeyPressMsg{Code: tea.KeyRight}) // pure navigation, no buffer change
 	if e.completer.active {
 		t.Errorf("strip must stay closed after dismiss then navigate; partial=%q", e.completer.partial)
 	}
@@ -615,8 +612,8 @@ func TestEditorCompletion_DismissThenNavStaysClosed(t *testing.T) {
 func TestEditorCompletion_TypingIntoUnclosedAfterNavReopens(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "draft [[Alph", false, 80, 24, 0)
-	e.Update(tea.KeyMsg{Type: tea.KeyHome})
-	e.Update(tea.KeyMsg{Type: tea.KeyEnd}) // navigation must not open
+	e.Update(tea.KeyPressMsg{Code: tea.KeyHome})
+	e.Update(tea.KeyPressMsg{Code: tea.KeyEnd}) // navigation must not open
 	if e.completer.active {
 		t.Fatalf("precondition: navigation should leave the completer closed")
 	}
@@ -629,7 +626,7 @@ func TestEditorCompletion_TypingIntoUnclosedAfterNavReopens(t *testing.T) {
 func TestEditorViewIsLeftInset(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "hello world\n", false, 40, 10, 0)
-	out := e.View()
+	out := plain(e.View())
 	for i, line := range strings.Split(out, "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue // padding/blank rows need not be inset
@@ -644,7 +641,7 @@ func TestEditorViewHasTopMargin(t *testing.T) {
 	quietTerm(t)
 	const h = 10
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "# Title\n", false, 40, h, 0)
-	lines := strings.Split(e.View(), "\n")
+	lines := strings.Split(plain(e.View()), "\n")
 	// Match the read view's leading blank line: the editor's first row is a
 	// top margin, so content starts on row 1, not row 0.
 	if strings.TrimSpace(lines[0]) != "" {
@@ -669,7 +666,7 @@ func TestEditorEnterContinuesBullet(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "- first\nsecond\n", false, 40, 10, 0)
 	e.ta.CursorEnd()
-	e.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	e.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if got := e.Content(); got != "- first\n- \nsecond\n" {
 		t.Fatalf("continuation: got %q, want %q", got, "- first\n- \nsecond\n")
 	}
@@ -679,7 +676,7 @@ func TestEditorEnterContinuesNestedBullet(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "  - nested\nsecond\n", false, 40, 10, 0)
 	e.ta.CursorEnd()
-	e.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	e.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if got := e.Content(); got != "  - nested\n  - \nsecond\n" {
 		t.Fatalf("nested continuation: got %q, want %q", got, "  - nested\n  - \nsecond\n")
 	}
@@ -689,7 +686,7 @@ func TestEditorEnterEmptyBulletTerminates(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "- \nsecond\n", false, 40, 10, 0)
 	e.ta.CursorEnd()
-	e.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	e.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if got := e.Content(); got != "\nsecond\n" {
 		t.Fatalf("empty-bullet terminate: got %q, want %q", got, "\nsecond\n")
 	}
@@ -699,7 +696,7 @@ func TestEditorEnterNonBulletInsertsNewline(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "plain\nsecond\n", false, 40, 10, 0)
 	e.ta.CursorEnd()
-	e.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	e.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if got := e.Content(); got != "plain\n\nsecond\n" {
 		t.Fatalf("non-bullet newline: got %q, want %q", got, "plain\n\nsecond\n")
 	}
@@ -707,11 +704,7 @@ func TestEditorEnterNonBulletInsertsNewline(t *testing.T) {
 
 func TestEditorViewTintsHeadings(t *testing.T) {
 	// Integration test: tinting must actually reach EditorView.View() output.
-	// Force a color profile so lipgloss emits ANSI (a non-TTY `go test` strips
-	// it otherwise). Must NOT call t.Parallel — SetColorProfile is process-global.
-	orig := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(orig) })
+	// Lip Gloss v2 always emits SGR, so no colour profile needs forcing.
 
 	// The editor opens with the cursor on row 0, which is rendered raw, so put a
 	// plain line there; the heading and wiki-link on later rows are non-cursor
@@ -736,15 +729,15 @@ func TestEditorCtrlTCyclesMarker(t *testing.T) {
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "- task\n", false, 40, 10, 0)
 	e.ta.CursorEnd()
 
-	e.Update(tea.KeyMsg{Type: tea.KeyCtrlT})
+	e.Update(tea.KeyPressMsg{Code: 't', Mod: tea.ModCtrl})
 	if got := e.Content(); got != "- TODO task\n" {
 		t.Fatalf("plain->TODO: got %q", got)
 	}
-	e.Update(tea.KeyMsg{Type: tea.KeyCtrlT})
+	e.Update(tea.KeyPressMsg{Code: 't', Mod: tea.ModCtrl})
 	if got := e.Content(); got != "- DONE task\n" {
 		t.Fatalf("TODO->DONE: got %q", got)
 	}
-	e.Update(tea.KeyMsg{Type: tea.KeyCtrlT})
+	e.Update(tea.KeyPressMsg{Code: 't', Mod: tea.ModCtrl})
 	if got := e.Content(); got != "- task\n" {
 		t.Fatalf("DONE->plain: got %q", got)
 	}
@@ -754,7 +747,7 @@ func TestEditorCtrlTNoOpOnNonBullet(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "# heading\n", false, 40, 10, 0)
 	e.ta.CursorEnd()
-	e.Update(tea.KeyMsg{Type: tea.KeyCtrlT})
+	e.Update(tea.KeyPressMsg{Code: 't', Mod: tea.ModCtrl})
 	if got := e.Content(); got != "# heading\n" {
 		t.Fatalf("ctrl+t on non-bullet should be a no-op, got %q", got)
 	}
@@ -769,24 +762,16 @@ func TestEditorRepositionsAfterContinuation(t *testing.T) {
 	}
 	sb.WriteString("- ANCHOR")
 	e := NewEditorView(nil, "Note", "/tmp/n.md", sb.String(), false, 80, 24, 0)
-	// CursorDown does not reposition the viewport, so this lands the cursor on
-	// the bottom bullet while the viewport stays at the top.
-	for {
-		before := e.ta.Line()
-		e.ta.CursorDown()
-		if e.ta.Line() == before {
-			break
-		}
-	}
-	e.ta.CursorEnd()
-	_ = e.View() // prime the textarea viewport content; it is still scrolled to the top
-	if strings.Contains(e.View(), "ANCHOR") {
+	// SetValue leaves the cursor at the end of ANCHOR and the viewport at the top.
+	e.ta.SetValue(sb.String())
+	_ = plain(e.View()) // prime the textarea viewport content; it is still scrolled to the top
+	if strings.Contains(plain(e.View()), "ANCHOR") {
 		t.Fatalf("precondition: the bottom bullet should be off-screen before Enter")
 	}
 	// Continuation inserts a new bullet below ANCHOR via InsertString (which does
 	// not reposition); syncViewport must scroll the cursor region into view.
-	e.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if !strings.Contains(e.View(), "ANCHOR") {
+	e.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if !strings.Contains(plain(e.View()), "ANCHOR") {
 		t.Errorf("continuation must scroll the new bullet into view (viewport did not follow the cursor)")
 	}
 }
@@ -795,7 +780,7 @@ func TestEditorTabIndents(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "- foo\nx\n", false, 40, 10, 0)
 	e.ta.CursorEnd() // end of "- foo" on row 0
-	e.Update(tea.KeyMsg{Type: tea.KeyTab})
+	e.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	if got := e.Content(); got != "  - foo\nx\n" {
 		t.Fatalf("tab indent: got %q, want %q", got, "  - foo\nx\n")
 	}
@@ -809,7 +794,7 @@ func TestEditorShiftTabDedents(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "  - foo\nx\n", false, 40, 10, 0)
 	e.ta.CursorEnd()
-	e.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	e.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
 	if got := e.Content(); got != "- foo\nx\n" {
 		t.Fatalf("shift+tab dedent: got %q, want %q", got, "- foo\nx\n")
 	}
@@ -823,7 +808,7 @@ func TestEditorShiftTabNoOpAtZeroIndent(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(nil, "Page", "/tmp/page.md", "- foo\nx\n", false, 40, 10, 0)
 	e.ta.CursorEnd()
-	e.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	e.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
 	if got := e.Content(); got != "- foo\nx\n" {
 		t.Fatalf("shift+tab at zero indent should be a no-op: got %q", got)
 	}
@@ -834,8 +819,8 @@ func TestEditorUpdate_FailedSaveExitShowsErrorNotConfirmPrompt(t *testing.T) {
 	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 6, 0)
 	e.ta.SetValue("x\nmore\n") // make it dirty
 
-	e.Update(tea.KeyMsg{Type: tea.KeyEsc}) // -> confirmingExit
-	res, _ := e.Update(key("s"))           // request save+exit
+	e.Update(tea.KeyPressMsg{Code: tea.KeyEsc}) // -> confirmingExit
+	res, _ := e.Update(key("s"))                // request save+exit
 	if !res.Save || !res.Exit {
 		t.Fatalf("s should request save and exit; got %+v", res)
 	}
@@ -845,7 +830,7 @@ func TestEditorUpdate_FailedSaveExitShowsErrorNotConfirmPrompt(t *testing.T) {
 		t.Fatalf("after save+exit request, mode should reset to editing; got %v", e.mode)
 	}
 	e.SetError("permission denied")
-	view := e.View()
+	view := plain(e.View())
 	if !strings.Contains(view, "permission denied") {
 		t.Errorf("failed save+exit should show the error; got:\n%s", view)
 	}
@@ -862,13 +847,13 @@ func TestEditorUpdate_FailedSaveExitShowsErrorNotConfirmPrompt(t *testing.T) {
 func TestEditorCompletion_AcceptAfterLeftMoveRelocatesTail(t *testing.T) {
 	quietTerm(t)
 	e := NewEditorView(loadFixture(t), "Note", "/tmp/n.md", "", true, 80, 24, 0)
-	typeRunes(e, "[[Alph")                  // buffer "[[Alph", cursor at end
-	e.Update(tea.KeyMsg{Type: tea.KeyLeft}) // cursor after "Alp"
-	e.Update(tea.KeyMsg{Type: tea.KeyLeft}) // cursor after "Al"
+	typeRunes(e, "[[Alph")                       // buffer "[[Alph", cursor at end
+	e.Update(tea.KeyPressMsg{Code: tea.KeyLeft}) // cursor after "Alp"
+	e.Update(tea.KeyPressMsg{Code: tea.KeyLeft}) // cursor after "Al"
 	if !e.completer.active {
 		t.Fatalf("completer should still be active after left moves; partial=%q", e.completer.partial)
 	}
-	e.Update(tea.KeyMsg{Type: tea.KeyEnter}) // accept "Alpha"
+	e.Update(tea.KeyPressMsg{Code: tea.KeyEnter}) // accept "Alpha"
 	if got := e.ta.Value(); got != "[[Alpha]]ph" {
 		t.Errorf("documented current behavior: got %q, want %q", got, "[[Alpha]]ph")
 	}
@@ -882,6 +867,6 @@ func BenchmarkEditorViewLargePage(b *testing.B) {
 	e := NewEditorView(nil, "Big", "/tmp/big.md", sb.String(), false, 80, 40, 0)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = e.View()
+		_ = plain(e.View())
 	}
 }

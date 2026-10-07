@@ -10,8 +10,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/ansi"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
 	syncpkg "github.com/fiatcode-gh/weft/v2/internal/sync"
@@ -20,14 +19,14 @@ import (
 // pressE sends the e key to a booted app and returns the resulting cmd.
 func pressE(t *testing.T, a *App) tea.Cmd {
 	t.Helper()
-	_, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	_, cmd := a.Update(key("e"))
 	return cmd
 }
 
 // pressShiftE sends the E key (the $EDITOR escape hatch).
 func pressShiftE(t *testing.T, a *App) tea.Cmd {
 	t.Helper()
-	_, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("E")})
+	_, cmd := a.Update(key("E"))
 	return cmd
 }
 
@@ -201,8 +200,8 @@ func TestE_ColdStart_DefersCreation(t *testing.T) {
 		t.Errorf("e must NOT create the journal file before save; stat err=%v", err)
 	}
 
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
-	a.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	a.Update(key("h"))
+	a.Update(tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
 	if _, err := os.Stat(journalPath); err != nil {
 		t.Errorf("ctrl+s should create the journal file; stat err=%v", err)
 	}
@@ -233,7 +232,7 @@ func TestDotKey_CreatesMissingTodayJournal_ThenEditReachable(t *testing.T) {
 
 	// Press `.`. This should create the journal file, reindex, and
 	// land on today's journal.
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(".")})
+	a.Update(key("."))
 	if a.page.Page() != today {
 		t.Errorf("after . on absent today: want page %q, got %q", today, a.page.Page())
 	}
@@ -362,8 +361,8 @@ func assertEditorOnReadTop(t *testing.T, raw string) {
 	// a line from the middle of the read window has to be on screen too.
 	var n int
 	fmt.Sscanf(want, "- line %d", &n)
-	if mid := fmt.Sprintf("line %d", n+5); !strings.Contains(ansi.Strip(a.View()), mid) {
-		t.Fatalf("editor view does not show %q below the reading position:\n%s", mid, ansi.Strip(a.View()))
+	if mid := fmt.Sprintf("line %d", n+5); !strings.Contains(appText(a), mid) {
+		t.Fatalf("editor view does not show %q below the reading position:\n%s", mid, appText(a))
 	}
 }
 

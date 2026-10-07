@@ -1,7 +1,7 @@
 package views
 
 // Key strings shared by the App key handler and the overlay Update methods.
-// These mirror the tea.KeyMsg.String() values Bubble Tea produces. Only keys
+// These mirror the tea.KeyPressMsg.String() values Bubble Tea produces. Only keys
 // used in more than one file live here; single-use keys stay as literals at
 // their call site.
 const (

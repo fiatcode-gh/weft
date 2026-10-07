@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
 	"github.com/fiatcode-gh/weft/v2/internal/search"
@@ -61,7 +61,7 @@ func TestSyncKeyShowsSyncingHintAndRunsRunner(t *testing.T) {
 		called = true
 		return syncpkg.Result{Pushed: true}
 	}
-	model, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("S")})
+	model, cmd := a.Update(key("S"))
 	a = model.(*App)
 	if !strings.Contains(a.hint, "syncing") {
 		t.Errorf("hint = %q, want syncing…", a.hint)
@@ -89,7 +89,7 @@ func TestSyncSecondPressWhileSyncingIsNoOp(t *testing.T) {
 	a.syncing = true
 	calls := 0
 	a.syncFunc = func(string) syncpkg.Result { calls++; return syncpkg.Result{} }
-	model, _ := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("S")})
+	model, _ := a.Update(key("S"))
 	a = model.(*App)
 	if calls != 0 {
 		t.Errorf("runner should not be called while syncing")
@@ -124,14 +124,14 @@ func TestSyncFailureHintNamesStage(t *testing.T) {
 }
 
 func TestWriteKeysBlockedWhileSyncing(t *testing.T) {
-	for _, key := range []string{"e", "E", "."} {
-		t.Run(key, func(t *testing.T) {
+	for _, k := range []string{"e", "E", "."} {
+		t.Run(k, func(t *testing.T) {
 			// arrange
 			a := bootApp(t)
 			a.syncing = true
 
 			// act
-			model, _ := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
+			model, _ := a.Update(key(k))
 			a = model.(*App)
 
 			// assert
@@ -157,7 +157,7 @@ func TestWriteKeysBlockedWhileSyncing(t *testing.T) {
 // backlinks_test.go's unlinkedFixture/selectFirstUnlinked helpers — this
 // test builds the Backlinks overlay directly with a synthetic UnlinkedRef
 // pointing at a real file, drives it into the confirm sub-state with its
-// own real Update("l"), and only then hands the "y" tea.KeyMsg to a.Update.
+// own real Update("l"), and only then hands the "y" tea.KeyPressMsg to a.Update.
 // That still exercises the actual guarded branch (a.active.Update(key)
 // producing an overlayLinkify result, gated by blockIfSyncing) rather than
 // calling a.linkify directly, which would bypass the guard entirely.
@@ -199,7 +199,7 @@ func TestLinkifyBlockedWhileSyncing(t *testing.T) {
 	a.syncing = true
 
 	// act
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	a.Update(key("y"))
 
 	// assert
 	after, err := os.ReadFile(betaPath)
@@ -209,7 +209,7 @@ func TestLinkifyBlockedWhileSyncing(t *testing.T) {
 	if string(after) != string(before) {
 		t.Fatalf("Beta.md mutated while syncing: before=%q after=%q", before, after)
 	}
-	out := b.View()
+	out := plain(b.View())
 	if !strings.Contains(out, "sync in progress") {
 		t.Fatalf("expected in-panel busy message, got:\n%s", out)
 	}
@@ -246,7 +246,7 @@ func TestPickerCreateBlockedWhileSyncingShowsInPanelMessage(t *testing.T) {
 	a.active = p
 
 	// act
-	a.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	// assert
 	if a.active == nil {
@@ -255,8 +255,8 @@ func TestPickerCreateBlockedWhileSyncingShowsInPanelMessage(t *testing.T) {
 	if a.editor != nil {
 		t.Fatal("editor must not open while syncing")
 	}
-	if !strings.Contains(p.View(), "sync in progress") {
-		t.Fatalf("expected in-panel busy message, got:\n%s", p.View())
+	if !strings.Contains(plain(p.View()), "sync in progress") {
+		t.Fatalf("expected in-panel busy message, got:\n%s", plain(p.View()))
 	}
 }
 
@@ -267,7 +267,7 @@ func TestPickerCreateBlockedWhileSyncing(t *testing.T) {
 	a.active = stubOverlay{res: overlayCreate("Brand New")}
 
 	// act
-	model, _ := a.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model, _ := a.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	a = model.(*App)
 
 	// assert: no editor mid-rebase, same contract as e/E/./linkify.

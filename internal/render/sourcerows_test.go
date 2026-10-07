@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/glamour"
+	"charm.land/glamour/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -142,7 +142,7 @@ func TestSourceRowsRealignAfterLayoutDivergence(t *testing.T) {
 	for find, want := range map[string]int{
 		"before":          0,
 		"http://example.": 4,
-		"wraps/around":    4,
+		"com/a/very":      4,
 		"after one":       5,
 		"after two":       6,
 	} {

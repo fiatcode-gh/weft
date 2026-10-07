@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestPageEdgeKeys(t *testing.T) {
@@ -21,14 +21,14 @@ func TestPageEdgeKeys(t *testing.T) {
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 5})
 
 	// 'G' jumps to bottom.
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")})
+	a.Update(key("G"))
 	bottomOffset := a.page.Offset()
 	if bottomOffset == 0 {
 		t.Errorf("after G: expected non-zero offset, got 0")
 	}
 
 	// 'g' jumps back to top.
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
+	a.Update(key("g"))
 	if got := a.page.Offset(); got != 0 {
 		t.Errorf("after g: want offset 0, got %d", got)
 	}
@@ -70,7 +70,7 @@ func TestAppStatusBarHidesIndicatorWhenFits(t *testing.T) {
 func TestAppLoadingSplashBeforePage(t *testing.T) {
 	quietTerm(t)
 	a := New("/nonexistent/before/build", "test")
-	v := a.View()
+	v := appText(a)
 	if !strings.Contains(v, "weft") {
 		t.Errorf("splash should contain title; got:\n%s", v)
 	}
@@ -83,7 +83,7 @@ func TestAppErrorSplashOnIndexFailure(t *testing.T) {
 	quietTerm(t)
 	a := New("/some/graph", "test")
 	a.Update(indexLoadedMsg{err: errors.New("synthetic build failure")})
-	v := a.View()
+	v := appText(a)
 	if !strings.Contains(v, "failed to index") {
 		t.Errorf("error splash should announce failure; got:\n%s", v)
 	}
@@ -100,7 +100,7 @@ func TestAppRetryFromErrorSplash(t *testing.T) {
 		t.Fatalf("setup: loadErr should be set")
 	}
 
-	_, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("R")})
+	_, cmd := a.Update(key("R"))
 	if cmd == nil {
 		t.Fatalf("R from error splash should return a retry cmd")
 	}
@@ -123,13 +123,13 @@ func TestAppMidSessionReindexFailureKeepsPage(t *testing.T) {
 	// must match a.indexGen (R just bumped it) or the generation guard
 	// would drop this synthetic message as stale before it ever reaches
 	// the failure-handling branch under test.
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
+	a.Update(key("R"))
 	a.Update(indexLoadedMsg{err: errors.New("disk full"), gen: a.indexGen})
 
 	if !strings.Contains(a.hint, "disk full") {
 		t.Errorf("mid-session reindex failure should surface a hint; got hint %q", a.hint)
 	}
-	view := a.View()
+	view := appText(a)
 	if strings.Contains(view, "failed to index") {
 		t.Errorf("replaced the working page with the error splash:\n%s", view)
 	}
@@ -141,7 +141,7 @@ func TestAppMidSessionReindexFailureKeepsPage(t *testing.T) {
 func TestAppQuitsBeforePage(t *testing.T) {
 	quietTerm(t)
 	a := New("/no/such/path", "test")
-	_, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	_, cmd := a.Update(key("q"))
 	if cmd == nil {
 		t.Errorf("q before page should return Quit cmd, got nil")
 	}
@@ -152,29 +152,29 @@ func TestAppPageKeyDispatch(t *testing.T) {
 	a.navigate("Alpha")
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 5}) // scrollable
 
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	a.Update(key("n"))
 	if a.page.Cursor() < 0 {
 		t.Errorf("n should advance cursor from -1, got %d", a.page.Cursor())
 	}
 
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("N")})
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	a.Update(key("N"))
+	a.Update(key("j"))
 	afterJ := a.page.Offset()
 	if afterJ == 0 {
 		t.Fatalf("setup: j should advance offset, got 0")
 	}
 
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	a.Update(key("k"))
 	if a.page.Offset() >= afterJ {
 		t.Errorf("k should retreat from %d, got %d", afterJ, a.page.Offset())
 	}
 
-	a.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	a.Update(tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
 	afterCtrlD := a.page.Offset()
 	if afterCtrlD == 0 {
 		t.Fatalf("setup: ctrl+d should advance offset, got 0")
 	}
-	a.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	a.Update(tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl})
 	if a.page.Offset() >= afterCtrlD {
 		t.Errorf("ctrl+u should retreat from %d, got %d", afterCtrlD, a.page.Offset())
 	}
@@ -189,7 +189,7 @@ func TestAppEnterFollowsLink(t *testing.T) {
 		t.Fatalf("setup: no link target available")
 	}
 
-	a.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if a.page.Page() != target {
 		t.Errorf("enter should navigate to %q, got %q", target, a.page.Page())
 	}
@@ -197,7 +197,7 @@ func TestAppEnterFollowsLink(t *testing.T) {
 
 func TestAppReindexFromPage(t *testing.T) {
 	a := bootApp(t)
-	_, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("R")})
+	_, cmd := a.Update(key("R"))
 	if cmd == nil {
 		t.Errorf("R from page mode should return a reindex cmd")
 	}
@@ -214,7 +214,7 @@ func TestStatusBarTruncatesLongLeft(t *testing.T) {
 	a.navigate("Alpha")
 	a.Update(tea.WindowSizeMsg{Width: 20, Height: 24})
 
-	bar := a.statusBar()
+	bar := plain(a.statusBar())
 	for _, line := range strings.Split(bar, "\n") {
 		if w := runewidthLen(line); w > 20 {
 			t.Errorf("status bar line exceeds width 20: w=%d, line=%q", w, line)
@@ -229,7 +229,7 @@ func TestStatusBarTruncatesLongLeft(t *testing.T) {
 }
 
 // runewidthLen counts visible cells in a single line, ignoring nothing
-// (NO_COLOR=1 in test setup keeps ANSI out of the way).
+// (reads go through appText, which strips ANSI).
 func runewidthLen(s string) int {
 	n := 0
 	for range s {
@@ -245,7 +245,7 @@ func TestPeriodJumpsToTodayJournal(t *testing.T) {
 	a.navigate("Alpha")
 	startHistLen := len(a.hist)
 
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(".")})
+	a.Update(key("."))
 
 	if got := a.page.Page(); got != "2026-05-23" {
 		t.Errorf("after .: want page 2026-05-23, got %q", got)
@@ -264,7 +264,7 @@ func TestPeriodOnAbsentTodayCreatesAndNavigates(t *testing.T) {
 	a := bootApp(t, bootConfig{now: time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)})
 	a.navigate("Alpha")
 
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(".")})
+	a.Update(key("."))
 
 	if got := a.page.Page(); got != "2026-06-15" {
 		t.Errorf("after . on absent today: want page 2026-06-15, got %q", got)
@@ -284,12 +284,12 @@ func TestHintClearsOnNextKey(t *testing.T) {
 	// `.` on a missing journal creates+navigates rather than hinting, so
 	// trigger a hint via `<` at the oldest journal ("no earlier journal").
 	a := bootApp(t, bootConfig{now: time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)})
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
+	a.Update(key("<"))
 	if a.hint == "" {
 		t.Fatal("setup: expected hint to be set by < at oldest")
 	}
 	// Any subsequent key clears the hint at the top of Update.
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	a.Update(key("j"))
 	if a.hint != "" {
 		t.Errorf("hint should clear on next key, got %q", a.hint)
 	}
@@ -297,7 +297,7 @@ func TestHintClearsOnNextKey(t *testing.T) {
 
 func TestHintExpiresOnTick(t *testing.T) {
 	a := bootApp(t, bootConfig{now: time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)})
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
+	a.Update(key("<"))
 	if a.hint == "" {
 		t.Fatal("setup: expected < to set a hint")
 	}
@@ -310,11 +310,11 @@ func TestHintExpiresOnTick(t *testing.T) {
 
 func TestStaleHintTickIgnored(t *testing.T) {
 	a := bootApp(t, bootConfig{now: time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)})
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
+	a.Update(key("<"))
 	staleGen := a.hintGen
-	// Second < clears the hint via the top-of-KeyMsg sweep, then re-sets it
+	// Second < clears the hint via the top-of-KeyPressMsg sweep, then re-sets it
 	// with a fresh generation. The tick scheduled by the first < is now stale.
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
+	a.Update(key("<"))
 	if a.hint == "" {
 		t.Fatal("setup: expected second < to set a new hint")
 	}
@@ -332,7 +332,7 @@ func TestPeriodIdempotentOnTodayJournal(t *testing.T) {
 		t.Fatalf("setup: want boot page 2026-05-23, got %q", got)
 	}
 	startHistLen := len(a.hist)
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(".")})
+	a.Update(key("."))
 	if got := a.page.Page(); got != "2026-05-23" {
 		t.Errorf("after . on today: want 2026-05-23, got %q", got)
 	}
@@ -344,7 +344,7 @@ func TestPeriodIdempotentOnTodayJournal(t *testing.T) {
 func TestPrevJournalWalksBackwards(t *testing.T) {
 	a := bootApp(t, bootConfig{now: time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC)})
 	// Boot lands on 2026-05-24.
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
+	a.Update(key("<"))
 	if got := a.page.Page(); got != "2026-05-23" {
 		t.Errorf("after <: want 2026-05-23, got %q", got)
 	}
@@ -355,7 +355,7 @@ func TestPrevJournalWalksBackwards(t *testing.T) {
 
 func TestNextJournalWalksForward(t *testing.T) {
 	a := bootApp(t, bootConfig{now: time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)})
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(">")})
+	a.Update(key(">"))
 	if got := a.page.Page(); got != "2026-05-24" {
 		t.Errorf("after >: want 2026-05-24, got %q", got)
 	}
@@ -365,7 +365,7 @@ func TestPrevJournalSkipsGapDays(t *testing.T) {
 	// Fixture has 2026-04-20 then 2026-03-15 — large gap. < from 04-20 lands
 	// on 03-15, skipping the missing calendar days in between.
 	a := bootApp(t, bootConfig{now: time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)})
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
+	a.Update(key("<"))
 	if got := a.page.Page(); got != "2026-03-15" {
 		t.Errorf("after < across gap: want 2026-03-15, got %q", got)
 	}
@@ -375,7 +375,7 @@ func TestPrevJournalAtOldestShowsHint(t *testing.T) {
 	a := bootApp(t, bootConfig{now: time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)})
 	startPage := a.page.Page()
 	startHistLen := len(a.hist)
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
+	a.Update(key("<"))
 	if got := a.page.Page(); got != startPage {
 		t.Errorf("< at oldest: page changed from %q to %q", startPage, got)
 	}
@@ -391,7 +391,7 @@ func TestNextJournalAtNewestShowsHint(t *testing.T) {
 	a := bootApp(t, bootConfig{now: time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC)})
 	startPage := a.page.Page()
 	startHistLen := len(a.hist)
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(">")})
+	a.Update(key(">"))
 	if got := a.page.Page(); got != startPage {
 		t.Errorf("> at newest: page changed from %q to %q", startPage, got)
 	}
@@ -410,7 +410,7 @@ func TestPrevJournalFromPhantomToday(t *testing.T) {
 	if got := a.page.Page(); got != "2026-06-15" {
 		t.Fatalf("setup: want boot page 2026-06-15, got %q", got)
 	}
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
+	a.Update(key("<"))
 	if got := a.page.Page(); got != "2026-05-25" {
 		t.Errorf("after < from phantom today: want 2026-05-25, got %q", got)
 	}
@@ -425,7 +425,7 @@ func TestNextJournalFromPhantomTodayShowsHint(t *testing.T) {
 	a := bootApp(t, bootConfig{now: time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)})
 	startPage := a.page.Page()
 	startHistLen := len(a.hist)
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(">")})
+	a.Update(key(">"))
 	if got := a.page.Page(); got != startPage {
 		t.Errorf("> from phantom today (no later): page changed from %q to %q", startPage, got)
 	}
@@ -443,8 +443,8 @@ func TestPrevNextInertOutsideJournalContext(t *testing.T) {
 	startPage := a.page.Page()
 	startHistLen := len(a.hist)
 
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("<")})
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(">")})
+	a.Update(key("<"))
+	a.Update(key(">"))
 
 	if got := a.page.Page(); got != startPage {
 		t.Errorf("<,> outside journal context: page changed from %q to %q", startPage, got)
@@ -489,7 +489,7 @@ func TestEditBootstrapRebuildsPageView(t *testing.T) {
 	}
 
 	// Press `E` directly — cold-start bootstrap ($EDITOR path).
-	_, cmd = a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("E")})
+	_, cmd = a.Update(key("E"))
 	if cmd == nil {
 		t.Fatal("E on cold-start should return a non-nil editor cmd; got nil (hint: " + a.hint + ")")
 	}
@@ -508,7 +508,7 @@ func TestEditBootstrapRebuildsPageView(t *testing.T) {
 }
 
 // TestSaveFailureKeepsEditorAndBuffer pins the highest-consequence untested
-// flow in the Ctrl+S handler (app.go's tea.KeyMsg case, res.Save branch):
+// flow in the Ctrl+S handler (app.go's tea.KeyPressMsg case, res.Save branch):
 // when the guarded write (edit.WriteFileIfUnchanged) fails, the in-app editor must stay open with the
 // buffer intact and the error surfaced — never torn down and never losing
 // unsaved work. The save is made to fail deterministically by revoking
@@ -528,11 +528,11 @@ func TestSaveFailureKeepsEditorAndBuffer(t *testing.T) {
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	a.navigate("A")
 
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	a.Update(key("e"))
 	if a.editor == nil {
 		t.Fatal("precondition: editor did not open")
 	}
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	a.Update(key("x"))
 	content := a.editor.Content()
 
 	// Make the save fail: the page directory becomes read-only, so
@@ -543,7 +543,7 @@ func TestSaveFailureKeepsEditorAndBuffer(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(pages, 0o755) })
 
-	a.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	a.Update(tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
 
 	if a.editor == nil {
 		t.Fatal("failed save tore down the editor (buffer lost)")

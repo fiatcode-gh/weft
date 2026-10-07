@@ -11,7 +11,7 @@ import (
 	"runtime/debug"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/doctor"
 	"github.com/fiatcode-gh/weft/v2/internal/render"
@@ -132,7 +132,7 @@ func main() {
 
 	app := views.New(graphPath, resolvedVersion())
 
-	if _, err := tea.NewProgram(app, tea.WithAltScreen()).Run(); err != nil {
+	if _, err := tea.NewProgram(app).Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "weft: %v\n", err)
 		os.Exit(1)
 	}

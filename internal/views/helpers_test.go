@@ -4,17 +4,31 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"unicode/utf8"
 
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
 )
 
-// quietTerm forces a colourless, dumb terminal for the duration of the test so
-// the package-wide lipgloss colour profile is not primed with truecolor by
-// whichever test happens to run first. Every test that builds a view or boots
-// the app relies on this for stable, ANSI-free output.
+// key builds the key press Bubble Tea v2 reports for typing s (one rune).
+func key(s string) tea.KeyPressMsg {
+	r, _ := utf8.DecodeRuneInString(s)
+	return tea.KeyPressMsg{Code: r, Text: s}
+}
+
+// plain strips ANSI escapes: Lip Gloss v2 always emits styling, where v1's
+// test profile produced escape-free strings.
+func plain(s string) string { return ansi.Strip(s) }
+
+// appText is the App's current frame as plain text.
+func appText(a *App) string { return ansi.Strip(a.View().Content) }
+
+// quietTerm sets NO_COLOR so Glamour uses the notty layout the goldens were
+// recorded with; Lip Gloss v2 styling is removed at read time by
+// plain/appText.
 func quietTerm(t *testing.T) {
 	t.Helper()
-	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "1")
 }
 

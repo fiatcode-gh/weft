@@ -1,6 +1,6 @@
 package views
 
-import "github.com/charmbracelet/lipgloss"
+import "charm.land/lipgloss/v2"
 
 // Palette. Numeric ANSI colors so the TUI honors the user's terminal theme.
 //
@@ -24,3 +24,10 @@ var (
 	// attention, matching the cursor/emphasis accent.
 	styleSyncDirty = lipgloss.NewStyle().Foreground(colorCursor)
 )
+
+// renderBordered draws s in styleBorder at width columns excluding the
+// border, which is what Style.Width meant in Lip Gloss v1; v2's Width
+// includes the border.
+func renderBordered(width int, s string) string {
+	return styleBorder.Width(width + styleBorder.GetHorizontalBorderSize()).Render(s)
+}

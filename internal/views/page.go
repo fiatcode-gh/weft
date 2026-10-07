@@ -8,8 +8,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/viewport"
+	"charm.land/lipgloss/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
 	"github.com/fiatcode-gh/weft/v2/internal/render"
@@ -72,7 +72,7 @@ func NewPageView(idx *graph.Index, page string, width, height int) *PageView {
 		height: height,
 		cursor: -1,
 		cache:  map[string]cachedPage{},
-		vp:     viewport.New(width, max(1, height-2)),
+		vp:     viewport.New(viewport.WithWidth(width), viewport.WithHeight(max(1, height-2))),
 	}
 	pv.load()
 	return pv
@@ -111,8 +111,8 @@ func (p *PageView) SetPageEmphasizing(name, term string) {
 func (p *PageView) SetSize(w, h int) {
 	widthChanged := w != p.width
 	p.width, p.height = w, h
-	p.vp.Width = w
-	p.vp.Height = max(1, h-2)
+	p.vp.SetWidth(w)
+	p.vp.SetHeight(max(1, h-2))
 	if widthChanged {
 		p.load()
 	}
@@ -145,12 +145,12 @@ func (p *PageView) scrollToCursor() {
 	if !ok {
 		return
 	}
-	top := p.vp.YOffset
-	bottom := top + p.vp.Height - 1
+	top := p.vp.YOffset()
+	bottom := top + p.vp.Height() - 1
 	if row >= top && row <= bottom {
 		return
 	}
-	target := row - p.vp.Height/2
+	target := row - p.vp.Height()/2
 	if target < 0 {
 		target = 0
 	}
@@ -179,9 +179,9 @@ func (p *PageView) linkRow(i int) (int, bool) {
 // produced. The map is computed lazily, once per load, and only after an
 // anchor is known to be needed.
 func (p *PageView) AnchorSourceLine() (line int, ok bool) {
-	top := p.vp.YOffset
+	top := p.vp.YOffset()
 	row := top
-	if r, found := p.linkRow(p.cursor); found && r >= top && r <= top+p.vp.Height-1 {
+	if r, found := p.linkRow(p.cursor); found && r >= top && r <= top+p.vp.Height()-1 {
 		row = r
 	} else if top == 0 {
 		return 0, false
@@ -234,7 +234,7 @@ func (p *PageView) GotoTop()      { p.vp.GotoTop() }
 func (p *PageView) GotoBottom()   { p.vp.GotoBottom() }
 
 // Offset returns the viewport's current scroll position (YOffset).
-func (p *PageView) Offset() int { return p.vp.YOffset }
+func (p *PageView) Offset() int { return p.vp.YOffset() }
 
 // Cursor returns the current link cursor index. -1 means no link selected.
 func (p *PageView) Cursor() int { return p.cursor }
@@ -244,7 +244,7 @@ func (p *PageView) Cursor() int { return p.cursor }
 // viewport.ScrollPercent is already clamped to [0, 1] and returns exactly
 // 0 at YOffset=0 and 1 at the max offset.
 func (p *PageView) ScrollIndicator() string {
-	if p.vp.TotalLineCount() <= p.vp.Height {
+	if p.vp.TotalLineCount() <= p.vp.Height() {
 		return ""
 	}
 	return fmt.Sprintf("%d%%", int(p.vp.ScrollPercent()*100))
@@ -277,7 +277,7 @@ func (p *PageView) ScrollToTask(ordinal int) {
 		return
 	}
 	row := strings.Count(p.result.Styled[:off], "\n")
-	target := row - p.vp.Height/2
+	target := row - p.vp.Height()/2
 	if target < 0 {
 		target = 0
 	}
@@ -395,7 +395,7 @@ func (p *PageView) scrollToFirstFind() {
 		return
 	}
 	row := strings.Count(p.result.Styled[:off], "\n")
-	target := row - p.vp.Height/2
+	target := row - p.vp.Height()/2
 	if target < 0 {
 		target = 0
 	}

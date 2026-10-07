@@ -5,8 +5,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/ansi"
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestHistorySeededOnFirstPage(t *testing.T) {
@@ -111,19 +110,19 @@ func TestHistoryBackForward(t *testing.T) {
 	a.navigate("Beta")
 
 	// Press '['
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("[")})
+	a.Update(key("["))
 	if got := a.page.Page(); got != "Alpha" {
 		t.Errorf("after [: want Alpha, got %q", got)
 	}
 
 	// '[' again -> startPage
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("[")})
+	a.Update(key("["))
 	if got := a.page.Page(); got != startPage {
 		t.Errorf("after second [: want %q, got %q", startPage, got)
 	}
 
 	// ']' -> Alpha
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("]")})
+	a.Update(key("]"))
 	if got := a.page.Page(); got != "Alpha" {
 		t.Errorf("after ]: want Alpha, got %q", got)
 	}
@@ -134,7 +133,7 @@ func TestHistoryBackAtStartNoop(t *testing.T) {
 	startPage := a.page.Page()
 	startIdx := a.histIdx
 
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("[")})
+	a.Update(key("["))
 
 	if got := a.page.Page(); got != startPage {
 		t.Errorf("page should be unchanged: want %q, got %q", startPage, got)
@@ -149,7 +148,7 @@ func TestHistoryForwardAtTailNoop(t *testing.T) {
 	a.navigate("Alpha")
 	tailIdx := a.histIdx
 
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("]")})
+	a.Update(key("]"))
 
 	if got := a.page.Page(); got != "Alpha" {
 		t.Errorf("page should be unchanged: want Alpha, got %q", got)
@@ -165,7 +164,7 @@ func TestHistoryBranchTruncatesForward(t *testing.T) {
 	a.navigate("Beta")
 
 	// Back to Alpha; forward stack still has Beta.
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("[")})
+	a.Update(key("["))
 	if a.page.Page() != "Alpha" {
 		t.Fatalf("setup: want Alpha, got %q", a.page.Page())
 	}
@@ -182,7 +181,7 @@ func TestHistoryBranchTruncatesForward(t *testing.T) {
 	}
 
 	// ']' is now a no-op — there is no forward history.
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("]")})
+	a.Update(key("]"))
 	if a.page.Page() != "proj/nested" {
 		t.Errorf("forward after branch should be no-op: got %q", a.page.Page())
 	}
@@ -200,7 +199,7 @@ func TestHistoryRestoresScrollAndCursor(t *testing.T) {
 	a.navigate("Beta")
 
 	// Back to Alpha — cursor should be restored.
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("[")})
+	a.Update(key("["))
 	if a.page.Page() != "Alpha" {
 		t.Fatalf("after [: want Alpha, got %q", a.page.Page())
 	}
@@ -218,12 +217,12 @@ func TestAppTodosDeepLinkScrollsToBullet(t *testing.T) {
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	// Open todos.
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")})
+	a.Update(key("T"))
 	// Cycle to TODO filter; markerCycle = ["", "TODO", "LATER", "DOING", "WAITING"]
 	// so one "t" press from "" lands on "TODO".
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
+	a.Update(key("t"))
 	// Select the first row.
-	a.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	// The first open TODO in the fixture is on 2026-05-24, line 2
 	// ("TODO Ship the TUI MVP"). Sorting is by page name then line number.
@@ -243,9 +242,8 @@ func TestAppTodosDeepLinkScrollsToBullet(t *testing.T) {
 	// Smoke check: the bullet text is rendered on screen. With the
 	// fixture's short page the bullet is always visible regardless of
 	// deep-link, so this only catches "we navigated to the wrong page".
-	view := a.View()
-	plain := ansi.Strip(view)
-	if !strings.Contains(plain, "Ship the TUI MVP") {
-		t.Errorf("expected 'Ship the TUI MVP' on screen, got:\n%s", plain)
+	view := appText(a)
+	if !strings.Contains(view, "Ship the TUI MVP") {
+		t.Errorf("expected 'Ship the TUI MVP' on screen, got:\n%s", view)
 	}
 }

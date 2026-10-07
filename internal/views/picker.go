@@ -7,8 +7,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/lipgloss/v2"
 	"github.com/sahilm/fuzzy"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
@@ -214,7 +214,7 @@ func (p *Picker) View() string {
 		b.WriteString(styleFaint.Render("  no matches"))
 		b.WriteString("\n")
 		p.writeFooter(&b, inner)
-		return styleBorder.Width(inner + 4).Render(b.String())
+		return renderBordered(inner+4, b.String())
 	}
 	if len(p.matches) == 0 {
 		b.WriteString(styleFaint.Render("  no matches"))
@@ -267,7 +267,7 @@ func (p *Picker) View() string {
 	p.writeFooter(&b, inner)
 	// Width(inner) locks the panel so the rounded border doesn't resize when
 	// a longer match scrolls into view.
-	return styleBorder.Width(inner + 4).Render(b.String())
+	return renderBordered(inner+4, b.String())
 }
 
 // writeFooter renders the blank spacer, the optional in-panel message, and

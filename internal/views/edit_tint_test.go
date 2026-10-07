@@ -4,20 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
 )
 
+// setupTintTest is kept as a hook for the tint tests; Lip Gloss v2 always
+// emits SGR, so no colour profile needs forcing.
 func setupTintTest(t *testing.T) {
-	// Force ANSI color output for consistent tint tests.
-	// Save the original profile so other tests are not affected.
-	origProfile := lipgloss.ColorProfile()
-	// NOTE: lipgloss.SetColorProfile is process-global. Tests in this file must
-	// not call t.Parallel — concurrent mutation would corrupt sibling tests
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() {
-		lipgloss.SetColorProfile(origProfile)
-	})
+	t.Helper()
 }
 
 func TestTintLineNormalUnchanged(t *testing.T) {

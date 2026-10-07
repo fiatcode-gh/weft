@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/edit"
 )
 
-var ctrlS = tea.KeyMsg{Type: tea.KeyCtrlS}
+var ctrlS = tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl}
 
 const (
 	journalPath = "journals/2026_05_24.md"
@@ -91,7 +91,7 @@ func TestEditorSaveMergesOutsideAppend(t *testing.T) {
 	if a.editor.mode != editing {
 		t.Errorf("mode = %v, want editing", a.editor.mode)
 	}
-	if !strings.Contains(a.editor.View(), "merged") {
+	if !strings.Contains(plain(a.editor.View()), "merged") {
 		t.Error("view lacks merged notice")
 	}
 
@@ -101,7 +101,7 @@ func TestEditorSaveMergesOutsideAppend(t *testing.T) {
 	if got := readFile(t, path); got != want {
 		t.Errorf("second save file = %q, want %q", got, want)
 	}
-	if strings.Contains(a.editor.View(), "merged") {
+	if strings.Contains(plain(a.editor.View()), "merged") {
 		t.Error("notice should clear on the next key")
 	}
 }
@@ -117,7 +117,7 @@ func TestEditorSaveBothAppendAtEnd(t *testing.T) {
 	if a.editor.mode != editing {
 		t.Fatalf("mode = %v, want editing (no prompt)", a.editor.mode)
 	}
-	v := a.editor.View()
+	v := plain(a.editor.View())
 	if strings.Contains(v, "on disk") || !strings.Contains(v, "merged") {
 		t.Errorf("view should show merged notice only: %q", v)
 	}
@@ -146,7 +146,7 @@ func TestEditorSaveBothAppendToEmptyJournal(t *testing.T) {
 	if a.editor.mode != editing {
 		t.Fatalf("mode = %v, want editing (no prompt)", a.editor.mode)
 	}
-	if !strings.Contains(a.editor.View(), "merged") {
+	if !strings.Contains(plain(a.editor.View()), "merged") {
 		t.Error("view lacks merged notice")
 	}
 	if got := readFile(t, path); got != want {
@@ -163,7 +163,7 @@ func TestEditorSaveBothAppendToEmptyJournal(t *testing.T) {
 func TestEditorSaveMergeKeepsCursorOnSameText(t *testing.T) {
 	a, path := openEditor(t, map[string]string{"pages/Lines.md": "l1\nl2\nl3\nl4\nl5\n"}, "Lines")
 	for range 3 {
-		a.Update(tea.KeyMsg{Type: tea.KeyDown})
+		a.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	}
 	typeApp(a, "X")
 	writeOutside(t, path, "n1\nn2\nl1\nl2\nl3\nl4\nl5\n")
@@ -196,7 +196,7 @@ func TestEditorSaveOverlapShowsClashPrompt(t *testing.T) {
 	if a.editor.mode != confirmingClash {
 		t.Fatalf("mode = %v, want confirmingClash", a.editor.mode)
 	}
-	if !strings.Contains(a.editor.View(), "Changed on disk") {
+	if !strings.Contains(plain(a.editor.View()), "Changed on disk") {
 		t.Error("view lacks clash prompt")
 	}
 
@@ -212,7 +212,7 @@ func TestEditorSaveOverlapShowsClashPrompt(t *testing.T) {
 	if a.editor.mode != confirmingClash {
 		t.Fatalf("second save: mode = %v, want confirmingClash", a.editor.mode)
 	}
-	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if a.editor.mode != editing {
 		t.Errorf("esc: mode = %v, want editing", a.editor.mode)
 	}
@@ -231,7 +231,7 @@ func TestEditorSaveNewPageAppearedShowsClash(t *testing.T) {
 	if a.editor.mode != confirmingClash {
 		t.Fatalf("mode = %v, want confirmingClash", a.editor.mode)
 	}
-	if !strings.Contains(a.editor.View(), "Changed on disk") {
+	if !strings.Contains(plain(a.editor.View()), "Changed on disk") {
 		t.Error("view lacks clash prompt")
 	}
 }
@@ -251,7 +251,7 @@ func TestEditorSaveDeletedShowsDeletionPrompt(t *testing.T) {
 	if a.editor.mode != confirmingClash {
 		t.Fatalf("mode = %v, want confirmingClash", a.editor.mode)
 	}
-	if !strings.Contains(a.editor.View(), "Deleted on disk") {
+	if !strings.Contains(plain(a.editor.View()), "Deleted on disk") {
 		t.Error("view lacks deletion prompt")
 	}
 }
@@ -269,7 +269,7 @@ func TestEditorSaveMtimeOnlyChangeSavesPlainly(t *testing.T) {
 	if got, want := readFile(t, path), a.editor.Content(); got != want {
 		t.Errorf("file = %q, want %q", got, want)
 	}
-	v := a.editor.View()
+	v := plain(a.editor.View())
 	if a.editor.mode != editing || strings.Contains(v, "merged") || strings.Contains(v, "on disk") {
 		t.Errorf("mode=%v view=%q, want plain save", a.editor.mode, v)
 	}
@@ -281,7 +281,7 @@ func TestEditorSaveAndExitClashStaysInEditor(t *testing.T) {
 	theirs := "- ONE\n- two\n- three\n"
 	writeOutside(t, path, theirs)
 
-	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	a.Update(key("s"))
 
 	if a.editor == nil {
@@ -300,7 +300,7 @@ func TestEditorSaveAndExitMergeExits(t *testing.T) {
 	typeApp(a, "X")
 	appendTo(t, path, "- agent\n")
 
-	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	a.Update(key("s"))
 
 	if a.editor != nil {
@@ -426,7 +426,7 @@ func TestClashReloadTakesTheirs(t *testing.T) {
 }
 
 func TestClashKeepEditingChangesNothing(t *testing.T) {
-	for name, k := range map[string]tea.KeyMsg{"k": key("k"), "esc": {Type: tea.KeyEsc}} {
+	for name, k := range map[string]tea.KeyPressMsg{"k": key("k"), "esc": {Code: tea.KeyEsc}} {
 		t.Run(name, func(t *testing.T) {
 			a, path := openClash(t)
 
@@ -481,7 +481,7 @@ func TestClashDeletedOverwriteRecreates(t *testing.T) {
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Errorf("file should stay absent, stat err = %v", err)
 	}
-	if strings.Contains(a.editor.View(), "[r]") {
+	if strings.Contains(plain(a.editor.View()), "[r]") {
 		t.Error("deleted prompt must not offer reload")
 	}
 
@@ -512,7 +512,7 @@ func TestClashSaveAndExitOverwriteExits(t *testing.T) {
 	a, path := openJournal(t)
 	typeApp(a, "X")
 	writeOutside(t, path, clashTheirs)
-	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	a.Update(key("s"))
 	if a.editor == nil || a.editor.mode != confirmingClash {
 		t.Fatal("want clash prompt with editor open")
@@ -532,7 +532,7 @@ func TestClashSaveAndExitReloadStays(t *testing.T) {
 	a, path := openJournal(t)
 	typeApp(a, "X")
 	writeOutside(t, path, clashTheirs)
-	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	a.Update(key("s"))
 
 	a.Update(key("r"))
@@ -573,7 +573,7 @@ func TestClashUnloadableTheirsOffersNoReload(t *testing.T) {
 
 	a.Update(key("r"))
 
-	v := a.editor.View()
+	v := plain(a.editor.View())
 	if a.editor.mode != confirmingClash || !strings.Contains(v, "can't load it here") || strings.Contains(v, "[r]") {
 		t.Fatalf("mode=%v view=%q, want clash prompt without reload", a.editor.mode, v)
 	}

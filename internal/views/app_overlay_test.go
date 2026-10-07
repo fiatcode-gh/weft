@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/search"
 )
@@ -35,13 +35,13 @@ func activeKind(a *App) string {
 func TestCtrlCQuitsWithOverlayOpen(t *testing.T) {
 	// arrange — open the picker overlay
 	a := bootApp(t)
-	a.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
+	a.Update(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
 	if a.active == nil {
 		t.Fatal("precondition: overlay did not open")
 	}
 
 	// act
-	_, cmd := a.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	_, cmd := a.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 
 	// assert
 	if cmd == nil {
@@ -57,11 +57,11 @@ func TestAppOpensAndCancelsPicker(t *testing.T) {
 	if activeKind(a) != "page" {
 		t.Fatalf("setup: want page, got %s", activeKind(a))
 	}
-	a.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
+	a.Update(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
 	if activeKind(a) != "picker" {
 		t.Fatalf("after ctrl+p: want picker, got %s", activeKind(a))
 	}
-	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if activeKind(a) != "page" {
 		t.Errorf("after esc: want page, got %s", activeKind(a))
 	}
@@ -69,11 +69,11 @@ func TestAppOpensAndCancelsPicker(t *testing.T) {
 
 func TestAppOpensSearchAndEscapes(t *testing.T) {
 	a := bootApp(t)
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	a.Update(key("/"))
 	if activeKind(a) != "search" {
 		t.Fatalf("after /: want search, got %s", activeKind(a))
 	}
-	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if activeKind(a) != "page" {
 		t.Errorf("after esc: want page, got %s", activeKind(a))
 	}
@@ -82,11 +82,11 @@ func TestAppOpensSearchAndEscapes(t *testing.T) {
 func TestAppOpensBacklinksAndCloses(t *testing.T) {
 	a := bootApp(t)
 	a.navigate("Hub")
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
+	a.Update(key("b"))
 	if activeKind(a) != "backlinks" {
 		t.Fatalf("after b: want backlinks, got %s", activeKind(a))
 	}
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
+	a.Update(key("b"))
 	if activeKind(a) != "page" {
 		t.Errorf("after second b: want page, got %s", activeKind(a))
 	}
@@ -94,11 +94,11 @@ func TestAppOpensBacklinksAndCloses(t *testing.T) {
 
 func TestAppOpensTodosAndCloses(t *testing.T) {
 	a := bootApp(t)
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")})
+	a.Update(key("T"))
 	if activeKind(a) != "todos" {
 		t.Fatalf("after T: want todos, got %s", activeKind(a))
 	}
-	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if activeKind(a) != "page" {
 		t.Errorf("after esc: want page, got %s", activeKind(a))
 	}
@@ -106,11 +106,11 @@ func TestAppOpensTodosAndCloses(t *testing.T) {
 
 func TestAppOpensHelpAndCloses(t *testing.T) {
 	a := bootApp(t)
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	a.Update(key("?"))
 	if activeKind(a) != "help" {
 		t.Fatalf("after ?: want help, got %s", activeKind(a))
 	}
-	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if activeKind(a) != "page" {
 		t.Errorf("after esc: want page, got %s", activeKind(a))
 	}
@@ -118,14 +118,14 @@ func TestAppOpensHelpAndCloses(t *testing.T) {
 
 func TestAppPickerAcceptNavigates(t *testing.T) {
 	a := bootApp(t)
-	a.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
+	a.Update(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
 	if activeKind(a) != "picker" {
 		t.Fatalf("setup: picker not open")
 	}
 	for _, r := range "Alp" {
-		a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		a.Update(key(string(r)))
 	}
-	a.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if activeKind(a) != "page" {
 		t.Errorf("after enter: want page, got %s", activeKind(a))
 	}
@@ -136,11 +136,11 @@ func TestAppPickerAcceptNavigates(t *testing.T) {
 
 func TestAppTodosAcceptNavigates(t *testing.T) {
 	a := bootApp(t)
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")})
+	a.Update(key("T"))
 	if activeKind(a) != "todos" {
 		t.Fatalf("setup: todos not open")
 	}
-	a.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if activeKind(a) != "page" {
 		t.Errorf("after enter: want page, got %s", activeKind(a))
 	}
@@ -148,7 +148,7 @@ func TestAppTodosAcceptNavigates(t *testing.T) {
 
 func TestAppSearchDoneMsgRouting(t *testing.T) {
 	a := bootApp(t)
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	a.Update(key("/"))
 	s, ok := a.active.(*SearchView)
 	if !ok {
 		t.Fatalf("setup: search not open, got %s", activeKind(a))
@@ -164,8 +164,8 @@ func TestAppSearchDoneMsgRouting(t *testing.T) {
 func TestAppViewWithOverlay(t *testing.T) {
 	quietTerm(t)
 	a := bootApp(t)
-	a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")})
-	v := a.View()
+	a.Update(key("T"))
+	v := appText(a)
 	if strings.Contains(v, "? help") {
 		t.Errorf("overlay view should not render the page status bar; got:\n%s", v)
 	}
@@ -199,10 +199,10 @@ func TestPickerCreate_OpensEditorOnNewPage(t *testing.T) {
 	a.active = NewPicker(a.idx, a.width, a.height)
 	// Type a brand-new name into the open picker.
 	for _, r := range "Zzz New Page" {
-		a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(string(r))})
+		a.Update(key(string(r)))
 	}
 	// Enter selects the create row.
-	a.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if a.active != nil {
 		t.Errorf("picker should be closed after create")
@@ -229,29 +229,29 @@ func TestAppResizePropagatesToOverlays(t *testing.T) {
 
 	openers := []struct {
 		name      string
-		key       tea.KeyMsg
+		key       tea.KeyPressMsg
 		setupPage string
 		read      func() (int, int)
 	}{
 		{
 			name: "picker",
-			key:  tea.KeyMsg{Type: tea.KeyCtrlP},
+			key:  tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl},
 			read: func() (int, int) { return a.active.(*Picker).width, a.active.(*Picker).height },
 		},
 		{
 			name: "search",
-			key:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")},
+			key:  key("/"),
 			read: func() (int, int) { return a.active.(*SearchView).width, a.active.(*SearchView).height },
 		},
 		{
 			name:      "backlinks",
-			key:       tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")},
+			key:       key("b"),
 			setupPage: "Hub",
 			read:      func() (int, int) { return a.active.(*Backlinks).width, a.active.(*Backlinks).height },
 		},
 		{
 			name: "todos",
-			key:  tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("T")},
+			key:  key("T"),
 			read: func() (int, int) { return a.active.(*Todos).width, a.active.(*Todos).height },
 		},
 	}
@@ -271,7 +271,7 @@ func TestAppResizePropagatesToOverlays(t *testing.T) {
 				t.Errorf("%s: want 120x40 after resize, got %dx%d", o.name, w, h)
 			}
 
-			a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+			a.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 		})
 	}
 }
@@ -284,16 +284,16 @@ func TestPickerCreate_DiscardLeavesNoFile(t *testing.T) {
 	a := bootApp(t)
 	a.active = NewPicker(a.idx, a.width, a.height)
 	for _, r := range "Zzz Throwaway" {
-		a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(string(r))})
+		a.Update(key(string(r)))
 	}
-	a.Update(tea.KeyMsg{Type: tea.KeyEnter}) // create -> editor opens
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEnter}) // create -> editor opens
 	if a.editor == nil {
 		t.Fatalf("precondition: create should open the editor")
 	}
 	path := a.editor.path
 
 	// Esc on a clean (untyped) buffer exits straight to the read view.
-	a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if a.editor != nil {
 		t.Errorf("esc on a clean new-page buffer should close the editor")
 	}
@@ -301,5 +301,5 @@ func TestPickerCreate_DiscardLeavesNoFile(t *testing.T) {
 		t.Errorf("discarding a new page must not write a file; stat err=%v", err)
 	}
 	// Rendering the page (now naming a fileless page) must not panic.
-	_ = a.View()
+	_ = appText(a)
 }

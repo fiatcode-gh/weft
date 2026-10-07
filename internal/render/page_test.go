@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/glamour/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
@@ -81,7 +81,7 @@ func TestRenderPageReturnsLinksWithTargets(t *testing.T) {
 	}
 	if len(out.Links) >= 2 {
 		span := out.Styled[out.Links[1].Start:out.Links[1].End]
-		if !strings.Contains(span, "the second") {
+		if !strings.Contains(ansi.Strip(span), "the second") {
 			t.Errorf("aliased link span: want substring %q, got %q", "the second", span)
 		}
 	}
