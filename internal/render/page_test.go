@@ -865,3 +865,64 @@ func TestRenderReportsGlamourFallback(t *testing.T) {
 		t.Fatalf("fallback should still carry the page text, got:\n%s", res.Styled)
 	}
 }
+
+func TestRenderStripsHyperlinks(t *testing.T) {
+	body := "- see [the docs][d] and <https://auto.example.com>\n\n[d]: https://example.com/docs\n"
+
+	res := mustRender(t, body, 80)
+
+	if strings.Contains(res.Styled, "\x1b]8;") {
+		t.Errorf("Styled contains an OSC 8 hyperlink: %q", res.Styled)
+	}
+	plain := ansi.Strip(res.Styled)
+	for _, want := range []string{"the docs", "https://auto.example.com"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("text %q missing from %q", want, plain)
+		}
+	}
+	if got, want := len(SourceRows(body, 80, "")), strings.Count(res.Styled, "\n")+1; got != want {
+		t.Errorf("SourceRows = %d, styled rows = %d", got, want)
+	}
+}
+
+func TestRenderOverWideSentinelLeavesNoPadRunes(t *testing.T) {
+	const longName = "A very long page name that is longer than the column width"
+	cases := []struct {
+		name     string
+		body     string
+		width    int
+		emphasis string
+		check    func(t *testing.T, res Result)
+	}{
+		{"wiki", "- see [[" + longName + "]] ok\n", 30, "", func(t *testing.T, res Result) {
+			if len(res.Links) != 1 {
+				t.Fatalf("links = %d, want 1", len(res.Links))
+			}
+			l := res.Links[0]
+			if l.Display != longName {
+				t.Errorf("Display = %q, want %q", l.Display, longName)
+			}
+			if got := ansi.Strip(res.Styled[l.Start:l.End]); got != longName {
+				t.Errorf("styled span = %q, want %q", got, longName)
+			}
+		}},
+		{"emphasis", "- averyveryveryveryveryverylongword here\n", 20, "averyveryveryveryveryverylongword", func(t *testing.T, res Result) {
+			if len(res.Finds) != 1 {
+				t.Errorf("finds = %d, want 1", len(res.Finds))
+			}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := mustRenderEmphasis(t, tc.body, tc.width, tc.emphasis)
+
+			if i := strings.IndexAny(res.Styled, "\ue004\ue007\ue008"); i >= 0 {
+				t.Errorf("pad rune at byte %d in %q", i, res.Styled)
+			}
+			if got, want := len(SourceRows(tc.body, tc.width, tc.emphasis)), strings.Count(res.Styled, "\n")+1; got != want {
+				t.Errorf("SourceRows = %d, styled rows = %d", got, want)
+			}
+			tc.check(t, res)
+		})
+	}
+}
