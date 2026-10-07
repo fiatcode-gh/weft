@@ -1,12 +1,12 @@
 
-  # Heading one                                           
+  [1m# [m[1mHeading[m[1m one[m                                           
                                                           
-  ## Heading two                                          
+  [1m## [m[1mHeading[m[1m two[m                                          
                                                           
-  ### Heading three                                       
+  [1m### [m[1mHeading[m[1m three[m                                       
                                                           
-  A paragraph with **bold**, *italic*, ~~struck~~, code   
-  span, a markdown link, a [4;94;4mW[m[4;94;4mi[m[4;94;4mk[m[4;94;4mi[m[94;4m [m[4;94;4mT[m[4;94;4ma[m[4;94;4mr[m[4;94;4mg[m[4;94;4me[m[4;94;4mt[m and an [4;94;4ma[m[4;94;4ml[m[4;94;4mi[m[4;94;4ma[m[4;94;4ms[m[4;94;4me[m[4;94;4md[m[94;4m [m[4;94;4ml[m[4;94;4mi[m[4;94;4mn[m[4;94;4mk[m
+  A paragraph with [1m**[m[1mbold[m[1m**[m, [3m*[m[3mitalic[m[3m*[m, ~~[9mstruck[m~~, code   
+  span, a [1mmarkdown link[m, a [4;94;4mW[m[4;94;4mi[m[4;94;4mk[m[4;94;4mi[m[94;4m [m[4;94;4mT[m[4;94;4ma[m[4;94;4mr[m[4;94;4mg[m[4;94;4me[m[4;94;4mt[m and an [4;94;4ma[m[4;94;4ml[m[4;94;4mi[m[4;94;4ma[m[4;94;4ms[m[4;94;4me[m[4;94;4md[m[94;4m [m[4;94;4ml[m[4;94;4mi[m[4;94;4mn[m[4;94;4mk[m
   in it.                                                  
                                                           
   • [1;91mTODO[m top level task                                   

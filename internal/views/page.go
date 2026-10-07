@@ -321,7 +321,12 @@ func (p *PageView) View() string {
 	}
 	if p.cursor >= 0 && p.cursor < len(p.result.Links) {
 		l := p.result.Links[p.cursor]
-		body = body[:l.Start] + cursorStyle.Render(l.Display) + body[l.End:]
+		cs := cursorStyle
+		if theme, _ := render.CurrentTheme(); theme.Name == "notty" {
+			// No colour to tell the cursor link apart: reverse video does.
+			cs = cs.Reverse(true)
+		}
+		body = body[:l.Start] + cs.Render(l.Display) + body[l.End:]
 	}
 	p.vp.SetContent(body)
 	return p.vp.View()

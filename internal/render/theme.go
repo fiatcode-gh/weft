@@ -70,10 +70,13 @@ func CurrentTheme() (Theme, error) {
 	cfg, ok := styles.DefaultStyles[name]
 	if !ok {
 		t.Name = "notty"
-		t.Config = *styles.DefaultStyles["notty"]
+		t.Config = noColorStyleConfig
 		return t, fmt.Errorf("%s: style not found", name)
 	}
 	t.Name = name
 	t.Config = *cfg
+	if name == "notty" {
+		t.Config = noColorStyleConfig
+	}
 	return t, nil
 }

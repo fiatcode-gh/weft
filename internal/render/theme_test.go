@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"charm.land/glamour/v2/styles"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestCurrentTheme(t *testing.T) {
@@ -44,7 +45,10 @@ func TestCurrentTheme(t *testing.T) {
 				t.Errorf("Formatter = %q, want %q", got.Formatter, tc.wantFormatter)
 			}
 			want := terminalStyleConfig
-			if !tc.wantTerminal {
+			switch {
+			case got.Name == "notty":
+				want = noColorStyleConfig
+			case !tc.wantTerminal:
 				want = *styles.DefaultStyles[got.Name]
 			}
 			if !reflect.DeepEqual(got.Config, want) {
@@ -67,8 +71,8 @@ func TestRendererCacheFollowsStyle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(plain.Styled, "\x1b[") {
-		t.Fatalf("NO_COLOR render carries SGR: %q", plain.Styled)
+	if !strings.Contains(ansi.Strip(plain.Styled), "# Title") {
+		t.Fatalf("NO_COLOR render lacks the ASCII heading prefix: %q", plain.Styled)
 	}
 
 	t.Setenv("NO_COLOR", "")
@@ -76,7 +80,7 @@ func TestRendererCacheFollowsStyle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(coloured.Styled, "\x1b[") {
-		t.Fatalf("coloured render has no SGR (stale cached renderer?): %q", coloured.Styled)
+	if strings.Contains(ansi.Strip(coloured.Styled), "# Title") {
+		t.Fatalf("coloured render still has the ASCII heading prefix (stale cached renderer?): %q", coloured.Styled)
 	}
 }

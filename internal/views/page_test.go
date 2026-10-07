@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
@@ -38,7 +40,8 @@ func TestPageViewRendersActiveLinkCursor(t *testing.T) {
 	// snapshot without forcing a colour profile. Width 77 is unique to this
 	// test: the glamour renderer is width-cached process-wide.
 
-	// arrange
+	// arrange — the default style, whatever the environment says
+	t.Setenv("NO_COLOR", "")
 	idx := loadFixture(t)
 	pv := NewPageView(idx, "Alpha", 77, 24)
 	pv.CycleLink(+1)
@@ -48,6 +51,26 @@ func TestPageViewRendersActiveLinkCursor(t *testing.T) {
 
 	// act + assert
 	teatest.RequireEqualOutput(t, []byte(pv.View()))
+}
+
+// Without colour the cursor link must still stand out: reverse video.
+func TestPageViewLinkCursorVisibleUnderNoColor(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	_, idx := writeGraph(t, map[string]string{"pages/Solo.md": "- see [[Target]]\n"})
+	pv := NewPageView(idx, "Solo", 80, 24)
+	pv.CycleLink(+1)
+	if pv.Cursor() != 0 {
+		t.Fatalf("precondition: cursor should sit on the link, got %d", pv.Cursor())
+	}
+
+	rows := frameCells(pv.View(), 80, colorprofile.Ascii)
+
+	for _, c := range cellsShowing(t, rows, "Target") {
+		if c.Style.Attrs&uv.AttrReverse == 0 {
+			t.Errorf("cursor cell %q is not reverse video: %q", c.Content, c.Style.String())
+		}
+	}
+	assertNoColour(t, rows, "page")
 }
 
 // A page whose file disappears mid-session must degrade to an error: line on
