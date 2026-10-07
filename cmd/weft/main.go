@@ -132,7 +132,7 @@ func main() {
 
 	app := views.New(graphPath, resolvedVersion())
 
-	if _, err := tea.NewProgram(app).Run(); err != nil {
+	if _, err := tea.NewProgram(app, programOptions(os.Stdout)...).Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "weft: %v\n", err)
 		os.Exit(1)
 	}

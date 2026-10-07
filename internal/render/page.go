@@ -186,7 +186,7 @@ type styleSelection struct {
 //
 // NO_COLOR wins over WEFT_STYLE.
 func selectStyle() styleSelection {
-	if os.Getenv("NO_COLOR") != "" {
+	if noColor() {
 		return styleSelection{name: "notty"}
 	}
 	if s := os.Getenv("WEFT_STYLE"); s != "" {
