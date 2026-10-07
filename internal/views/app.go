@@ -14,6 +14,7 @@ import (
 
 	"github.com/fiatcode-gh/weft/v2/internal/edit"
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/merge"
 	"github.com/fiatcode-gh/weft/v2/internal/search"
 	syncpkg "github.com/fiatcode-gh/weft/v2/internal/sync"
 )
@@ -112,6 +113,10 @@ type App struct {
 	// linkify paths; injected so tests can simulate a change between read and
 	// write, like statusProbe.
 	readSnapshot func(path string) (edit.Snapshot, error)
+
+	// pendingPlace is where the read view puts the line the editor's cursor
+	// was on, set on a saved exit and consumed by the reindex that follows.
+	pendingPlace *Anchor
 
 	// Browser-style page history. hist[histIdx] is the entry currently on
 	// screen. histIdx == -1 before the first page is shown.
@@ -449,6 +454,47 @@ func (a *App) enterEditor() tea.Cmd {
 	return nil
 }
 
+// exitPlacement computes where the read view must put the editor's cursor
+// line when the editor closes. It reads the file once: that content is what
+// the read view will show, so the cursor line is mapped onto it when the buffer
+// differs, then shifted past the leading blank lines the read view trims.
+// place is false when there is nothing to place (a page with no file); keep
+// reports that an unsaved exit can reuse the page on screen as is.
+func (a *App) exitPlacement(saved bool) (at Anchor, place, keep bool) {
+	e := a.editor
+	at = e.ExitAnchor()
+	snap, err := a.readSnapshot(e.path)
+	if err != nil {
+		snap = e.disk
+	}
+	if !snap.Exists {
+		return at, false, false
+	}
+	shown := snap.Content
+	if !e.buf.EqualString(shown) {
+		cur := e.Content()
+		r := merge.Text(cur, cur, shown)
+		if r.Conflict || at.Line >= len(r.MineLine) {
+			last := strings.Count(strings.TrimSuffix(shown, "\n"), "\n")
+			at.Line = min(at.Line, last)
+		} else {
+			at.Line = r.MineLine[at.Line]
+		}
+	}
+	at.Line = max(0, at.Line-leadingTrimmedLines(shown))
+	keep = !saved && a.page.body == strings.TrimSpace(shown)+"\n"
+	return at, true, keep
+}
+
+// applyPendingPlace moves the page on screen to the anchor an editor exit left
+// behind, once the page has been rebuilt.
+func (a *App) applyPendingPlace() {
+	if a.pendingPlace != nil && a.page != nil {
+		a.page.PlaceAnchor(*a.pendingPlace)
+	}
+	a.pendingPlace = nil
+}
+
 // unlinkedRefs finds bare-text mentions of `name` elsewhere in the graph that
 // aren't already links. Best-effort: a ripgrep failure yields no unlinked refs
 // rather than breaking the backlinks panel — and an error hint would be
@@ -526,6 +572,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// tell the user via a hint. The working page stays on
 				// screen; the boot path (a.page == nil) still surfaces
 				// the splash so the user can retry.
+				a.applyPendingPlace()
 				return a, a.setHint("reindex failed: " + m.err.Error())
 			}
 			a.loadErr = m.err
@@ -540,6 +587,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			off, cur := a.page.Offset(), a.page.Cursor()
 			a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
 			a.page.Restore(off, cur)
+			a.applyPendingPlace()
 		} else {
 			a.tryInitPage()
 		}
@@ -656,15 +704,27 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if res.Exit {
 				saved := a.editor.saved
+				at, place, keep := a.exitPlacement(saved)
 				a.editor = nil
-				if saved {
+				switch {
+				case saved:
 					// Reindex picks up the saved file; its indexLoadedMsg
-					// then refreshes the indicator.
+					// then places the anchor and refreshes the indicator.
+					if place {
+						a.pendingPlace = &at
+					}
 					cmds = append(cmds, a.buildIndexCmd())
-				} else {
+				case keep:
+					// The page on screen already shows this content: keep it
+					// and its row map and just move it.
+					a.page.PlaceAnchor(at)
+				default:
 					off, cur := a.page.Offset(), a.page.Cursor()
 					a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
 					a.page.Restore(off, cur)
+					if place {
+						a.page.PlaceAnchor(at)
+					}
 				}
 				if res.Save && outcome == saveMerged {
 					cmds = append(cmds, a.setHint(mergedNotice))

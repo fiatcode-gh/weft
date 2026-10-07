@@ -205,6 +205,14 @@ func (e *EditorView) place(at Anchor) {
 	e.top = t
 }
 
+// ExitAnchor is where the cursor sits now: its buffer line, the index of its
+// row within that line, and the screen row it is drawn on. The App places the
+// read view with it when the editor closes.
+func (e *EditorView) ExitAnchor() Anchor {
+	cur, _ := e.cursorRow()
+	return Anchor{Line: cur.line, RowInLine: cur.row, ScreenRow: e.cursorScreenRow()}
+}
+
 // moveRows moves the cursor n display rows up (dir < 0) or down at the
 // remembered screen column. A single step off the first or last row goes to
 // the buffer start or end; a longer move (a page) clamps to that row.

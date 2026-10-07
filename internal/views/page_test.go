@@ -650,3 +650,98 @@ func TestPageViewAnchorComputesMapOncePerLoadAndOnlyWhenNeeded(t *testing.T) {
 		t.Fatalf("map computed %d times after reload, want 2", calls)
 	}
 }
+
+// placePage is 60 bullets "- L<n>", the n=20 one wrapped over several rows
+// at width 40, with a hidden :LOGBOOK: block (lines 31-33) after L30.
+func placePage() string {
+	var b strings.Builder
+	for n := range 60 {
+		switch n {
+		case 20:
+			b.WriteString("- L20 wrapped alpha beta gamma delta epsilon zeta eta theta iota kappa lambda\n")
+		case 31:
+			b.WriteString("  :LOGBOOK:\n  CLOCK: x\n  :END:\n")
+			fmt.Fprintf(&b, "- L%d\n", n)
+		default:
+			fmt.Fprintf(&b, "- L%d\n", n)
+		}
+	}
+	return b.String()
+}
+
+func TestPlaceAnchor(t *testing.T) {
+	quietTerm(t)
+	_, idx := writeGraph(t, map[string]string{"pages/A.md": placePage()})
+	view := func(p *PageView) []string { return strings.Split(plain(p.vp.View()), "\n") }
+	rowIndex := func(p *PageView, sub string) int {
+		for i, r := range p.styledRows(0, p.vp.TotalLineCount()) {
+			if strings.Contains(plain(r), sub) {
+				return i
+			}
+		}
+		t.Fatalf("no rendered row holds %q", sub)
+		return -1
+	}
+	tests := []struct {
+		name string
+		at   Anchor
+		// check receives the page after placement.
+		check func(t *testing.T, p *PageView)
+	}{
+		{"wrapped continuation row on screen row 5", Anchor{Line: 20, RowInLine: 1, ScreenRow: 5}, func(t *testing.T, p *PageView) {
+			want := plain(p.styledRows(rowIndex(p, "L20")+1, rowIndex(p, "L20")+2)[0])
+			if got := view(p)[5]; got != want {
+				t.Errorf("screen row 5 = %q, want the second row of the wrapped bullet %q", got, want)
+			}
+		}},
+		{"hidden line falls to the next visible line", Anchor{Line: 32, ScreenRow: 3}, func(t *testing.T, p *PageView) {
+			if got := view(p)[3]; !strings.Contains(got, "L31") {
+				t.Errorf("screen row 3 = %q, want L31", got)
+			}
+		}},
+		{"past the end lands on the last line", Anchor{Line: 9999, ScreenRow: 3}, func(t *testing.T, p *PageView) {
+			rows := view(p)
+			if !p.vp.AtBottom() || !strings.Contains(strings.Join(rows, "\n"), "L59") {
+				t.Errorf("want the last line L59 at the bottom, offset %d, view:\n%s", p.Offset(), strings.Join(rows, "\n"))
+			}
+		}},
+		{"near the top clamps to offset 0", Anchor{Line: 1, ScreenRow: 6}, func(t *testing.T, p *PageView) {
+			if p.Offset() != 0 {
+				t.Errorf("offset = %d, want 0", p.Offset())
+			}
+		}},
+		{"near the bottom clamps to the max offset", Anchor{Line: 58, ScreenRow: 0}, func(t *testing.T, p *PageView) {
+			if !p.vp.AtBottom() {
+				t.Errorf("offset = %d, want the max offset", p.Offset())
+			}
+		}},
+		{"screen row below the read window keeps the line visible", Anchor{Line: 30, ScreenRow: 40}, func(t *testing.T, p *PageView) {
+			if got := view(p)[p.vp.Height()-1]; !strings.Contains(got, "L30") {
+				t.Errorf("last window row = %q, want L30", got)
+			}
+		}},
+		{"wrapped row past its last row clamps to the last row", Anchor{Line: 20, RowInLine: 99, ScreenRow: 4}, func(t *testing.T, p *PageView) {
+			first := rowIndex(p, "L20")
+			n := 0
+			for _, r := range p.sourceRows()[first:] {
+				if r != 20 {
+					break
+				}
+				n++
+			}
+			if got := p.Offset() + 4; got != first+n-1 {
+				t.Errorf("screen row 4 is rendered row %d, want the wrapped bullet's last row %d", got, first+n-1)
+			}
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewPageView(idx, "A", 40, 12)
+			p.PlaceAnchor(tt.at)
+			if p.Cursor() != -1 {
+				t.Errorf("link cursor = %d, want it untouched", p.Cursor())
+			}
+			tt.check(t, p)
+		})
+	}
+}

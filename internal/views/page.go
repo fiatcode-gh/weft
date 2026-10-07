@@ -217,6 +217,48 @@ func (p *PageView) ReadingAnchor() (Anchor, bool) {
 	return Anchor{Line: line, RowInLine: row - f, ScreenRow: row - top}, true
 }
 
+// PlaceAnchor scrolls so the row RowInLine of body line a.Line sits on screen
+// row a.ScreenRow, the inverse of ReadingAnchor. A line the read view hides
+// has no rows: the nearest later line with rows stands in, else the nearest
+// earlier one. RowInLine clamps to the line's last row, ScreenRow to the last
+// row of the page window (the editor's window is two rows taller), and the
+// viewport clamps the offset. The link cursor is kept.
+func (p *PageView) PlaceAnchor(a Anchor) {
+	lines := p.sourceRows()
+	if len(lines) == 0 {
+		return
+	}
+	styled := p.styledRows(0, len(lines))
+	first := map[int]int{} // body line → first non-blank row
+	for r, s := range styled {
+		if _, seen := first[lines[r]]; !seen && strings.TrimSpace(ansi.Strip(s)) != "" {
+			first[lines[r]] = r
+		}
+	}
+	line, found := 0, false
+	for l := range first {
+		if l >= a.Line && (!found || l < line) {
+			line, found = l, true
+		}
+	}
+	if !found {
+		for l := range first {
+			if !found || l > line {
+				line, found = l, true
+			}
+		}
+	}
+	if !found {
+		return
+	}
+	f := first[line]
+	n := 0
+	for r := f; r < len(lines) && lines[r] == line; r++ {
+		n++
+	}
+	p.vp.SetYOffset(f + min(max(a.RowInLine, 0), n-1) - min(a.ScreenRow, p.vp.Height()-1))
+}
+
 // styledRows returns rows [from, to) of the rendered page, fewer at its end.
 func (p *PageView) styledRows(from, to int) []string {
 	s := p.result.Styled
