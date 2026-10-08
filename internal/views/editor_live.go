@@ -79,12 +79,27 @@ func (e *EditorView) drawDisplayRow(p viewPos) string {
 	case r < body && raw:
 		return e.drawRow(viewPos{p.line, r})
 	case r < body:
-		return lr.Body[r]
+		return e.findRestyle(p.line, lr.Body[r])
 	}
 	if r -= body; r < len(lr.Trail) {
 		return lr.Trail[r]
 	}
 	return ""
+}
+
+// findRestyle draws every occurrence of the find query in a rendered Body row of
+// line with matchStyle, when the open bar has a match on that line. Other rows
+// come back unchanged.
+func (e *EditorView) findRestyle(line int, row string) string {
+	f := e.find
+	if f == nil || f.version != e.buf.Version() {
+		return row
+	}
+	i := sort.Search(len(f.matches), func(i int) bool { return f.matches[i].Start.Line >= line })
+	if i == len(f.matches) || f.matches[i].Start.Line != line {
+		return row
+	}
+	return render.RestyleRow(row, func(p string) [][2]int { return buffer.MatchIn(p, f.query) }, matchStyle)
 }
 
 // revealSpans is the reveal set for the cursor and selection: the unit of the

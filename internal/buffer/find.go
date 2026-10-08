@@ -16,30 +16,36 @@ func (b *Buffer) Find(query string) []Range {
 	if query == "" || strings.Contains(query, "\n") {
 		return nil
 	}
-	exact := strings.IndexFunc(query, unicode.IsUpper) >= 0
-	var qr []rune
-	if !exact {
-		qr = []rune(query)
-	}
 	var out []Range
 	for i, line := range b.lines {
-		if exact {
-			out = findExact(out, i, line, query)
-		} else {
-			out = findFold(out, i, line, qr)
+		for _, m := range MatchIn(line, query) {
+			out = append(out, Range{Pos{i, m[0]}, Pos{i, m[1]}})
 		}
 	}
 	return out
 }
 
-func findExact(out []Range, ln int, line, query string) []Range {
+// MatchIn returns the byte ranges of the non-overlapping matches of query in s under
+// Find's rules (smart case, simple folding, matches start at grapheme boundaries). An
+// empty query, or one containing "\n", returns nil.
+func MatchIn(s, query string) [][2]int {
+	if query == "" || strings.Contains(query, "\n") {
+		return nil
+	}
+	if strings.IndexFunc(query, unicode.IsUpper) >= 0 {
+		return findExact(nil, s, query)
+	}
+	return findFold(nil, s, []rune(query))
+}
+
+func findExact(out [][2]int, line, query string) [][2]int {
 	for from := 0; from <= len(line)-len(query); {
 		j := strings.Index(line[from:], query)
 		if j < 0 {
 			break
 		}
 		s := from + j
-		out = append(out, Range{Pos{ln, s}, Pos{ln, s + len(query)}})
+		out = append(out, [2]int{s, s + len(query)})
 		from = s + len(query)
 	}
 	return out
@@ -47,7 +53,7 @@ func findExact(out []Range, ln int, line, query string) []Range {
 
 // findFold matches qr rune by rune under simple folding, starting only at grapheme
 // boundaries; offsets are bytes of line itself.
-func findFold(out []Range, ln int, line string, qr []rune) []Range {
+func findFold(out [][2]int, line string, qr []rune) [][2]int {
 	ascii := true
 	for i := 0; i < len(line); i++ {
 		if line[i] >= utf8.RuneSelf {
@@ -67,7 +73,7 @@ func findFold(out []Range, ln int, line string, qr []rune) []Range {
 	}
 	for i := 0; i < len(line); {
 		if end, ok := foldMatchAt(line, i, qr); ok {
-			out = append(out, Range{Pos{ln, i}, Pos{ln, end}})
+			out = append(out, [2]int{i, end})
 			i = end
 			continue
 		}
