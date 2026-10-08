@@ -48,6 +48,8 @@ func (e *EditorView) syncBuffer() {
 		return
 	}
 	e.scanner.Invalidate(from)
+	e.preview.Invalidate(from)
+	clear(e.previewed)
 	// A fence's highlighting runs across its lines, so a changed line can
 	// recolour its neighbours without changing their text.
 	for _, c := range e.cache {
@@ -71,42 +73,60 @@ func (e *EditorView) line(i int) *lineCache {
 	return c
 }
 
-// next is the display row after p; false at the last row of the buffer.
+// next is the display row after p; false at the last row of the buffer. Lines
+// without rows are skipped.
 func (e *EditorView) next(p viewPos) (viewPos, bool) {
 	switch {
 	case p.row < -1:
 		return viewPos{p.line, p.row + 1}, true
 	case p.row == -1:
-		return viewPos{p.line, 0}, true
-	case p.row+1 < len(e.line(p.line).rows):
+		if q, ok := e.firstRowFrom(p.line); ok {
+			return q, true
+		}
+		return p, false
+	case p.row+1 < e.rowCount(p.line):
 		return viewPos{p.line, p.row + 1}, true
-	case p.line+1 < e.buf.Len():
-		return viewPos{p.line + 1, 0}, true
+	}
+	if q, ok := e.firstRowFrom(p.line + 1); ok {
+		return q, true
 	}
 	return p, false
 }
 
+// firstRowFrom is the first row of the first line from l on that has rows.
+func (e *EditorView) firstRowFrom(l int) (viewPos, bool) {
+	for ; l < e.buf.Len(); l++ {
+		if e.rowCount(l) > 0 {
+			return viewPos{l, 0}, true
+		}
+	}
+	return viewPos{}, false
+}
+
 // prev is the display row before p; false at the margin row. With virtual,
-// rows above the margin exist on line 0.
+// rows above the margin exist on line 0. Lines without rows are skipped.
 func (e *EditorView) prev(p viewPos, virtual bool) (viewPos, bool) {
 	switch {
 	case p.line == 0 && p.row <= -1:
 		return viewPos{0, p.row - 1}, virtual
 	case p.row > 0:
 		return viewPos{p.line, p.row - 1}, true
-	case p.line == 0:
-		return viewPos{0, -1}, true
 	}
-	return viewPos{p.line - 1, len(e.line(p.line-1).rows) - 1}, true
+	for l := p.line - 1; l >= 0; l-- {
+		if n := e.rowCount(l); n > 0 {
+			return viewPos{l, n - 1}, true
+		}
+	}
+	return viewPos{0, -1}, true
 }
 
 // cursorRow is the display row holding the cursor and the screen column it
-// sits at.
+// sits at. The cursor is always on a raw row, below its line's Lead rows.
 func (e *EditorView) cursorRow() (viewPos, int) {
 	cur := e.buf.Cursor()
 	c := e.line(cur.Line)
 	row, x := e.geo.CellX(c.text, c.info, c.rows, cur.Col)
-	return viewPos{cur.Line, row}, x
+	return viewPos{cur.Line, e.leadRows(cur.Line) + row}, x
 }
 
 // normalizeTop keeps top on a row that exists after the buffer or the width
@@ -116,8 +136,15 @@ func (e *EditorView) normalizeTop() {
 	if t.line >= e.buf.Len() {
 		*t = viewPos{e.buf.Len() - 1, 0}
 	}
-	if t.row >= 0 {
-		t.row = min(t.row, len(e.line(t.line).rows)-1)
+	if t.row < 0 {
+		return
+	}
+	if n := e.rowCount(t.line); n > 0 {
+		t.row = min(t.row, n-1)
+	} else if q, ok := e.firstRowFrom(t.line); ok {
+		*t = q
+	} else if q, ok := e.prev(viewPos{t.line, 0}, false); ok {
+		*t = q
 	}
 }
 
@@ -195,6 +222,10 @@ func (e *EditorView) scrollCursorTo(sr int) {
 // place puts the cursor at the start of row RowInLine of line at.Line and
 // scrolls that row onto screen row at.ScreenRow, with rows above line 0 blank.
 func (e *EditorView) place(at Anchor) {
+	if !e.source {
+		e.placeLive(at)
+		return
+	}
 	line := clampInt(at.Line, 0, e.buf.Len()-1)
 	c := e.line(line)
 	k := clampInt(at.RowInLine, 0, len(c.rows)-1)
@@ -211,6 +242,9 @@ func (e *EditorView) place(at Anchor) {
 // row within that line, and the screen row it is drawn on. The App places the
 // read view with it when the editor closes.
 func (e *EditorView) ExitAnchor() Anchor {
+	if !e.source {
+		return e.exitAnchorLive()
+	}
 	cur, _ := e.cursorRow()
 	return Anchor{Line: cur.line, RowInLine: cur.row, ScreenRow: e.cursorScreenRow()}
 }
@@ -220,6 +254,10 @@ func (e *EditorView) ExitAnchor() Anchor {
 // the buffer start or end; a longer move (a page) clamps to that row. With
 // extend the move grows the selection.
 func (e *EditorView) moveRows(dir, n int, extend bool) {
+	if !e.source {
+		e.moveRowsLive(dir, n, extend)
+		return
+	}
 	cur, x := e.cursorRow()
 	if !e.goalOK {
 		e.goalX, e.goalOK = x, true
@@ -262,7 +300,7 @@ func (e *EditorView) frameRows() []string {
 	lo, hi := p.line, p.line
 	for y := range h {
 		if p.row >= 0 {
-			out[y] = e.drawRow(p)
+			out[y] = e.drawDisplayRow(p)
 			hi = p.line
 		}
 		n, ok := e.next(p)
@@ -324,6 +362,7 @@ func (e *EditorView) drawRow(p viewPos) string {
 // status line.
 func (e *EditorView) View() string {
 	e.findSync()
+	e.syncReveal()
 	e.ensureVisible()
 	v := strings.Join(e.frameRows(), "\n")
 	pad := e.geo.Margin
@@ -344,6 +383,7 @@ func (e *EditorView) Cursor() *tea.Cursor {
 		return nil
 	}
 	e.findSync()
+	e.syncReveal()
 	e.ensureVisible()
 	if f := e.find; f != nil {
 		_, x := f.barView(max(1, e.width-e.geo.Margin))

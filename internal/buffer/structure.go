@@ -289,7 +289,7 @@ func (b *Buffer) MoveBlock(dir int) bool {
 	type item struct{ text, term string }
 	items := make([]item, 0, to-from)
 	for l := from; l < to; l++ {
-		items = append(items, item{b.lines[l], b.lineTerminator(l)})
+		items = append(items, item{b.lines[l], b.Terminator(l)})
 	}
 	n1 := mid - from
 	moved := append(append([]item{}, items[n1:]...), items[:n1]...)

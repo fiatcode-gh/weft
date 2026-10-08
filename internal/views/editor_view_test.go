@@ -758,7 +758,7 @@ func TestEditorRepositionsAfterContinuation(t *testing.T) {
 		sb.WriteString("filler\n")
 	}
 	sb.WriteString("- ANCHOR")
-	e := NewEditorView(nil, "Note", "/tmp/n.md", sb.String(), false, 80, 24, Anchor{Line: 60, ScreenRow: 22}, nil)
+	e := NewEditorView(nil, "Note", "/tmp/n.md", sb.String(), false, 80, 24, Anchor{Line: 60, ScreenRow: 22}, nil, true)
 	e.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
 	e.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	rows := strings.Split(plain(e.View()), "\n")

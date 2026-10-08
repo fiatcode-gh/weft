@@ -107,7 +107,7 @@ func editorAt(idx *graph.Index, name, path, content string, isNew bool, width, h
 	if line <= 0 {
 		sr = 1
 	}
-	return NewEditorView(idx, name, path, content, isNew, width, height, Anchor{Line: line, ScreenRow: sr}, nil)
+	return NewEditorView(idx, name, path, content, isNew, width, height, Anchor{Line: line, ScreenRow: sr}, nil, true)
 }
 
 // setText replaces the whole buffer and leaves the cursor at its end.

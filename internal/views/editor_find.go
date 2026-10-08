@@ -107,6 +107,7 @@ func (e *EditorView) findShow() {
 		e.buf.MoveTo(f.origin, false)
 	}
 	e.goalOK = false
+	e.syncReveal()
 	e.ensureVisible()
 }
 

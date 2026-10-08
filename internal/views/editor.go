@@ -68,6 +68,12 @@ type EditorView struct {
 	dirtyVal bool
 	dirtyOK  bool
 	stats    struct{ wrapped, painted int } // work counters for the perf tests
+
+	source    bool               // draw the unit 3 source look instead of live preview
+	preview   *render.Preview    // rendered rows of the lines away from the cursor
+	shown     []lineSpan         // the lines drawn raw: the reveal set
+	revealCur buffer.Pos         // the cursor at the last syncReveal
+	previewed map[int]previewRow // preview rows by line, valid until the buffer changes
 }
 
 // EditorResult is what EditorView.Update reports to the App.
@@ -84,8 +90,9 @@ type EditorResult struct {
 // (e.g. in tests that don't exercise it). at says where the cursor opens: the
 // row RowInLine of line at.Line (clamped into the buffer) is placed on screen
 // row at.ScreenRow. reg is the App's copy register; nil gives the editor a
-// private one.
-func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, width, height int, at Anchor, reg *register) *EditorView {
+// private one. source draws the unit 3 source look; otherwise the lines away
+// from the cursor are drawn as the read view draws them (live preview).
+func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, width, height int, at Anchor, reg *register, source bool) *EditorView {
 	if reg == nil {
 		reg = &register{}
 	}
@@ -102,9 +109,12 @@ func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, wid
 		scanner:   render.NewScanner(),
 		painter:   render.NewPainter(theme),
 		cache:     map[int]*lineCache{},
+		source:    source,
+		previewed: map[int]previewRow{},
 	}
 	e.width, e.height = width, height
 	e.geo = render.NewGeometry(theme, width)
+	e.preview = render.NewPreview(theme, width)
 	e.completer.maxVisible = clampInt(height-7, 1, maxCompleterRows)
 	e.place(at)
 	e.refreshCompleter(false) // opening a file must not pop the strip
@@ -154,7 +164,9 @@ func (e *EditorView) SetError(msg string) { e.errMsg = msg }
 func (e *EditorView) SetSize(w, h int) {
 	if w != e.width {
 		e.geo = render.NewGeometry(e.theme, w)
+		e.preview = render.NewPreview(e.theme, w)
 		clear(e.cache)
+		clear(e.previewed)
 	}
 	e.width, e.height = w, h
 	e.completer.maxVisible = clampInt(h-7, 1, maxCompleterRows)
@@ -214,6 +226,7 @@ func (e *EditorView) acceptCompletion() {
 // cursor: the cursor stays on screen and completion follows it. edited
 // reports whether the key changed the text; only an edit may open the strip.
 func (e *EditorView) afterKey(edited bool) {
+	e.syncReveal()
 	e.refreshCompleter(edited)
 }
 
@@ -240,6 +253,7 @@ func (e *EditorView) replaceBuffer(content string, line, col int) {
 	e.buf.ReplaceAll(content)
 	e.buf.MoveTo(buffer.Pos{Line: line, Col: col}, false)
 	e.goalOK = false
+	e.syncReveal()
 	e.scrollCursorTo(sr)
 	e.refreshCompleter(false)
 }
@@ -504,6 +518,7 @@ func (e *EditorView) history(done bool, refusal string) {
 		e.notice = refusal
 	}
 	e.goalOK = false
+	e.syncReveal()
 	e.ensureVisible()
 }
 
