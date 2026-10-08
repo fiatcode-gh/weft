@@ -228,20 +228,38 @@ func sourceRowsDetail(r *glamour.TermRenderer, styled, pre string, src []int) ro
 	return rowMap{lines: lines, own: own, tagged: taggedRows, diverged: diverged}
 }
 
-// rowTagSpans lists, for every tagged row whose tags (values up to maxLine)
-// name two or more lines, the interval [lowest, highest] of those lines: the
-// lines that share that rendered row.
+// rowTagSpans lists the intervals [lowest, highest] of the lines that share a
+// tagged row. A row holds a line when it carries the line's tag, which sits
+// after the line's last letter, and also when it carries the line's first
+// words but not its tag: the text after a row's last tag is the start of the
+// line whose tag comes next, on a later row. Tags decode up to maxLine.
 func rowTagSpans(rows []string, maxLine int) [][2]int {
+	type tag struct{ line, end int }
+	tags := make([][]tag, len(rows))
+	for r, row := range rows {
+		for _, m := range rowTagRe.FindAllStringSubmatchIndex(row, -1) {
+			if n := decodeRowTag(row[m[2]:m[3]]); n <= maxLine {
+				tags[r] = append(tags[r], tag{n, m[1]})
+			}
+		}
+	}
 	var spans [][2]int
-	for _, row := range rows {
+	nextLine := -1 // the line of the first tag below the row
+	for r := len(rows) - 1; r >= 0; r-- {
 		lo, hi := math.MaxInt, -1
-		for _, m := range rowTagRe.FindAllStringSubmatch(row, -1) {
-			if n := decodeRowTag(m[1]); n <= maxLine {
-				lo, hi = min(lo, n), max(hi, n)
+		for _, t := range tags[r] {
+			lo, hi = min(lo, t.line), max(hi, t.line)
+		}
+		if k := len(tags[r]); k > 0 && nextLine >= 0 {
+			if strings.IndexFunc(ansi.Strip(rows[r][tags[r][k-1].end:]), isTextRune) >= 0 {
+				hi = max(hi, nextLine)
 			}
 		}
 		if hi > lo {
 			spans = append(spans, [2]int{lo, hi})
+		}
+		if len(tags[r]) > 0 {
+			nextLine = tags[r][0].line
 		}
 	}
 	return spans

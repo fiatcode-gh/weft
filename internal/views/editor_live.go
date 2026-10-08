@@ -198,8 +198,8 @@ func (e *EditorView) rawRow() (row, x int) {
 // moveRowsLive is moveRows in live preview: a step by one goes through the
 // cursor line's raw rows and then to the neighbouring source line, whatever
 // it looks like; a page walks display rows of the current layout and lands on
-// the raw row of the row it stopped on when that line is drawn raw, else on
-// the line's first raw row.
+// the raw row of the row it stopped on: k rows into the line's Body is raw row
+// k, clamped to the line's last raw row.
 func (e *EditorView) moveRowsLive(dir, n int, extend bool) {
 	cur := e.buf.Cursor()
 	c := e.line(cur.Line)
@@ -246,10 +246,10 @@ func (e *EditorView) moveRowsLive(dir, n int, extend bool) {
 		p = q
 	}
 	d := e.line(p.line)
-	r := 0 // a line drawn rendered is entered on its first raw row
-	if _, raw := e.liveRows(p.line); raw || p.line == cur.Line {
-		r = clampInt(p.row-e.leadRows(p.line), 0, len(d.rows)-1)
-	}
+	// A row k rows into a line's Body is raw row k, clamped, whether the line
+	// is drawn raw or rendered, so a line taller than the window is paged
+	// through instead of jumped over.
+	r := clampInt(p.row-e.leadRows(p.line), 0, len(d.rows)-1)
 	e.buf.MoveTo(buffer.Pos{Line: p.line, Col: e.geo.OffsetAt(d.text, d.info, d.rows, r, e.goalX)}, extend)
 }
 

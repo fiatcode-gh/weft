@@ -92,9 +92,10 @@ func TestLivePgDownInWrappedLastLineGoesForward(t *testing.T) {
 // TestLivePagingMoves runs the scripts of TestEditorPagingMoves in live
 // preview. Their traces count source rows, so what is checked is what does not
 // depend on the look: a page moves the cursor h-1 display rows of the layout it
-// started in (clamped at both ends); it lands on the raw row of a line that is
-// on screen raw (the cursor's) and on the first raw row of any other; and the
-// screen column is the remembered one, cut at the row's end.
+// started in (clamped at both ends); it lands on the raw row k of the line it
+// stops on, k rows into that line's Body (clamped to its last raw row), whether
+// the line is drawn raw or rendered; and the screen column is the remembered
+// one, cut at the row's end.
 func TestLivePagingMoves(t *testing.T) {
 	skipInSourceRun(t)
 	quietTerm(t)
@@ -146,11 +147,7 @@ func TestLivePagingMoves(t *testing.T) {
 					t.Fatalf("key %d (%c): the cursor's row %v is not a display row", n, k, cur)
 				}
 				target := rows[clampInt(at+dir*(h-1), 0, len(rows)-1)]
-				_, raw := e.liveRows(target.line)
-				wantRow := 0
-				if raw || target.line == cur.line {
-					wantRow = clampInt(target.row-e.leadRows(target.line), 0, len(e.line(target.line).rows)-1)
-				}
+				wantRow := clampInt(target.row-e.leadRows(target.line), 0, len(e.line(target.line).rows)-1)
 				e.Update(tea.KeyPressMsg{Code: code})
 				c := e.line(target.line)
 				maxOff := e.geo.OffsetAt(c.text, c.info, c.rows, wantRow, 1<<30)
@@ -165,4 +162,52 @@ func TestLivePagingMoves(t *testing.T) {
 			}
 		})
 	}
+}
+
+// tallPage is a bullet that renders onto far more rows than the window holds,
+// between two short ones.
+func tallPage() string {
+	var b strings.Builder
+	for i := range 900 {
+		fmt.Fprintf(&b, "w%03d ", i%1000)
+	}
+	return "- before\n- " + strings.TrimSpace(b.String()) + "\n- after\n"
+}
+
+// A page that ends inside a very tall rendered line lands k rows into it, not on
+// its first row: a page moves about a page whatever the lines look like.
+func TestLivePagingIntoTallRenderedLine(t *testing.T) {
+	skipInSourceRun(t)
+	quietTerm(t)
+	page := tallPage()
+
+	t.Run("PgUp from the line below", func(t *testing.T) {
+		e := liveEditor(page, 60, 40)
+		h := e.textHeight()
+		goTo(e, 2)
+		rendered := e.rowCount(1)
+		if rendered < 2*h {
+			t.Fatalf("setup: the tall line renders %d rows, want at least two windows (%d)", rendered, 2*h)
+		}
+		tap(e, tea.KeyPgUp)
+		row, _ := e.rawRow()
+		if c := e.buf.Cursor(); c.Line != 1 || row != rendered-(h-1) {
+			t.Errorf("after PgUp the cursor is at %s, want line 1 raw row %d (a page up from line 2 into the %d-row line)",
+				livePageAt(e), rendered-(h-1), rendered)
+		}
+	})
+
+	t.Run("PgDn from the line above", func(t *testing.T) {
+		e := liveEditor(page, 60, 40)
+		h := e.textHeight()
+		goTo(e, 0)
+		if e.rowCount(1) < 2*h {
+			t.Fatalf("setup: the tall line renders %d rows, want at least two windows", e.rowCount(1))
+		}
+		tap(e, tea.KeyPgDown)
+		row, _ := e.rawRow()
+		if c := e.buf.Cursor(); c.Line != 1 || row != h-2 {
+			t.Errorf("after PgDn the cursor is at %s, want line 1 raw row %d (h-1 rows below line 0's one row)", livePageAt(e), h-2)
+		}
+	})
 }
