@@ -522,7 +522,7 @@ func (p *Preview) mapRows(cr *chunkRender, src PreviewLines, c chunkSpan, s sand
 		cr.diverged = true
 		return
 	}
-	cr.share = rowTagSpans(m.tagged[ts:te], nt-1, startWords(pl.f.pre, pl.f.src, rel, np, nt))
+	cr.share = rowTagSpans(m.tagged[ts:te], nt-1)
 }
 
 // render renders chunk c in its sandwich and returns its own rows. A failure is

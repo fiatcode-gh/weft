@@ -1,6 +1,7 @@
 package render
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -330,3 +331,77 @@ func TestPreviewSingleLineChunkSkipsTagging(t *testing.T) {
 // rowsDocCount is how many generated documents the partition test covers per
 // style: each costs two Glamour renders per chunk.
 const rowsDocCount = 400
+
+// words splits s into its runs of letters and numbers.
+func words(s string) []string {
+	return strings.FieldsFunc(s, func(r rune) bool { return !isTextRune(r) })
+}
+
+// sharesRow reports whether some rendered row holds the last word of line a
+// right before the first word of line b: a wrap that falls inside the lines
+// rather than between them.
+func sharesRow(rows []string, a, b string) bool {
+	wa, wb := words(a), words(b)
+	last, first := wa[len(wa)-1], wb[0]
+	for _, row := range rows {
+		w := words(row)
+		for i := 0; i+1 < len(w); i++ {
+			if w[i] == last && w[i+1] == first {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// A paragraph or lazy quote the read view joins and wraps is one unit from any
+// of its lines, whatever punctuation its lines start and end with: the render
+// keeps the text after a line's last letter ('.', '**', ']]', ')') between the
+// line's end and the next line's first words. Each width in 24..70 at which
+// the wrap falls inside lines (so every line shares a row with the next) is a
+// case.
+func TestPreviewUnitsWrappedJoins(t *testing.T) {
+	variants := []struct {
+		name  string
+		lines [3]string
+	}{
+		{"period", [3]string{"Joined paragraph first line.", "Second line has the word.", "Third line closes it."}},
+		{"bold", [3]string{"Joined paragraph first **alpha**", "Second line has the **word**", "Third line closes **it**"}},
+		{"link", [3]string{"Joined paragraph first [[Alpha]]", "Second line has the [[Word]]", "Third line closes [[It]]"}},
+		{"paren", [3]string{"Joined paragraph first (alpha)", "Second line has the (word)", "Third line closes (it)"}},
+		{"code", [3]string{"Joined paragraph first `alpha`", "Second line has the `word`", "Third line closes `it`"}},
+		{"opening", [3]string{"Joined paragraph first line", "**Second** line has the word", "(third) line closes it"}},
+		{"link opening", [3]string{"Joined paragraph first line", "[[Second]] line has the word", "`third` line closes it"}},
+	}
+	for _, v := range variants {
+		for _, quote := range []bool{false, true} {
+			doc, kind := v.lines[0]+"\n"+v.lines[1]+"\n"+v.lines[2]+"\n\nx", "paragraph"
+			if quote {
+				doc, kind = "> "+v.lines[0]+"\n"+v.lines[1]+"\n"+v.lines[2]+"\n\nx", "lazy quote"
+			}
+			cases := 0
+			for width := 24; width <= 70; width++ {
+				r := newRowsDoc(t, doc, width)
+				c, ok := r.p.chunkAt(r.d, r.sc, 0)
+				if !ok {
+					t.Fatal("no chunk")
+				}
+				rows := plain(r.p.render(r.d, r.sc, c).rows)
+				if !sharesRow(rows, v.lines[0], v.lines[1]) || !sharesRow(rows, v.lines[1], v.lines[2]) {
+					continue
+				}
+				cases++
+				t.Run(fmt.Sprintf("%s %s w%d", kind, v.name, width), func(t *testing.T) {
+					for i := range 3 {
+						if from, to := r.p.Unit(r.d, r.sc, i); from != 0 || to != 3 {
+							t.Errorf("Unit(%d) = [%d %d], want [0 3]\ndoc: %q\nrows: %q", i, from, to, doc, rows)
+						}
+					}
+				})
+			}
+			if cases == 0 {
+				t.Errorf("%s %s: no width wraps inside every line", kind, v.name)
+			}
+		}
+	}
+}

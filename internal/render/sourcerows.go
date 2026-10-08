@@ -3,7 +3,6 @@ package render
 import (
 	"math"
 	"regexp"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -28,7 +27,9 @@ import (
 //
 // A row tag is a zero-width escape sequence, ESC + decimal digits spelled
 // with CSI-intermediate bytes + 'z', inserted after the last letter/number/
-// sentinel of a source line. It is chosen so every consumer between goldmark
+// sentinel of a source line (and, for a line that may continue the paragraph
+// or lazy quote above, also before its first word: see tagSourceLines). It is
+// chosen so every consumer between goldmark
 // and the terminal treats it as zero width and none treats it as markdown:
 // see rowTagDigits. Where a tag could change the layout anyway (inside link
 // destinations, angle constructs, fence info strings, bare list markers,
@@ -55,6 +56,7 @@ var (
 	rowTagRe            = regexp.MustCompile("\x1b([\"#$%'+,\\-./]{1,9})[zZ]")
 	fenceOpenerRe       = regexp.MustCompile("^\\s*(?:[-*+]\\s+)?(?:`{3,}|~{3,})")
 	bareOrderedMarkerRe = regexp.MustCompile(`^[\s>*+-]*\d{1,9}[.)]\s*$`)
+	orderedItemRe       = regexp.MustCompile(`^[ \t]*\d{1,9}[.)](?:[ \t]|$)`)
 	linkRefDefRe        = regexp.MustCompile(`^\s{0,3}\[[^\]]+\]:`)
 )
 
@@ -75,18 +77,26 @@ func decodeRowTag(digits string) int {
 	return n
 }
 
-// tagSourceLines returns pre with one row tag per eligible line, tagging
-// line j with src[j], and loose: the src values (ascending) of the non-blank
-// lines left untagged because they hold nothing to tag after, excluding fence
-// delimiters, bare ordered markers and link reference definitions, whose
-// rendering is not a row of their own.
+// tagSourceLines returns pre with row tags, tagging line j with src[j], and
+// loose: the src values (ascending) of the non-blank lines left untagged
+// because they hold nothing to tag after, excluding fence delimiters, bare
+// ordered markers and link reference definitions, whose rendering is not a row
+// of their own.
+//
+// A line gets an end tag after its last text rune. A line that follows a
+// non-blank line outside a fence, and so may continue a paragraph or a lazy
+// quote with it, also gets a start tag before its first word (rowTagStart), so
+// the rows a wrapped line spans carry its tag at both ends and a row's lines
+// are the lines whose tags it holds.
 func tagSourceLines(pre string, src []int) (tagged string, loose []int) {
 	lines := strings.Split(pre, "\n")
 	var fence graph.FenceState
+	follows := false // the line above is non-blank text outside a fence
 	for j, line := range lines {
 		wasOpen := fence.Open()
 		in := fence.Step(line)
 		nowOpen := fence.Open()
+		blank := strings.TrimSpace(line) == ""
 		switch {
 		case in && !wasOpen && nowOpen:
 			// Opening delimiter: plaintext info string keeps each code line
@@ -94,17 +104,23 @@ func tagSourceLines(pre string, src []int) (tagged string, loose []int) {
 			lines[j] = fenceOpenerRe.FindString(line) + "text"
 		case in && wasOpen && !nowOpen:
 			// Closing delimiter: unchanged.
-		case strings.TrimSpace(line) == "":
+		case blank:
 		case in:
 			lines[j] = line + encodeRowTag(src[j])
 		case bareOrderedMarkerRe.MatchString(line), linkRefDefRe.MatchString(line):
 		default:
 			if cut := rowTagCut(line); cut >= 0 {
-				lines[j] = line[:cut] + encodeRowTag(src[j]) + line[cut:]
+				tag := encodeRowTag(src[j])
+				if start := rowTagStart(line); follows && start >= 0 {
+					lines[j] = line[:start] + tag + line[start:cut] + tag + line[cut:]
+				} else {
+					lines[j] = line[:cut] + tag + line[cut:]
+				}
 			} else {
 				loose = append(loose, src[j])
 			}
 		}
+		follows = !blank && !in
 	}
 	return strings.Join(lines, "\n"), loose
 }
@@ -113,7 +129,33 @@ func tagSourceLines(pre string, src []int) (tagged string, loose []int) {
 // number or private-use rune (unicode.Co: weft's sentinels) and lies outside
 // an inline link/image destination and outside an angle construct; -1 if none.
 func rowTagCut(line string) int {
-	cut := -1
+	cut, _ := rowTagPoints(line)
+	return cut
+}
+
+// rowTagStart is the byte offset where a start tag goes on line: just before
+// its first eligible rune (see rowTagCut), when a tag there leaves the line's
+// block syntax alone; -1 otherwise. Only spaces or inline openers (* _ ` ~ ( [
+// " ') may come before that rune, so a quote, heading, bullet or table line
+// is left alone, as is one that opens an ordered list item: ESC before its
+// digits would end the list.
+func rowTagStart(line string) int {
+	_, first := rowTagPoints(line)
+	if first < 0 || orderedItemRe.MatchString(line) {
+		return -1
+	}
+	for _, r := range strings.TrimLeft(line[:first], " \t") {
+		if !strings.ContainsRune("*_`~(['\"", r) {
+			return -1
+		}
+	}
+	return first
+}
+
+// rowTagPoints is the byte offset just after the last eligible rune of line
+// and the offset of the first one (see rowTagCut); -1, -1 if there is none.
+func rowTagPoints(line string) (cut, first int) {
+	cut, first = -1, -1
 	dest := 0
 	angle := false
 	var prev rune
@@ -133,10 +175,13 @@ func rowTagCut(line string) int {
 			angle = false
 		case dest == 0 && !angle && isTextRune(r):
 			cut = i + size
+			if first < 0 {
+				first = i
+			}
 		}
 		prev = r
 	}
-	return cut
+	return cut, first
 }
 
 // frontend is the shared front of the render pipeline: the preprocessed body
@@ -229,61 +274,25 @@ func sourceRowsDetail(r *glamour.TermRenderer, styled, pre string, src []int) ro
 	return rowMap{lines: lines, own: own, tagged: taggedRows, diverged: diverged}
 }
 
-// rowTagSpans lists the intervals [lowest, highest] of the lines that share a
-// tagged row. A row holds a line when it carries the line's tag, which sits
-// after the line's last letter, and also when the text after the row's last
-// tag provably starts the next line, whose tag is on a later row: that line is
-// the one right after the last tag's line, and the trailing text begins with a
-// word and is a prefix, word for word, of the words of that line's source
-// text (startWords). Anything else after a tag (an image's "→ /url") is the
-// tagged line's own. Tags decode up to maxLine.
-func rowTagSpans(rows []string, maxLine int, startWords func(line int) []string) [][2]int {
-	type tag struct{ line, end int }
-	tags := make([][]tag, len(rows))
-	for r, row := range rows {
-		for _, m := range rowTagRe.FindAllStringSubmatchIndex(row, -1) {
-			if n := decodeRowTag(row[m[2]:m[3]]); n <= maxLine {
-				tags[r] = append(tags[r], tag{n, m[1]})
-			}
-		}
-	}
+// rowTagSpans lists, for every tagged row whose tags (values up to maxLine)
+// name two or more lines, the interval [lowest, highest] of those lines: the
+// lines that share that rendered row. A line's tags (one at each end when it
+// may continue the line above, see tagSourceLines) sit in the rows it spans,
+// so a row holds exactly the lines whose tags it carries.
+func rowTagSpans(rows []string, maxLine int) [][2]int {
 	var spans [][2]int
-	nextLine := -1 // the line of the first tag below the row
-	for r := len(rows) - 1; r >= 0; r-- {
+	for _, row := range rows {
 		lo, hi := math.MaxInt, -1
-		for _, t := range tags[r] {
-			lo, hi = min(lo, t.line), max(hi, t.line)
-		}
-		if k := len(tags[r]); k > 0 && nextLine == tags[r][k-1].line+1 {
-			if tail := strings.TrimSpace(ansi.Strip(rows[r][tags[r][k-1].end:])); startsWord(tail) && isPrefixWords(textWords(tail), startWords(nextLine)) {
-				hi = max(hi, nextLine)
+		for _, m := range rowTagRe.FindAllStringSubmatch(row, -1) {
+			if n := decodeRowTag(m[1]); n <= maxLine {
+				lo, hi = min(lo, n), max(hi, n)
 			}
 		}
 		if hi > lo {
 			spans = append(spans, [2]int{lo, hi})
 		}
-		if len(tags[r]) > 0 {
-			nextLine = tags[r][0].line
-		}
 	}
 	return spans
-}
-
-// startsWord reports whether s begins with a text rune.
-func startsWord(s string) bool {
-	r, _ := utf8.DecodeRuneInString(s)
-	return isTextRune(r)
-}
-
-// textWords splits s, which holds no escapes, into its runs of text runes.
-func textWords(s string) []string {
-	return strings.FieldsFunc(s, func(r rune) bool { return !isTextRune(r) })
-}
-
-// isPrefixWords reports whether got is a non-empty prefix of want, ignoring
-// case (headings are upper-cased).
-func isPrefixWords(got, want []string) bool {
-	return len(got) > 0 && len(got) <= len(want) && slices.EqualFunc(got, want[:len(got)], strings.EqualFold)
 }
 
 // isTextRune is what a row tag can follow: a letter, a number or a sentinel.

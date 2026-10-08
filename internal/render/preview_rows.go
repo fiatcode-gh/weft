@@ -305,27 +305,3 @@ func (p *Preview) Unit(src PreviewLines, sc *Scanner, i int) (from, to int) {
 	}
 	return i, i + 1
 }
-
-// startWords returns, for a chunk-relative line, the words of its source text
-// as the renderer sees it (the preprocessed line), nil for a line not in the
-// chunk. The lines of pre are indexed on first use. rel maps each line of pre
-// to its chunk-relative line; src holds the sandwiched-body line behind each,
-// of which those in [np, np+nt) are the chunk's own.
-func startWords(pre string, src, rel []int, np, nt int) func(int) []string {
-	var lines []string
-	at := map[int]int{}
-	return func(line int) []string {
-		if lines == nil {
-			lines = strings.Split(pre, "\n")
-			for j, b := range src {
-				if b >= np && b < np+nt {
-					at[rel[j]] = j
-				}
-			}
-		}
-		if j, ok := at[line]; ok {
-			return textWords(lines[j])
-		}
-		return nil
-	}
-}
