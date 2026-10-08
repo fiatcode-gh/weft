@@ -910,6 +910,39 @@ func TestLinkGrammarAgreesAcrossConsumers(t *testing.T) {
 			if !reflect.DeepEqual(rendered, tc.want) || !reflect.DeepEqual(indexed, tc.want) {
 				t.Fatalf("render %q, index %q, want %q", rendered, indexed, tc.want)
 			}
+
+			// The source painter is the fourth consumer: per line outside
+			// fences, its '[' spans are the wiki links and its '#' spans the
+			// simple tags and bracket-tag hashes.
+			var fence graph.FenceState
+			for n, line := range strings.Split(tc.body, "\n") {
+				if fence.Step(line) {
+					continue
+				}
+				_, spans := maskLinks(line)
+				var brackets, hashes, wantHashes []int
+				for _, s := range spans {
+					switch line[s.start] {
+					case '[':
+						brackets = append(brackets, s.start)
+					case '#':
+						hashes = append(hashes, s.start)
+					}
+				}
+				simple := 0
+				for _, tg := range graph.FindTags(line) {
+					wantHashes = append(wantHashes, tg.Start)
+					if !tg.Bracket {
+						simple++
+					}
+				}
+				if want := len(graph.ExtractLinks(line)) - simple; len(brackets) != want {
+					t.Errorf("line %d %q: painter has %d wiki spans, index %d", n+1, line, len(brackets), want)
+				}
+				if !reflect.DeepEqual(hashes, wantHashes) {
+					t.Errorf("line %d %q: painter tag starts %v, FindTags %v", n+1, line, hashes, wantHashes)
+				}
+			}
 		})
 	}
 }

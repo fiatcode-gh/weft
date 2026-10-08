@@ -25,6 +25,7 @@ const parityDoc = "# Title\n" +
 	"- CANCELED f\n" +
 	"- NOW g\n" +
 	"- see [[Target]] and [[Real|Alias]] here\n" +
+	"- tags #topic and #[[Two Words]] here\n" +
 	"  - child words\n" +
 	"\n" +
 	"> quoted words\n" +
@@ -54,6 +55,7 @@ var paritySamples = []paritySample{
 	{"TODO", "TODO"}, {"DOING", "DOING"}, {"LATER", "LATER"}, {"WAITING", "WAITING"},
 	{"DONE", "DONE"}, {"CANCELED", "CANCELED"}, {"NOW", "NOW"},
 	{"wiki target", "Target"}, {"wiki alias", "Alias"},
+	{"tag", "#topic"}, {"bracket tag", "Two Words"},
 	{"child", "child words"}, {"quote", "quoted words"},
 	{"table header", "ca"}, {"table cell", "c1"},
 	{"fence func", "func"}, {"fence name", "main"}, {"fence string", "\"lit\""},
@@ -215,7 +217,7 @@ func bodyOnly(samples []paritySample) []paritySample {
 	for _, s := range samples {
 		switch s.name {
 		case "body", "child", "quote", "h1", "h2", "h3", "strong", "emph", "strike", "code", "link",
-			"table header", "table cell", "fence func", "fence name", "fence string", "wiki target":
+			"table header", "table cell", "fence func", "fence name", "fence string", "wiki target", "tag":
 			out = append(out, s)
 		}
 	}
@@ -254,6 +256,7 @@ func TestPainterParityNoColor(t *testing.T) {
 		"strike": {uv.AttrStrikethrough, false},
 		"TODO":   {uv.AttrBold, false}, "CANCELED": {uv.AttrStrikethrough, false},
 		"wiki target": {0, true}, "wiki alias": {0, true},
+		"tag": {0, true}, "bracket tag": {0, true},
 	}
 	for _, sm := range paritySamples {
 		for _, side := range []struct {

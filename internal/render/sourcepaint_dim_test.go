@@ -12,6 +12,8 @@ import (
 var dimDoc = []string{
 	"words «**»bold«**» «*»ital«*» «~~»gone«~~» «`»code«`» «[»label«](http://x.y)» end",
 	"- see «[[»Target«]]» and «[[Real|»Alias«]]» here",
+	"- tag #topic and #«[[»Two Words«]]» and #«[[Real|»Alias«]]» here",
+	"- code «`»#x«`» C# #18",
 	"## Two «##»",
 	"Setext",
 	"«======»",
