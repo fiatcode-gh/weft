@@ -55,14 +55,14 @@ func TestRunWithBuildsReport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rep.Pages != 7 || rep.Journals != 9 {
-		t.Errorf("counts = %d pages / %d journals, want 7 / 9", rep.Pages, rep.Journals)
+	if rep.Pages != 10 || rep.Journals != 9 {
+		t.Errorf("counts = %d pages / %d journals, want 10 / 9", rep.Pages, rep.Journals)
 	}
 	if !reflect.DeepEqual(rep.Orphans, []string{"Orphan"}) {
 		t.Errorf("orphans = %v, want [Orphan]", rep.Orphans)
 	}
-	if len(rep.Unresolved) != 1 || rep.Unresolved[0].Target != "DoesNotExist" {
-		t.Errorf("unresolved = %+v, want the DoesNotExist phantom", rep.Unresolved)
+	if got := unresolvedTargets(rep); !reflect.DeepEqual(got, fixtureUnresolvedTargets) {
+		t.Errorf("unresolved targets = %v, want %v", got, fixtureUnresolvedTargets)
 	}
 	want := []PageMentions{{Page: "Alpha", Refs: []graph.UnlinkedRef{{PageName: "Workbench", Line: 8}}}}
 	if !reflect.DeepEqual(rep.Mentions, want) {
@@ -155,11 +155,11 @@ func TestRunAgainstFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rep.Pages != 7 || rep.Journals != 9 {
-		t.Errorf("counts = %d pages / %d journals, want 7 / 9", rep.Pages, rep.Journals)
+	if rep.Pages != 10 || rep.Journals != 9 {
+		t.Errorf("counts = %d pages / %d journals, want 10 / 9", rep.Pages, rep.Journals)
 	}
-	if len(rep.Unresolved) != 1 || rep.Unresolved[0].Target != "DoesNotExist" {
-		t.Errorf("unresolved = %+v, want the DoesNotExist phantom", rep.Unresolved)
+	if got := unresolvedTargets(rep); !reflect.DeepEqual(got, fixtureUnresolvedTargets) {
+		t.Errorf("unresolved targets = %v, want %v", got, fixtureUnresolvedTargets)
 	}
 	if !reflect.DeepEqual(rep.Orphans, []string{"Orphan"}) {
 		t.Errorf("orphans = %v, want [Orphan]", rep.Orphans)
@@ -271,4 +271,19 @@ func TestWriteTextOmitsZeroSections(t *testing.T) {
 	if !strings.Contains(out, "Index warnings\n  cannot stat pages/X.md: stale handle\n") {
 		t.Errorf("warnings section missing or malformed:\n%s", out)
 	}
+}
+
+// fixtureUnresolvedTargets is the fixture's phantom list: DoesNotExist plus
+// every tag name in Corpus that has no page.
+var fixtureUnresolvedTargets = []string{
+	"a1b2c3d4e", "abc12", "add", "bad", "C#", "cafe", "café", "DoesNotExist",
+	"inheading", "Lab #inner", "lead", "s", "日本",
+}
+
+func unresolvedTargets(rep *Report) []string {
+	var out []string
+	for _, u := range rep.Unresolved {
+		out = append(out, u.Target)
+	}
+	return out
 }

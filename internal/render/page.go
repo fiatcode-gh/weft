@@ -49,7 +49,6 @@ type Result struct {
 
 var (
 	wikiLinkRe     = regexp.MustCompile(`\[\[([^\]\|]+)(?:\|([^\]]*))?\]\]`)
-	markdownLinkRe = regexp.MustCompile(`(!?)\[([^\]]*)\]\(((?:[^()]|\([^()]*\))*)\)`)
 	taskMarkerRe   = regexp.MustCompile(`^(\s*-\s+)(TODO|DOING|LATER|WAITING|DONE|CANCELED|CANCELLED|NOW)\b`)
 	logbookStartRe = regexp.MustCompile(`(?i)^\s*:LOGBOOK:\s*$`)
 	logbookEndRe   = regexp.MustCompile(`(?i)^\s*:END:\s*$`)
@@ -413,7 +412,7 @@ func hideMarkdownLinkURLs(body string) string {
 // contains a code span is still a real link and gets rewritten. Uses
 // graph.InlineCodeSpans so render and parse agree on what counts as code.
 func hideMarkdownLinkURLsOutsideInlineCode(line string) string {
-	locs := markdownLinkRe.FindAllStringSubmatchIndex(line, -1)
+	locs := graph.MarkdownLinkRe.FindAllStringSubmatchIndex(line, -1)
 	if locs == nil {
 		return line
 	}

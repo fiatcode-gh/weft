@@ -3,6 +3,7 @@ package graph
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"sort"
 	"strings"
@@ -22,7 +23,7 @@ func TestBuildIndex(t *testing.T) {
 	want := []string{
 		"2026-01-10", "2026-03-15", "2026-04-20", "2026-05-01",
 		"2026-05-15", "2026-05-22", "2026-05-23", "2026-05-24", "2026-05-25",
-		"Alpha", "Beta", "Hub", "Orphan", "Workbench", "kb/notes", "proj/nested",
+		"Alpha", "Beta", "Book Club", "Corpus", "Hub", "Kitchen", "Orphan", "Workbench", "kb/notes", "proj/nested",
 	}
 	if !equalSlices(names, want) {
 		t.Errorf("page names: want %v, got %v", want, names)
@@ -64,7 +65,7 @@ func TestBuildIndex(t *testing.T) {
 
 	// Fence-internal wiki-links must NOT be extracted. Alpha has
 	// `[[ShouldNotMatch]]` inside a fence; 2026-03-15 has `[[NotALink]]`.
-	// If either name surfaces in Backlinks, ExtractWikiLinks lost fence
+	// If either name surfaces in Backlinks, ExtractLinks lost fence
 	// awareness.
 	for _, name := range []string{"ShouldNotMatch", "NotALink"} {
 		if refs := idx.BacklinksTo(name); len(refs) != 0 {
@@ -75,6 +76,37 @@ func TestBuildIndex(t *testing.T) {
 	// Todos: 13 open across the fixture
 	if len(idx.Todos) != 13 {
 		t.Errorf("todo count: want 13, got %d (%+v)", len(idx.Todos), idx.Todos)
+	}
+}
+
+func TestBuildIndexCountsTags(t *testing.T) {
+	idx := buildFixtureIndex(t)
+
+	wantKitchen := []Ref{
+		{FromPage: "Corpus", LineNumber: 1, Context: "- Tags: #kitchen and (#Kitchen) and #s"},
+		{FromPage: "Corpus", LineNumber: 1, Context: "- Tags: #kitchen and (#Kitchen) and #s"},
+	}
+	if got := idx.BacklinksTo("Kitchen"); !reflect.DeepEqual(got, wantKitchen) {
+		t.Errorf("Kitchen backlinks = %+v, want %+v", got, wantKitchen)
+	}
+	// #[[Book Club]] and #[[Book Club|the club]] each count once.
+	book := idx.BacklinksTo("Book Club")
+	if len(book) != 2 || book[0].FromPage != "Corpus" || book[0].LineNumber != 2 || book[1].LineNumber != 2 {
+		t.Errorf("Book Club backlinks = %+v, want 2 from Corpus line 2", book)
+	}
+	var nsHit bool
+	for _, r := range idx.BacklinksTo("kb/notes") {
+		if r.FromPage == "Corpus" && r.LineNumber == 2 {
+			nsHit = true
+		}
+	}
+	if !nsHit {
+		t.Errorf("kb/notes backlinks lack Corpus:2: %+v", idx.BacklinksTo("kb/notes"))
+	}
+	for _, name := range []string{"incode", "alsocode", "fenced", "anchor", "frag", "inner", "18", "FAF3E7", "a1b"} {
+		if refs := idx.BacklinksTo(name); len(refs) != 0 {
+			t.Errorf("%q must not be a tag target, got %+v", name, refs)
+		}
 	}
 }
 

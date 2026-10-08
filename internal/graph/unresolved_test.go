@@ -12,17 +12,28 @@ func TestUnresolvedLinksFindsPhantoms(t *testing.T) {
 	// act
 	got := idx.UnresolvedLinks()
 
-	// assert — [[DoesNotExist]] in Beta is the only phantom in the fixture;
+	// assert — [[DoesNotExist]] in Beta plus every Corpus tag without a page;
 	// fenced [[ShouldNotMatch]] and [[NotALink]] never enter the index.
-	if len(got) != 1 {
-		t.Fatalf("want 1 unresolved link, got %d: %+v", len(got), got)
+	var targets []string
+	for _, u := range got {
+		targets = append(targets, u.Target)
 	}
-	if got[0].Target != "DoesNotExist" {
-		t.Errorf("target = %q, want DoesNotExist", got[0].Target)
+	wantTargets := []string{
+		"a1b2c3d4e", "abc12", "add", "bad", "C#", "cafe", "café", "DoesNotExist",
+		"inheading", "Lab #inner", "lead", "s", "日本",
+	}
+	if !reflect.DeepEqual(targets, wantTargets) {
+		t.Fatalf("unresolved targets = %v, want %v", targets, wantTargets)
+	}
+	var dne UnresolvedLink
+	for _, u := range got {
+		if u.Target == "DoesNotExist" {
+			dne = u
+		}
 	}
 	want := []Ref{{FromPage: "Beta", LineNumber: 3, Context: "- This link is dangling: [[DoesNotExist]]."}}
-	if !reflect.DeepEqual(got[0].Refs, want) {
-		t.Errorf("refs = %+v, want %+v", got[0].Refs, want)
+	if !reflect.DeepEqual(dne.Refs, want) {
+		t.Errorf("refs = %+v, want %+v", dne.Refs, want)
 	}
 }
 

@@ -4,7 +4,7 @@ import "testing"
 
 func TestParseBodySkipsTildeFences(t *testing.T) {
 	// arrange / act
-	links := ExtractWikiLinks("~~~\ncode [[InsideCode]]\n~~~\n- after [[Real]]\n")
+	links := ExtractLinks("~~~\ncode [[InsideCode]]\n~~~\n- after [[Real]]\n")
 
 	// assert
 	if len(links) != 1 || links[0].Target != "Real" {
@@ -15,7 +15,7 @@ func TestParseBodySkipsTildeFences(t *testing.T) {
 func TestParseBodyHandlesBulletPrefixedFences(t *testing.T) {
 	// arrange / act — Logseq puts fences inside bullets; the indented
 	// closer must not INVERT state and swallow the rest of the page
-	links := ExtractWikiLinks("- ```\n  code [[InsideCode]]\n  ```\n- after [[Real]]\n")
+	links := ExtractLinks("- ```\n  code [[InsideCode]]\n  ```\n- after [[Real]]\n")
 
 	// assert
 	if len(links) != 1 || links[0].Target != "Real" {

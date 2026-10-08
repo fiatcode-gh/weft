@@ -819,7 +819,7 @@ func TestRenderSkipsTildeAndBulletFences(t *testing.T) {
 }
 
 // Alignment: the same corpus must be fenced identically for the index
-// (graph.ExtractWikiLinks) and the read view (Render). This is the
+// (graph.ExtractLinks) and the read view (Render). This is the
 // guard against the two grammars drifting again.
 func TestFenceGrammarAlignsWithGraph(t *testing.T) {
 	corpus := "- ```\n  [[A]]\n  ```\n~~~\n[[B]]\n~~~\n- [[C]] `[[D]]` text\n"
@@ -832,7 +832,7 @@ func TestFenceGrammarAlignsWithGraph(t *testing.T) {
 		rendered = append(rendered, l.Target)
 	}
 	var indexed []string
-	for _, h := range graph.ExtractWikiLinks(corpus) {
+	for _, h := range graph.ExtractLinks(corpus) {
 		indexed = append(indexed, h.Target)
 	}
 	if !reflect.DeepEqual(rendered, indexed) {
