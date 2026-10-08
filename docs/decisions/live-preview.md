@@ -51,7 +51,10 @@ Out of scope: mouse, Vim mode, multiple cursors, editing in rendered rows
   fence, a quote, a `:LOGBOOK:` block, a query or embed block, a wrapped bullet.
   Lines Glamour joins into one flow reveal as a whole: a paragraph's soft-broken
   lines, a quote with lazy lines, a setext heading with its underline. A
-  selection reveals every unit it touches.
+  selection reveals every unit it touches. A quote's run includes its lazy
+  continuation lines (CommonMark text lines without `>`), because Glamour's
+  two-stage quote wrap can leave a lazy line's words on margin rows that share
+  no tag with the quote.
 - **Start tags find joined lines exactly.** The tagged render marks the end of
   every line and also the start of every line that may continue the one above
   (not quote, heading, bullet, table, `:` or ordered-item lines), so a row's
