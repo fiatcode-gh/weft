@@ -52,6 +52,14 @@ Out of scope: mouse, Vim mode, multiple cursors, editing in rendered rows
   Lines Glamour joins into one flow reveal as a whole: a paragraph's soft-broken
   lines, a quote with lazy lines, a setext heading with its underline. A
   selection reveals every unit it touches.
+- **Start tags find joined lines exactly.** The tagged render marks the end of
+  every line and also the start of every line that may continue the one above
+  (not quote, heading, bullet, table, `:` or ordered-item lines), so a row's
+  lines are exactly the lines whose tags it holds. Two earlier attempts guessed
+  from the text after a row's last tag: one merged images and autolinks with
+  the next block, the other missed joins after lines ending in `.` or `**`. The
+  start tags exist only in the throwaway tagged render; the read view and
+  `SourceRows` are unchanged (checked on 8068 renders).
 - **Fallback to one unit.** If a chunk's row map diverges from the rendered rows
   or is not monotone, the whole chunk is one reveal unit: it reveals entirely
   and nothing is lost. About 3% of chunks on the fixture pages do this; nested
@@ -59,10 +67,12 @@ Out of scope: mouse, Vim mode, multiple cursors, editing in rendered rows
 - **The cursor's line keeps its screen row.** When the line just left changes
   height, the text above shifts instead of the cursor jumping. Same rule for
   `e`, `Esc` and `Ctrl+R`.
-- **Movement is by source line.** Up and Down move one source line; wrapped
-  bullets are one line of movement. In live mode `PgDn` at the end of the buffer
-  lands on the last line that has a display row; `Down` still reaches a trailing
-  empty line.
+- **Movement is by source line.** Up and Down move one source line, by display
+  row inside a revealed wrapped line as in unit 3. A page move that lands k rows
+  into a line goes to that line's raw row k (clamped), so paging through a tall
+  rendered line moves about a page. In live mode `PgDn` at the end of the
+  buffer lands on the last line that has a display row; `Down` still reaches a
+  trailing empty line.
 - **Find on rendered rows.** Matches are highlighted on the rows the user sees;
   jumping to a match reveals its unit.
 - **Mode ownership.** The App owns the mode per run (`editorSource`), passes it
