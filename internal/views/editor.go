@@ -199,27 +199,45 @@ func (e *EditorView) refreshCompleter(allowOpen bool) {
 		return
 	}
 	before, after := e.cursorSplit()
-	e.completer.refresh(before, after, allowOpen)
+	tagOK := strings.IndexByte(before, '#') >= 0 && e.lineSubst()
+	e.completer.refresh(before, after, allowOpen, tagOK)
 	e.ensureVisible()
 }
 
 // acceptCompletion splices the selected candidate into the buffer as one
 // edit. For an existing page it replaces the typed partial with "Name]]". For
 // the create row it keeps the typed name and only closes the link with "]]".
+// A tag completion replaces "#partial" with tagText(name), writing nothing
+// when the text already matches.
 func (e *EditorView) acceptCompletion() {
 	cand, ok := e.completer.selected()
 	if !ok {
 		return
 	}
 	cur := e.buf.Cursor()
-	if cand.create {
+	switch {
+	case e.completer.tag:
+		start := buffer.Pos{Line: cur.Line, Col: cur.Col - len(e.completer.partial) - 1}
+		text := tagText(cand.name)
+		if e.buf.Line(cur.Line)[start.Col:cur.Col] != text {
+			e.buf.ReplaceRange(buffer.Range{Start: start, End: cur}, text)
+		}
+		e.completer.dismiss()
+	case cand.create:
 		e.buf.ReplaceRange(buffer.Range{Start: cur, End: cur}, "]]")
-	} else {
+	default:
 		start := buffer.Pos{Line: cur.Line, Col: cur.Col - len(e.completer.partial)}
 		e.buf.ReplaceRange(buffer.Range{Start: start, End: cur}, cand.name+"]]")
 	}
 	e.goalOK = false
 	e.afterKey(false)
+}
+
+// lineSubst reports whether the read view substitutes the cursor line's links
+// and tags (outside fences and hidden blocks).
+func (e *EditorView) lineSubst() bool {
+	e.syncBuffer()
+	return e.scanner.Info(e.buf, e.buf.Cursor().Line).Subst
 }
 
 // afterKey brings the view up to date after a key changed the buffer or the
