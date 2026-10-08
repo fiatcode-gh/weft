@@ -8,7 +8,7 @@
 │    g / G           top / bottom                                       tab             switch find ↔ replace        │
 │                                                                       enter           replace (replace field)      │
 │  Links                                                                ctrl-a          replace all (replace field)  │
-│    n / N           next / previous wiki-link                          esc             close find                   │
+│    n / N           next / previous link or tag                        esc             close find                   │
 │    enter           follow link under cursor                                                                        │
 │                                                                     Maintain                                       │
 │  History                                                              R               rebuild index                │
@@ -48,6 +48,7 @@
 │    ctrl-t          cycle TODO / DONE on the current bullet                                                         │
 │    ctrl-r          live preview ↔ source                                                                           │
 │    [[              link completion (↑/↓, enter/tab, esc)                                                           │
+│    #               tag completion after # + letter                                                                 │
 │                                                                                                                    │
 │  ? or esc to close                                                                                    weft v1.0.0  │
 ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

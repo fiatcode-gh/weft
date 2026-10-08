@@ -2,7 +2,7 @@
 
 Journals are the warp — the continuous daily timeline you lay down. `[[wiki-links]]` are the weft — the cross-threads you weave across into pages. The fabric is your knowledge base, and weft is the terminal tool for keeping it: a recency-sorted page picker (with page-creation), ripgrep-backed full-text search, backlinks (linked and unlinked), and a cross-graph dashboard of your open tasks (`TODO/DOING/LATER/WAITING`) — because a journal tool that can't surface your open loops is incomplete.
 
-One linking primitive — `[[wiki-links]]`, no tags. Pages are flat markdown under `pages/` and `journals/`, with `___` for namespaces and no nested directories to manage. weft is a navigator, not an outliner: it renders your bullets, workflow markers, and links, but it never makes you tend the tree — no fold/unfold, no block refs, no zoom.
+Two kinds of link, both pointing at a page — `[[wiki-links]]` and `#tag` / `#[[Multi Word]]`. Pages are flat markdown under `pages/` and `journals/`, with `___` for namespaces and no nested directories to manage. weft is a navigator, not an outliner: it renders your bullets, workflow markers, and links, but it never makes you tend the tree — no fold/unfold, no block refs, no zoom.
 
 Press `e` to edit the current page in a full-screen in-app editor (`Ctrl+S` saves, `Esc` exits with an unsaved-changes prompt). It opens on the line you were reading, at the same screen row, and `Esc` brings you back the same way. The editor is a live preview: the page is drawn exactly as the read view draws it, and only the line or block under the cursor (a table, a fence, a quote, a joined paragraph, a `:LOGBOOK:` block) turns back into source while you edit it, then renders again when you move away. `Ctrl+R` switches to the plain source look and back; the choice lasts until weft quits and is never saved. The editor is coloured like the read view (same styles, `WEFT_STYLE` and `NO_COLOR` apply) and shows your terminal's own cursor. Any markdown file opens — CRLF, tabs, any length — and saves byte-for-byte, with the file's own line endings and final-newline state kept. If the file changed on disk since you opened or last saved it, a save merges changes on separate lines (lines both sides added at the same spot are all kept, yours first), and otherwise asks whether to overwrite, reload or keep editing; `E` hands the file to your `$EDITOR`. The editor has undo/redo, selection, copy/cut/paste (copies also go to the system clipboard through OSC 52), find and replace, and bullet-aware editing: `Enter` continues a bullet, `Tab`/`Shift+Tab` indent a bullet with its children, `Alt+↑/↓` move it, `Ctrl+T` cycles its workflow marker. Typing `[[` opens a live, fuzzy-filtered page-name completion list — `↑`/`↓` to choose, `Enter` or `Tab` to insert `[[Page Name]]`, `Esc` to dismiss; an unmatched name shows a `＋ Create` row to insert a link to the not-yet-created page in one keystroke. Press `.` to jump to today's journal.
 
@@ -58,7 +58,7 @@ weft doctor --graph PATH     # explicit path
 
 `weft doctor` walks the graph once and prints a health report. It is read-only and never writes to the graph.
 
-- **unresolved links** — `[[wiki-links]]` whose target page does not exist
+- **unresolved links** — `[[wiki-links]]` and tags whose target page does not exist
 - **orphan pages** — pages no other page links to (journals excluded)
 - **unlinked mentions** — bare-text mentions that could become links
 - **index warnings** — problems the index walk noticed (unreadable files, name collisions, subdirectories)
@@ -76,7 +76,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | `T`        | open TODO dashboard                 |
 | `b`        | open backlinks for the current page (linked + unlinked refs) |
 | `?`        | toggle the help overlay             |
-| `n` / `N`  | cycle the wiki-link cursor          |
+| `n` / `N`  | cycle the link cursor (wiki-links and tags) |
 | `Enter`    | follow link / open selection        |
 | `[` / `]`  | back / forward in page history      |
 | `.`        | jump to today's journal (creates it if missing) |
@@ -110,16 +110,18 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | `Alt-↑` / `Alt-↓` | move the bullet with its children |
 | `Ctrl-T` | cycle TODO / DONE |
 | `[[` | page-name completion (`↑`/`↓`, `Enter`/`Tab`, `Esc`) |
+| `#` + letter | page-name completion inserting `#name`, or `#[[Name]]` when the name has spaces or other characters a tag cannot hold |
 | `Ctrl-R` | switch between live preview and source look |
 | `Ctrl-F` | find; `Enter`/`↓` next, `↑` previous, `Tab` find ↔ replace, `Enter` replace, `Ctrl-A` replace all (replace field), `Esc` close |
 
 ## What gets rendered
 
 - `[[wiki-links]]` are styled inline, navigable with `n`/`N`, and follow with `Enter`. Aliased links (`[[Target|alias]]`) show the alias.
+- A tag is a link to the page of that name: `#kitchen` or `#[[Book Club]]`. It starts at the line start or after whitespace or `(`, the name begins with a letter and continues with letters, digits, `-`, `_` and `/`; any other name needs the bracket form. The `#` stays visible, and tags are navigable with `n`/`N` and `Enter` like wiki-links. Never a tag: issue numbers (`#18`, `PR #5`), hex colours (`#FAF3E7`), headings, `#+…` and `#!` lines, text inside `[[…]]`, URL fragments, code spans and fences.
 - Workflow markers at the start of a bullet are colour-coded (`TODO` red, `DOING` yellow, `LATER` blue, `WAITING` dim, `DONE` green, `CANCELED`/`CANCELLED` strikethrough, `NOW` magenta).
 - `:LOGBOOK: ... :END:` blocks are hidden — they're metadata, not content.
 - Long bullets wrap with hanging indent, so continuation lines align with the text after the bullet rather than under the bullet glyph.
-- Backlinks (`b`) shows two sections: **Linked references** (`[[…]]` mentions) followed by **Unlinked references** — bare-text mentions of the page name that aren't yet wiki-linked. `Enter` on either section jumps to the mention's page and lands on the reference itself: a linked backlink focuses the back-reference `[[link]]` (cursor on it, scrolled into view), and an unlinked reference highlights the bare-text mention and scrolls it into view. Self-references are always excluded.
+- Backlinks (`b`) shows two sections: **Linked references** (`[[…]]` links and tags) followed by **Unlinked references** — bare-text mentions of the page name that aren't yet wiki-linked. `Enter` on either section jumps to the mention's page and lands on the reference itself: a linked backlink focuses the back-reference `[[link]]` or tag (cursor on it, scrolled into view), and an unlinked reference highlights the bare-text mention and scrolls it into view. Self-references are always excluded.
 
 ## Environment
 
@@ -141,10 +143,11 @@ crash weft — they degrade to plain text or a silent no-op.
 
 - **`{{query …}}` and `{{embed …}}` blocks** are stripped from the rendered
   page (Glamour can't render them usefully).
-- **Block references** don't exist — `#` is an ordinary character in page
-  names, so `[[page#block]]` links to a page literally named `page#block`.
+- **Block references** don't exist — `#` inside `[[…]]` is an ordinary
+  character in the page name, so `[[page#block]]` links to a page literally
+  named `page#block`.
 - **`alias::` / `title::` / `tags::` properties** are not extracted — they
-  appear as plain text in the page body.
+  appear as plain text in the page body; `tags::` is not a tag.
 - **Case-insensitive page-name uniqueness** is not enforced — `Alpha.md` and
   `alpha.md` can coexist (weft records a warning — status bar points at
   `weft.log` — and resolves links deterministically to the first). Link
