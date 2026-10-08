@@ -3,6 +3,7 @@ package render
 import (
 	"math"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -230,10 +231,13 @@ func sourceRowsDetail(r *glamour.TermRenderer, styled, pre string, src []int) ro
 
 // rowTagSpans lists the intervals [lowest, highest] of the lines that share a
 // tagged row. A row holds a line when it carries the line's tag, which sits
-// after the line's last letter, and also when it carries the line's first
-// words but not its tag: the text after a row's last tag is the start of the
-// line whose tag comes next, on a later row. Tags decode up to maxLine.
-func rowTagSpans(rows []string, maxLine int) [][2]int {
+// after the line's last letter, and also when the text after the row's last
+// tag provably starts the next line, whose tag is on a later row: that line is
+// the one right after the last tag's line, and the trailing text begins with a
+// word and is a prefix, word for word, of the words of that line's source
+// text (startWords). Anything else after a tag (an image's "→ /url") is the
+// tagged line's own. Tags decode up to maxLine.
+func rowTagSpans(rows []string, maxLine int, startWords func(line int) []string) [][2]int {
 	type tag struct{ line, end int }
 	tags := make([][]tag, len(rows))
 	for r, row := range rows {
@@ -250,8 +254,8 @@ func rowTagSpans(rows []string, maxLine int) [][2]int {
 		for _, t := range tags[r] {
 			lo, hi = min(lo, t.line), max(hi, t.line)
 		}
-		if k := len(tags[r]); k > 0 && nextLine >= 0 {
-			if strings.IndexFunc(ansi.Strip(rows[r][tags[r][k-1].end:]), isTextRune) >= 0 {
+		if k := len(tags[r]); k > 0 && nextLine == tags[r][k-1].line+1 {
+			if tail := strings.TrimSpace(ansi.Strip(rows[r][tags[r][k-1].end:])); startsWord(tail) && isPrefixWords(textWords(tail), startWords(nextLine)) {
 				hi = max(hi, nextLine)
 			}
 		}
@@ -263,6 +267,23 @@ func rowTagSpans(rows []string, maxLine int) [][2]int {
 		}
 	}
 	return spans
+}
+
+// startsWord reports whether s begins with a text rune.
+func startsWord(s string) bool {
+	r, _ := utf8.DecodeRuneInString(s)
+	return isTextRune(r)
+}
+
+// textWords splits s, which holds no escapes, into its runs of text runes.
+func textWords(s string) []string {
+	return strings.FieldsFunc(s, func(r rune) bool { return !isTextRune(r) })
+}
+
+// isPrefixWords reports whether got is a non-empty prefix of want, ignoring
+// case (headings are upper-cased).
+func isPrefixWords(got, want []string) bool {
+	return len(got) > 0 && len(got) <= len(want) && slices.EqualFunc(got, want[:len(got)], strings.EqualFold)
 }
 
 // isTextRune is what a row tag can follow: a letter, a number or a sentinel.
