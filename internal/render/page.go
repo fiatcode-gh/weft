@@ -2,6 +2,7 @@ package render
 
 import (
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -322,59 +323,100 @@ func mapLinesOutsideFences(body string, f func(line string) string) string {
 	return out.String()
 }
 
-// replaceWikiLinksOutsideInlineCode preprocesses a single line for wiki links,
-// but only OUTSIDE backtick-delimited inline code spans. Markdown treats
+// linkHit is one link to substitute on a line: the bytes [start, end) become
+// a sentinel that restores to display and navigates to target.
+type linkHit struct {
+	start, end      int
+	target, display string
+}
+
+// replaceLinksOutsideInlineCode preprocesses a single line for wiki links and
+// tags, but only OUTSIDE backtick-delimited inline code spans. Markdown treats
 // backticked text as literal — `[[Foo]]` should display as the literal text
 // "[[Foo]]", not as a styled wiki link. Splits the line on backticks so even-
 // indexed parts are literal text (processed) and odd-indexed parts are inline
-// code (left alone), then rejoins. Per-line because inline code spans are
-// single-line; the cross-line fence state is already handled by the caller.
+// code (left alone). Per-line because inline code spans are single-line; the
+// cross-line fence state is already handled by the caller.
+//
+// A simple tag (#name) is its own hit; a bracket tag (#[[Name]]) is the wiki
+// link at its '#'+1, extended one byte left over the '#' and shown with a
+// leading '#'. Hits are emitted in byte order, bytes between them verbatim.
 //
 // The `subs` slice is appended to as matches are found; the id-encoded sentinel
-// is the same shape `preprocessWikiLinks` uses so the rest of the pipeline
+// is the same shape `preprocessLinks` uses so the rest of the pipeline
 // (Glamour → sentinel substitution) is unchanged.
-func replaceWikiLinksOutsideInlineCode(line string, base int, subs *[]linkSubst) string {
-	parts := strings.Split(line, "`")
-	for i, part := range parts {
-		if i%2 == 1 {
-			// Odd-indexed part is inside backticks (inline code). Leave the
-			// text literal so `[[Foo]]` stays as `[[Foo]]` in the output.
+func replaceLinksOutsideInlineCode(line string, base int, subs *[]linkSubst) string {
+	tags := graph.FindTags(line)
+	if len(tags) == 0 && !strings.Contains(line, "[[") {
+		return line
+	}
+	var hits []linkHit
+	off := 0
+	for i, part := range strings.Split(line, "`") {
+		// Odd-indexed part is inside backticks (inline code). Leave the
+		// text literal so `[[Foo]]` stays as `[[Foo]]` in the output.
+		if i%2 == 0 {
+			for _, m := range wikiLinkRe.FindAllStringSubmatchIndex(part, -1) {
+				target := part[m[2]:m[3]]
+				if target == "" {
+					// Defensive no-op: wikiLinkRe's capture is [^\]\|]+ (always ≥1
+					// char) and render does not TrimSpace, so target is never empty
+					// here — unlike internal/graph/parse.go, which trims m[1] and
+					// genuinely relies on its empty-target guard. Kept only to guard
+					// against future regex changes.
+					continue
+				}
+				display := target
+				if m[5] > m[4] {
+					display = part[m[4]:m[5]]
+				}
+				hits = append(hits, linkHit{off + m[0], off + m[1], target, display})
+			}
+		}
+		off += len(part) + 1
+	}
+	simple := false
+	for _, t := range tags {
+		if !t.Bracket {
+			hits = append(hits, linkHit{t.Start, t.End, t.Name, "#" + t.Name})
+			simple = true
 			continue
 		}
-		parts[i] = wikiLinkRe.ReplaceAllStringFunc(part, func(match string) string {
-			m := wikiLinkRe.FindStringSubmatch(match)
-			target := m[1]
-			if target == "" {
-				// Defensive no-op: wikiLinkRe's capture is [^\]\|]+ (always ≥1
-				// char) and render does not TrimSpace, so target is never empty
-				// here — unlike internal/graph/parse.go, which trims m[1] and
-				// genuinely relies on its empty-target guard. Kept only to guard
-				// against future regex changes.
-				return match
+		for k := range hits {
+			if hits[k].start == t.Start+1 {
+				hits[k].start = t.Start
+				hits[k].display = "#" + hits[k].display
+				break
 			}
-			display := target
-			if m[2] != "" {
-				display = m[2]
-			}
-			id := base + len(*subs)
-			*subs = append(*subs, linkSubst{target: target, display: display})
-			core := wikiSentinelStart + encodeSentinelID(id) + wikiSentinelEnd
-			// Pad sentinel to the rendered link's display width so Glamour's
-			// word-wrap reserves enough columns. Otherwise a short sentinel
-			// (e.g. <id 0>) at the end of a line lets Glamour fit it within
-			// the wrap width, then post-substitution the longer link text
-			// overflows the right margin and the terminal crops it.
-			if pad := lipgloss.Width(display) - lipgloss.Width(core); pad > 0 {
-				core += strings.Repeat(wikiSentinelPad, pad)
-			}
-			return core
-		})
+		}
 	}
-	return strings.Join(parts, "`")
+	if simple {
+		slices.SortFunc(hits, func(a, b linkHit) int { return a.start - b.start })
+	}
+	var out strings.Builder
+	last := 0
+	for _, h := range hits {
+		out.WriteString(line[last:h.start])
+		last = h.end
+		id := base + len(*subs)
+		*subs = append(*subs, linkSubst{target: h.target, display: h.display})
+		core := wikiSentinelStart + encodeSentinelID(id) + wikiSentinelEnd
+		// Pad sentinel to the rendered link's display width so Glamour's
+		// word-wrap reserves enough columns. Otherwise a short sentinel
+		// (e.g. <id 0>) at the end of a line lets Glamour fit it within
+		// the wrap width, then post-substitution the longer link text
+		// overflows the right margin and the terminal crops it.
+		if pad := lipgloss.Width(h.display) - lipgloss.Width(core); pad > 0 {
+			core += strings.Repeat(wikiSentinelPad, pad)
+		}
+		out.WriteString(core)
+	}
+	out.WriteString(line[last:])
+	return out.String()
 }
 
-// preprocessWikiLinks replaces non-fenced [[X]] and [[X|alias]] occurrences
-// in body with sentinels that survive Glamour rendering. Returns the rewritten
+// preprocessLinks replaces non-fenced [[X]], [[X|alias]], #tag and #[[X]]
+// occurrences in body with sentinels that survive Glamour rendering. Returns the rewritten
 // body and a slice of substitutions indexed by the id encoded in each sentinel.
 //
 // Scanning the *original* body (instead of the post-render styled output)
@@ -384,10 +426,10 @@ func replaceWikiLinksOutsideInlineCode(line string, base int, subs *[]linkSubst)
 // base is the id of the first substitution: a chunk of a larger document
 // numbers its sentinels from the count the document has before it, because a
 // sentinel's width depends on the digits of its id.
-func preprocessWikiLinks(body string, base int) (string, []linkSubst) {
+func preprocessLinks(body string, base int) (string, []linkSubst) {
 	var subs []linkSubst
 	body = mapLinesOutsideFences(body, func(line string) string {
-		return replaceWikiLinksOutsideInlineCode(line, base, &subs)
+		return replaceLinksOutsideInlineCode(line, base, &subs)
 	})
 	return body, subs
 }
@@ -443,7 +485,7 @@ func hideMarkdownLinkURLsOutsideInlineCode(line string) string {
 // preprocessTaskMarkers replaces leading TODO/DOING/etc. markers on non-fenced
 // bullet lines with sentinels, returning the rewritten body and the captured
 // marker text indexed by sentinel id.
-// base is the id of the first marker, as in preprocessWikiLinks.
+// base is the id of the first marker, as in preprocessLinks.
 func preprocessTaskMarkers(body string, base int) (string, []taskInfo) {
 	var markers []taskInfo
 	body = mapLinesOutsideFences(body, func(line string) string {
@@ -462,7 +504,7 @@ func preprocessTaskMarkers(body string, base int) (string, []taskInfo) {
 		sentinel := taskSentinelStart + encodeSentinelID(id) + taskSentinelEnd
 		// Pad to the marker's display width so Glamour's word-wrap reserves
 		// the columns the restored marker text will occupy (same trick as
-		// the wiki-link and emphasis sentinels, see preprocessWikiLinks).
+		// the wiki-link and emphasis sentinels, see preprocessLinks).
 		if pad := lipgloss.Width(marker) - lipgloss.Width(sentinel); pad > 0 {
 			sentinel += strings.Repeat(taskSentinelPad, pad)
 		}
@@ -520,7 +562,7 @@ func indentWrappedBullets(styled string) string {
 // emphasis sentinels (outside fences and inline code), returning the rewritten
 // body and the original matched substrings indexed by sentinel id (so casing is
 // preserved on restore). Returns (body, nil) when term is empty. Run AFTER
-// preprocessWikiLinks/preprocessTaskMarkers so [[term]] is already a sentinel
+// preprocessLinks/preprocessTaskMarkers so [[term]] is already a sentinel
 // and only bare mentions match.
 func preprocessEmphasis(body, term string) (string, []string) {
 	if term == "" {

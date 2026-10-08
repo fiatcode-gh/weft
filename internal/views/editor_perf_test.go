@@ -29,7 +29,7 @@ func perfContent(n int) string {
 		case i%5 == 2:
 			fmt.Fprintf(&b, "  - nested %d with `code` and *emphasis*\n", i)
 		case i%5 == 3:
-			fmt.Fprintf(&b, "A plain paragraph line %d, with a [markdown link](http://example.com).\n", i)
+			fmt.Fprintf(&b, "A plain paragraph line %d, with a [markdown link](http://example.com), #topic%d and issue #%d.\n", i, i, i)
 		default:
 			b.WriteString("\n")
 		}

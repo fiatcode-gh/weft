@@ -2,6 +2,7 @@ package render
 
 import (
 	"errors"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -840,6 +841,89 @@ func TestFenceGrammarAlignsWithGraph(t *testing.T) {
 	}
 }
 
+// corpusLinks is Corpus.md's links in document order (target, display).
+var corpusLinks = [][2]string{
+	{"kitchen", "#kitchen"}, {"Kitchen", "#Kitchen"}, {"s", "#s"},
+	{"kb/notes", "#kb/notes"}, {"Book Club", "#Book Club"}, {"Book Club", "#the club"},
+	{"café", "#café"}, {"日本", "#日本"}, {"add", "#add"}, {"cafe", "#cafe"},
+	{"bad", "#bad"}, {"abc12", "#abc12"}, {"a1b2c3d4e", "#a1b2c3d4e"},
+	{"C#", "C#"}, {"Lab #inner", "Lab #inner"}, {"inheading", "#inheading"},
+	{"lead", "#lead"},
+}
+
+func readCorpus(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile("../../testdata/fixture-graph/pages/Corpus.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func TestRenderTags(t *testing.T) {
+	res := mustRender(t, readCorpus(t), 100)
+
+	var got [][2]string
+	for _, l := range res.Links {
+		got = append(got, [2]string{l.Target, l.Display})
+		if span := ansi.Strip(res.Styled[l.Start:l.End]); span != l.Display {
+			t.Errorf("link %q: styled span = %q", l.Target, span)
+		}
+	}
+	if !reflect.DeepEqual(got, corpusLinks) {
+		t.Fatalf("links = %q\nwant    %q", got, corpusLinks)
+	}
+	out := ansi.Strip(res.Styled)
+	if strings.Contains(out, "#[[") {
+		t.Errorf("bracket tag left raw in output:\n%s", out)
+	}
+	for _, lit := range []string{"C#", "repo#12", "#18", "#FAF3E7", "#incode", "#fenced"} {
+		if !strings.Contains(out, lit) {
+			t.Errorf("literal non-tag %q missing from output:\n%s", lit, out)
+		}
+	}
+}
+
+// Alignment: the index (graph.ExtractLinks) and the read view (Render) must
+// find the same links, tags included.
+func TestLinkGrammarAgreesAcrossConsumers(t *testing.T) {
+	var corpusTargets []string
+	for _, l := range corpusLinks {
+		corpusTargets = append(corpusTargets, l[0])
+	}
+	cases := []struct {
+		name, body string
+		want       []string
+	}{
+		{"Corpus", readCorpus(t), corpusTargets},
+		{"inline", "- #a [[B]] #[[C|c]] `#d` (#e) x#f\n", []string{"a", "B", "C", "e"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var rendered, indexed []string
+			for _, l := range mustRender(t, tc.body, 100).Links {
+				rendered = append(rendered, l.Target)
+			}
+			for _, h := range graph.ExtractLinks(tc.body) {
+				indexed = append(indexed, h.Target)
+			}
+			if !reflect.DeepEqual(rendered, tc.want) || !reflect.DeepEqual(indexed, tc.want) {
+				t.Fatalf("render %q, index %q, want %q", rendered, indexed, tc.want)
+			}
+		})
+	}
+}
+
+func TestRenderTagsWrapAtWidth(t *testing.T) {
+	res := mustRender(t, "- "+strings.Repeat("word ", 8)+"#topic", 20)
+
+	for i, row := range strings.Split(res.Styled, "\n") {
+		if w := lipgloss.Width(row); w > 20 {
+			t.Errorf("row %d is %d cells wide: %q", i, w, ansi.Strip(row))
+		}
+	}
+}
+
 // A Glamour failure falls back to un-styled text — that must be visible to
 // the caller (FallbackErr) so it can skip its cache: a transient failure
 // cached by mtime becomes a sticky unstyled page.
@@ -904,6 +988,19 @@ func TestRenderOverWideSentinelLeavesNoPadRunes(t *testing.T) {
 			}
 			if got := ansi.Strip(res.Styled[l.Start:l.End]); got != longName {
 				t.Errorf("styled span = %q, want %q", got, longName)
+			}
+		}},
+		{"tag", "- see #" + strings.Repeat("abcdefghij", 4) + " ok\n", 30, "", func(t *testing.T, res Result) {
+			name := strings.Repeat("abcdefghij", 4)
+			if len(res.Links) != 1 {
+				t.Fatalf("links = %d, want 1", len(res.Links))
+			}
+			l := res.Links[0]
+			if l.Display != "#"+name {
+				t.Errorf("Display = %q, want %q", l.Display, "#"+name)
+			}
+			if got := ansi.Strip(res.Styled[l.Start:l.End]); got != l.Display {
+				t.Errorf("styled span = %q, want %q", got, l.Display)
 			}
 		}},
 		{"emphasis", "- averyveryveryveryveryverylongword here\n", 20, "averyveryveryveryveryverylongword", func(t *testing.T, res Result) {

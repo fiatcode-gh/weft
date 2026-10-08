@@ -250,11 +250,11 @@ func (p *Preview) chunkText(src PreviewLines, c chunkSpan, first, last int) stri
 }
 
 // lineSentinels counts the sentinels the read view's substitution passes make
-// on one line: wiki links and the task marker.
+// on one line: wiki links, tags and the task marker.
 func lineSentinels(line string) (wiki, task int) {
-	if strings.Contains(line, "[[") {
+	if strings.Contains(line, "[[") || strings.IndexByte(line, '#') >= 0 {
 		var subs []linkSubst
-		replaceWikiLinksOutsideInlineCode(hideMarkdownLinkURLsOutsideInlineCode(line), 0, &subs)
+		replaceLinksOutsideInlineCode(hideMarkdownLinkURLsOutsideInlineCode(line), 0, &subs)
 		wiki = len(subs)
 	}
 	if taskMarkerRe.MatchString(line) {

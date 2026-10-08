@@ -211,7 +211,7 @@ func preprocess(body, emphasis string, base idBase) frontend {
 		src[i] = keptLog[k]
 	}
 	body = hideMarkdownLinkURLs(body)
-	pre, wikiSubs := preprocessWikiLinks(body, base.wiki)
+	pre, wikiSubs := preprocessLinks(body, base.wiki)
 	pre, taskMarkers := preprocessTaskMarkers(pre, base.task)
 	pre, emphSubs := preprocessEmphasis(pre, emphasis)
 	return frontend{base: base, pre: pre, src: src, wikiSubs: wikiSubs, taskMarkers: taskMarkers, emphSubs: emphSubs}
