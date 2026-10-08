@@ -3,12 +3,14 @@ package render
 import (
 	"bytes"
 	"image/color"
+	"sort"
 	"strings"
 	"sync"
 
 	gansi "charm.land/glamour/v2/ansi"
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/fiatcode-gh/weft/v2/internal/graph"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
@@ -222,7 +224,7 @@ func (p *Painter) Paint(src SourceLines, i int, info LineInfo, sc *Scanner) []Sp
 		return nil
 	}
 	b := &lineBuf{line: line, masked: line, st: make([]uv.Style, len(line)), cov: make([]bool, len(line))}
-	var wikis []wikiLink
+	var links []linkSpan
 	switch info.Kind {
 	case KindHidden, KindFence, KindSetextUnderline:
 		b.fill(0, len(line), dimmed(toUV(p.doc)))
@@ -232,10 +234,10 @@ func (p *Painter) Paint(src SourceLines, i int, info LineInfo, sc *Scanner) []Sp
 		b.fill(0, len(line), toUV(cascade(p.doc, p.theme.Config.HorizontalRule)))
 	case KindBlank:
 	default:
-		b.masked, wikis = maskWikiLinks(line)
+		b.masked, links = maskLinks(line)
 		p.paintBlock(b, src, sc, i, info)
 	}
-	for _, w := range wikis {
+	for _, w := range links {
 		for k := w.start; k < w.textStart; k++ {
 			b.st[k] = dimmed(b.st[k])
 		}
@@ -495,25 +497,29 @@ func (w *inliner) node(n ast.Node, ov *gansi.StylePrimitive) {
 	}
 }
 
-// wikiLink is one [[...]] in a line: its bytes [start, end) and the display
-// text [textStart, textEnd), the alias when there is one, else the target.
-type wikiLink struct{ start, end, textStart, textEnd int }
+// linkSpan is one link-styled run on a line: a wiki link, a simple tag, or the
+// `#` of a bracket tag. Its bytes are [start, end); [textStart, textEnd) is
+// styled as a link and the rest is dimmed.
+type linkSpan struct{ start, end, textStart, textEnd int }
 
-// maskWikiLinks replaces every wiki-link outside code spans with the same
+// maskLinks replaces every wiki-link and tag outside code spans with the same
 // number of 'x' bytes, a word character like the read view's sentinel, so
 // goldmark's emphasis flanking sees what the read view's Glamour sees. Code
 // spans are found by the read view's rule: odd parts of a split on backticks.
-func maskWikiLinks(line string) (string, []wikiLink) {
-	if !strings.Contains(line, "[[") {
+// A simple tag is one span, link-styled whole; a bracket tag #[[X]] is its
+// '#' (link-styled) followed by the wiki link. Spans come back in byte order.
+func maskLinks(line string) (string, []linkSpan) {
+	if !strings.Contains(line, "[[") && strings.IndexByte(line, '#') < 0 {
 		return line, nil
 	}
+	tags := graph.FindTags(line)
 	masked := []byte(line)
-	var links []wikiLink
+	var links []linkSpan
 	off := 0
 	for k, part := range strings.Split(line, "`") {
 		if k%2 == 0 {
 			for _, m := range wikiLinkRe.FindAllStringSubmatchIndex(part, -1) {
-				w := wikiLink{off + m[0], off + m[1], off + m[2], off + m[3]}
+				w := linkSpan{off + m[0], off + m[1], off + m[2], off + m[3]}
 				if m[5] > m[4] {
 					w.textStart, w.textEnd = off+m[4], off+m[5]
 				}
@@ -521,10 +527,26 @@ func maskWikiLinks(line string) (string, []wikiLink) {
 					masked[q] = 'x'
 				}
 				links = append(links, w)
+				for _, t := range tags {
+					if t.Bracket && t.Start == w.start-1 {
+						masked[t.Start] = 'x'
+						links = append(links, linkSpan{t.Start, t.Start + 1, t.Start, t.Start + 1})
+					}
+				}
 			}
 		}
 		off += len(part) + 1
 	}
+	for _, t := range tags {
+		if t.Bracket {
+			continue
+		}
+		for q := t.Start; q < t.End; q++ {
+			masked[q] = 'x'
+		}
+		links = append(links, linkSpan{t.Start, t.End, t.Start, t.End})
+	}
+	sort.Slice(links, func(i, j int) bool { return links[i].start < links[j].start })
 	return string(masked), links
 }
 

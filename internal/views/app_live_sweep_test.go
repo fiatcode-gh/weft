@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/charmbracelet/colorprofile"
@@ -36,7 +37,11 @@ func sameCells(a, b []uv.Cell) bool {
 // the read view's row, cell for cell, as far as the window shows.
 func liveReadSweep(t *testing.T) {
 	compared := 0
-	pages := []struct{ name, text string }{{"rowless", rowlessPage()}, {"round trip", roundTripPage()}}
+	corpus, err := os.ReadFile("../../testdata/fixture-graph/pages/Corpus.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pages := []struct{ name, text string }{{"rowless", rowlessPage()}, {"round trip", roundTripPage()}, {"tags", string(corpus)}}
 	for p, page := range pages {
 		for _, width := range []int{40, 80} {
 			t.Run(fmt.Sprintf("%s width %d", page.name, width), func(t *testing.T) {

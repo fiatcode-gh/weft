@@ -20,7 +20,7 @@ type UnlinkedRef struct {
 
 // FilterUnlinked turns raw ripgrep hits for the target page into unlinked
 // references, dropping any hit that is in the target's own file, inside a
-// fenced code block, or already inside a [[…]] link. read returns a file's
+// fenced code block, or already inside a [[…]] link or a tag. read returns a file's
 // body; a read error drops every hit from that file (we can't verify its
 // fence state).
 func FilterUnlinked(hits []search.Hit, targetPath string, read func(path string) (string, error)) []UnlinkedRef {
@@ -62,7 +62,7 @@ func FilterUnlinked(hits []search.Hit, targetPath string, read func(path string)
 }
 
 // fencedLines returns the set of 1-based line numbers that fall inside (or are)
-// a code fence, mirroring how ExtractWikiLinks skips fenced content.
+// a code fence, mirroring how ExtractLinks skips fenced content.
 func fencedLines(body string) map[int]bool {
 	fenced := map[int]bool{}
 	var fence FenceState
@@ -75,20 +75,13 @@ func fencedLines(body string) map[int]bool {
 }
 
 // firstUnlinkedMatch returns the first match span on line that does NOT fall
-// within a [[…]] link span or an inline-code span. ok is false when every
+// within a [[…]] link, a tag or an inline-code span. ok is false when every
 // match is already linked, in code, or there are no matches.
 func firstUnlinkedMatch(line string, matches []search.Span) (search.Span, bool) {
-	links := wikiLinkRe.FindAllStringIndex(line, -1)
+	links := linkedSpans(line)
 	code := InlineCodeSpans(line)
 	for _, m := range matches {
-		inside := false
-		for _, l := range links {
-			if m.Start >= l[0] && m.End <= l[1] {
-				inside = true
-				break
-			}
-		}
-		if inside || spanInside(m, code) {
+		if spanInside(m, links) || spanInside(m, code) {
 			continue
 		}
 		return m, true
@@ -96,9 +89,22 @@ func firstUnlinkedMatch(line string, matches []search.Span) (search.Span, bool) 
 	return search.Span{}, false
 }
 
+// linkedSpans returns the spans of line that already are links: every
+// [[wiki link]] and every tag.
+func linkedSpans(line string) []search.Span {
+	var spans []search.Span
+	for _, l := range wikiLinkRe.FindAllStringIndex(line, -1) {
+		spans = append(spans, search.Span{Start: l[0], End: l[1]})
+	}
+	for _, t := range FindTags(line) {
+		spans = append(spans, search.Span{Start: t.Start, End: t.End})
+	}
+	return spans
+}
+
 // InlineCodeSpans returns the byte ranges of inline code spans on line —
 // the odd segments of a backtick split, mirroring how parse.go
-// (appendWikiLinks) and render.replaceWikiLinksOutsideInlineCode treat
+// (appendLinks) and render.replaceLinksOutsideInlineCode treat
 // backticks: split the line on "`", even-indexed segments are literal text,
 // odd-indexed segments are inline code. Each returned span includes its
 // leading backtick (and trailing backtick, when the code run is closed).

@@ -497,3 +497,21 @@ func TestStandingIndexWarningsDoNotRenag(t *testing.T) {
 		t.Fatalf("log has %d 'skipping subdirectory' lines, want exactly 1:\n%s", got, logBytes)
 	}
 }
+
+func TestAppEnterFollowsTag(t *testing.T) {
+	a := bootApp(t)
+	a.navigate("Corpus")
+	a.page.CycleLink(+1)
+
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	if got := a.page.Page(); got != "Kitchen" {
+		t.Fatalf("page after Enter on #kitchen = %q, want Kitchen", got)
+	}
+
+	a.navigateFocusingLink("Corpus", "Book Club")
+	r, ok := a.idx.Resolve(a.page.FollowCursor())
+	if !ok || r.Name != "Book Club" {
+		t.Errorf("focused link resolves to %q (ok=%v), want Book Club", r.Name, ok)
+	}
+}

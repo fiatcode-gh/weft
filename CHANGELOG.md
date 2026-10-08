@@ -16,6 +16,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `Ctrl+V` pastes what was copied inside weft, not the system clipboard. Migration: use the terminal's paste (`Ctrl+Shift+V` or similar) for the system clipboard.
 - The editor opens in live preview instead of showing raw source. Migration: press `Ctrl+R` for the source look; the choice lasts until weft quits.
 - Under `NO_COLOR` every screen now shows bold, italic, underline, strikethrough, faint and reverse video; only colour is dropped. Migration: use `TERM=dumb` for fully unstyled output.
+- `#word` outside code is now a tag: a link to the page `word` (also in backlinks and `weft doctor`). Migration: wrap literal `#word` text in backticks.
 
 ### Added
 
@@ -29,6 +30,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `e` and `Esc` keep the line you are on at the same screen row between the read view and the editor. The editor now shows the read view's faint rule row above its status line, so both windows are the same height.
 - Any markdown file opens in the in-app editor (CRLF, tabs, more than 10000 lines) and saves byte-for-byte; the `E`/`$EDITOR` refusal hint is gone.
 - Under `NO_COLOR` the read view's selected link shows in reverse video.
+- Tags: `#tag` and `#[[Multi Word]]` link to a page like `[[Page]]` — rendered as links with `#` kept, followed with `n`/`N` and `Enter`, counted in backlinks and `weft doctor`, never reported as unlinked mentions. Typing `#` and a letter in the editor offers page completion. Issue numbers, hex colours, headings, `#+`/`#!` lines, URL fragments and code are never tags.
 
 ### Changed
 

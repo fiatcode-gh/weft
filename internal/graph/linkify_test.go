@@ -128,3 +128,12 @@ func TestLinkifyMentionOnlyCodeOccurrenceIsNotFound(t *testing.T) {
 		t.Fatalf("err = %v, want ErrMentionNotFound", err)
 	}
 }
+
+func TestLinkifyMentionSkipsTags(t *testing.T) {
+	got, _ := linkifyOK(t, "- #kitchen and kitchen\n", 1, "kitchen")
+	if want := "- #kitchen and [[kitchen]]\n"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	assertMentionNotFound(t, "- #kitchen only\n", 1, "kitchen")
+	assertMentionNotFound(t, "- #kb/notes\n", 1, "notes")
+}

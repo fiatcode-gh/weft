@@ -3,6 +3,8 @@ package views
 import (
 	"fmt"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/sahilm/fuzzy"
 
@@ -29,7 +31,8 @@ type linkCompleter struct {
 	names      []string       // lockstep with choices, for fuzzy.Find
 	active     bool
 	dismissed  bool   // user pressed esc; stays closed until the partial changes
-	partial    string // runes between the open [[ and the cursor
+	tag        bool   // the open list was triggered by #, not [[
+	partial    string // runes after [[, or the tag name after #, up to the cursor
 	cands      []linkCandidate
 	sel        int
 	maxVisible int // EditorView lowers this on short terminals; default maxCompleterRows
@@ -89,11 +92,20 @@ func closingAhead(after string) bool {
 // and therefore cannot pop the strip just because the cursor landed to the
 // right of an unclosed "[[" — though once open, navigation still updates it or
 // closes it (e.g. when the cursor leaves the link).
-func (c *linkCompleter) refresh(before, after string, allowOpen bool) {
+func (c *linkCompleter) refresh(before, after string, allowOpen, tagOK bool) {
 	partial, ok := extractPartial(before)
-	if !ok || closingAhead(after) {
+	tag := false
+	if ok && closingAhead(after) {
+		ok = false
+	}
+	if !ok && tagOK {
+		partial, ok = extractTagPartial(before, after)
+		tag = ok
+	}
+	if !ok {
 		c.active = false
 		c.dismissed = false
+		c.tag = false
 		c.partial = ""
 		c.cands = nil
 		return
@@ -101,8 +113,9 @@ func (c *linkCompleter) refresh(before, after string, allowOpen bool) {
 	if !allowOpen && !c.active {
 		return
 	}
-	if partial != c.partial {
+	if partial != c.partial || tag != c.tag {
 		c.partial = partial
+		c.tag = tag
 		c.dismissed = false
 		c.sel = 0
 	}
@@ -115,6 +128,50 @@ func (c *linkCompleter) refresh(before, after string, allowOpen bool) {
 	if c.sel >= len(c.cands) {
 		c.sel = 0
 	}
+}
+
+// extractTagPartial finds the active tag-completion query: the name typed
+// after a '#' that starts a tag (graph.TagStartAt), with the cursor at the
+// end of the name. The first rune must be a letter, so headings, "#1", "#+"
+// and the like never open it. Hex-shaped names still open: the partial is
+// only a query.
+func extractTagPartial(before, after string) (string, bool) {
+	if strings.IndexByte(before, '#') < 0 {
+		return "", false
+	}
+	s := len(before)
+	for s > 0 {
+		r, size := utf8.DecodeLastRuneInString(before[:s])
+		if !graph.IsTagNameRune(r) {
+			break
+		}
+		s -= size
+	}
+	if s == 0 || before[s-1] != '#' {
+		return "", false
+	}
+	partial := before[s:]
+	if r, _ := utf8.DecodeRuneInString(partial); !unicode.IsLetter(r) {
+		return "", false
+	}
+	if after != "" {
+		if r, _ := utf8.DecodeRuneInString(after); graph.IsTagNameRune(r) {
+			return "", false
+		}
+	}
+	if !graph.TagStartAt(before+after, s-1) {
+		return "", false
+	}
+	return partial, true
+}
+
+// tagText is how a page is written as a tag: "#Name" when that reads back as
+// a simple tag, "#[[Name]]" otherwise.
+func tagText(name string) string {
+	if graph.IsSimpleTagName(name) {
+		return "#" + name
+	}
+	return "#[[" + name + "]]"
 }
 
 // buildCands returns the candidate rows for a partial: fuzzy matches over the

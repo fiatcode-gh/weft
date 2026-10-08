@@ -57,7 +57,7 @@ func lineBounds(body string, line int) (start, end int, ok bool) {
 }
 
 // firstUnlinkedOccurrence finds the first whole-word, case-insensitive, literal
-// occurrence of target in line that is not inside a [[…]] link or an inline-code
+// occurrence of target in line that is not inside a [[…]] link, a tag or an inline-code
 // span. The returned span is relative to line.
 func firstUnlinkedOccurrence(line, target string) (search.Span, bool) {
 	re := regexp.MustCompile("(?i)" + regexp.QuoteMeta(target))
@@ -65,24 +65,18 @@ func firstUnlinkedOccurrence(line, target string) (search.Span, bool) {
 	if locs == nil {
 		return search.Span{}, false
 	}
-	links := wikiLinkRe.FindAllStringIndex(line, -1)
+	links := linkedSpans(line)
 	code := InlineCodeSpans(line)
 	for _, loc := range locs {
 		start, end := loc[0], loc[1]
 		if !wholeWordAt(line, start, end) {
 			continue
 		}
-		inside := false
-		for _, l := range links {
-			if start >= l[0] && end <= l[1] {
-				inside = true
-				break
-			}
-		}
-		if inside || spanInside(search.Span{Start: start, End: end}, code) {
+		m := search.Span{Start: start, End: end}
+		if spanInside(m, links) || spanInside(m, code) {
 			continue
 		}
-		return search.Span{Start: start, End: end}, true
+		return m, true
 	}
 	return search.Span{}, false
 }

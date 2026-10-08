@@ -65,8 +65,8 @@ func TestFirstUnlinkedMatchSkipsInlineCode(t *testing.T) {
 }
 
 func TestInlineCodeSpansUnclosedBacktickRunsToEndOfLine(t *testing.T) {
-	// arrange — a single, unpaired backtick: parse.go's appendWikiLinks and
-	// render's replaceWikiLinksOutsideInlineCode both split on backticks and
+	// arrange — a single, unpaired backtick: parse.go's appendLinks and
+	// render's replaceLinksOutsideInlineCode both split on backticks and
 	// treat every odd-indexed segment as inline code, including a trailing
 	// segment with no closing backtick (strings.Split("a `code", "`") ==
 	// ["a ", "code"], and "code" sits at odd index 1). InlineCodeSpans must
@@ -84,5 +84,29 @@ func TestInlineCodeSpansUnclosedBacktickRunsToEndOfLine(t *testing.T) {
 	got := line[spans[0].Start:spans[0].End]
 	if want := "`code"; got != want {
 		t.Fatalf("span covers %q, want %q", got, want)
+	}
+}
+
+func TestFilterUnlinkedSkipsTags(t *testing.T) {
+	body := "- #kitchen and (#Kitchen)\n- the kitchen sink\n- #kb/notes\n"
+	read := mapReader(map[string]string{"/g/pages/Note.md": body})
+	span := func(line, sub string) search.Span {
+		i := strings.Index(line, sub)
+		return search.Span{Start: i, End: i + len(sub)}
+	}
+	lines := strings.Split(body, "\n")
+	hit := func(n int, sub string) search.Hit {
+		return search.Hit{FilePath: "/g/pages/Note.md", Line: n, Context: lines[n-1], Matches: []search.Span{span(lines[n-1], sub)}}
+	}
+	// ripgrep reports every match on a line; line 1 carries both tags.
+	line1 := search.Hit{FilePath: "/g/pages/Note.md", Line: 1, Context: lines[0], Matches: []search.Span{span(lines[0], "kitchen"), {Start: 17, End: 24}}}
+
+	got := FilterUnlinked([]search.Hit{line1, hit(2, "kitchen")}, "/g/pages/Kitchen.md", read)
+	if len(got) != 1 || got[0].Line != 2 {
+		t.Errorf("kitchen: want only line 2, got %+v", got)
+	}
+	got = FilterUnlinked([]search.Hit{hit(3, "notes")}, "/g/pages/notes.md", read)
+	if len(got) != 0 {
+		t.Errorf("notes inside #kb/notes must be dropped, got %+v", got)
 	}
 }

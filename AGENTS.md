@@ -15,6 +15,7 @@ opening then discarding never touches disk. The editor edits an `internal/buffer
 live fuzzy completion list of page names (`↑`/`↓` to choose, `Enter`/`Tab` to
 insert `[[Page Name]]`, `Esc` to dismiss); an unmatched name offers a create row
 that inserts a link to the not-yet-created page without writing to disk.
+Typing `#` plus a letter at a tag start opens the same completion list, inserting `#name` (or `#[[Name]]`).
 Enter continues a `- ` bullet at the same indent (empty bullet ends the list);
 `Ctrl+T` cycles the current bullet's workflow marker (plain → TODO → DONE);
 `Tab` / `Shift+Tab` indent / de-indent a bullet with its children; `Alt+↑/↓` move it.
@@ -53,7 +54,7 @@ an intentional UI change, run with `-update` and visually diff the golden before
   `quietStdout`, which drops the terminal probes and keyboard-protocol switches Bubble
   Tea v2 sends on its own, so weft sends no queries and keeps the terminal's normal key
   encoding.
-- `internal/graph/` — filesystem walk, page parsing, name resolution, index.
+- `internal/graph/` — filesystem walk, page parsing (wiki links and tags; `tag.go` is the one tag definition every consumer uses), name resolution, index.
 - `internal/render/` — Glamour-based page rendering (wiki-link styling, hanging-indent,
   workflow-marker colouring, `:LOGBOOK:` stripping). Has a `Warmup()` paid before the
   TUI takes the screen to avoid chroma init flicker. `theme.go` is the shared
@@ -85,7 +86,7 @@ an intentional UI change, run with `-update` and visually diff the golden before
   edits a conflicted tree — conflicts bail to the shell.
 - `internal/views/` — Bubble Tea models: `app` (root), `page`, `picker`, `search`,
   `backlinks`, `todos`, `help`, `editor` (in-app markdown editor). The backlinks
-  view (`b`) shows two sections: linked references (`[[…]]` mentions) then unlinked
+  view (`b`) shows two sections: linked references (`[[…]]` links and tags) then unlinked
   references (bare-text mentions not yet wiki-linked); read-only, `enter` jumps to the
   mention's page and lands on the reference: linked backlinks focus the back-reference
   link (cursor + scroll), unlinked references highlight the mention and scroll it into view.

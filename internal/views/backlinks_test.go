@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -417,5 +418,26 @@ func TestBacklinksHintShowsLinkifyOnUnlinkedRow(t *testing.T) {
 	selectFirstUnlinked(t, b)
 	if !strings.Contains(plain(b.View()), "l linkify") {
 		t.Errorf("hint should advertise linkify when an unlinked row is selected:\n%s", plain(b.View()))
+	}
+}
+
+func TestBacklinksTagReferences(t *testing.T) {
+	if _, err := exec.LookPath("rg"); err != nil {
+		t.Skip("rg not on PATH")
+	}
+	a := bootApp(t)
+
+	refs := a.unlinkedRefs("Kitchen")
+	if len(refs) != 0 {
+		t.Fatalf("tags are linked references, unlinked = %+v", refs)
+	}
+	b := NewBacklinks(a.idx, "Kitchen", refs, 80, 30)
+	if len(b.rows) != 2 {
+		t.Fatalf("rows = %d, want 2: %+v", len(b.rows), b.rows)
+	}
+	for _, r := range b.rows {
+		if r.ref == nil || r.ref.FromPage != "Corpus" || r.ref.LineNumber != 1 {
+			t.Errorf("row = %+v, want linked Corpus:1", r)
+		}
 	}
 }

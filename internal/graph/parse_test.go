@@ -5,14 +5,14 @@ import (
 	"testing"
 )
 
-func TestExtractWikiLinks(t *testing.T) {
+func TestExtractLinks(t *testing.T) {
 	// arrange
 	body := "- See [[Alpha]] and [[Beta|the second]].\n" +
 		"```\n[[InsideFence]]\n```\n" +
 		"- Another [[proj/nested]] ref."
 
 	// act
-	got := ExtractWikiLinks(body)
+	got := ExtractLinks(body)
 
 	// assert
 	want := []LinkHit{
@@ -21,7 +21,7 @@ func TestExtractWikiLinks(t *testing.T) {
 		{Target: "proj/nested", Line: 5},
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("ExtractWikiLinks mismatch:\nwant %#v\ngot  %#v", want, got)
+		t.Fatalf("ExtractLinks mismatch:\nwant %#v\ngot  %#v", want, got)
 	}
 }
 
@@ -29,7 +29,7 @@ func TestExtractWikiLinksKeepsHashInTarget(t *testing.T) {
 	// Logseq has no [[page#fragment]] syntax and allows "#" in page names,
 	// so "#" and everything after it must stay part of the target.
 	body := "intro\n[[Alpha#summary]]\n[[proj/nested#intro]]\n"
-	hits := ExtractWikiLinks(body)
+	hits := ExtractLinks(body)
 	if len(hits) != 2 {
 		t.Fatalf("want 2 hits, got %d (%+v)", len(hits), hits)
 	}
@@ -43,7 +43,7 @@ func TestExtractWikiLinksKeepsHashInTarget(t *testing.T) {
 
 func TestWikiLinkTargetKeepsHash(t *testing.T) {
 	// arrange / act
-	links := ExtractWikiLinks("- [[C#]] and [[F#|fsharp]]\n")
+	links := ExtractLinks("- [[C#]] and [[F#|fsharp]]\n")
 
 	// assert
 	if len(links) != 2 || links[0].Target != "C#" || links[1].Target != "F#" {
@@ -55,7 +55,7 @@ func TestExtractWikiLinksSkipsInlineCode(t *testing.T) {
 	// [[Literal]] inside backticks is a code example, not a real link;
 	// only [[Real]] outside code counts. Mirrors the renderer.
 	body := "see [[Real]] and `[[Literal]]` here\n"
-	got := ExtractWikiLinks(body)
+	got := ExtractLinks(body)
 	if len(got) != 1 || got[0].Target != "Real" {
 		t.Fatalf("inline-code link must be skipped; got %+v", got)
 	}
@@ -69,7 +69,7 @@ func TestExtractWikiLinksInlineCodeMidDocument(t *testing.T) {
 	body := "intro line\n" +
 		"- `[[Backticked]]` is a literal example\n" +
 		"- a real [[Link]] here\n"
-	got := ExtractWikiLinks(body)
+	got := ExtractLinks(body)
 	if len(got) != 1 || got[0].Target != "Link" || got[0].Line != 3 {
 		t.Fatalf("only the real link on line 3 should count; got %+v", got)
 	}
@@ -129,5 +129,16 @@ func TestExtractTodos(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("ExtractTodos mismatch:\nwant %#v\ngot  %#v", want, got)
+	}
+}
+
+func TestExtractLinksIncludesTags(t *testing.T) {
+	body := "- #a and [[B]] then #[[C]] `#d`\n```\n#e\n```\n#f\n"
+
+	got := ExtractLinks(body)
+
+	want := []LinkHit{{"a", 1}, {"B", 1}, {"C", 1}, {"f", 5}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ExtractLinks = %+v, want %+v", got, want)
 	}
 }

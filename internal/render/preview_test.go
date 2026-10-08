@@ -208,6 +208,8 @@ var previewPieces = []string{
 	"![img](x.png)", "<http://auto.link>", "https://bare.link/x",
 	"-", "- ", "foo\n-", "foo\n+ ", "+ ", "\u00a0", "\u00a0- x", "a\rb", "para\r- x",
 	"bar\n--", "x\n\n=", "\f", " \t ",
+	"- tagged #topic and #[[Two Words]] here", "#lead tag line",
+	"(#paren) C# #18 `#code` #FAF3E7 #add", "[x](#frag) and #[[A|alias]]",
 }
 
 // generatedDocs returns n seeded documents: 2-15 pieces joined by newlines, a
@@ -419,6 +421,20 @@ func TestPreviewSubstMatchesPreprocess(t *testing.T) {
 	}
 }
 
+func TestLineSentinelsCountsTags(t *testing.T) {
+	for _, tc := range []struct {
+		line       string
+		wiki, task int
+	}{
+		{"#a and #b [[c]] `#d`", 3, 0},
+		{"[x](#frag) #[[Y]]", 1, 0},
+	} {
+		if wiki, task := lineSentinels(tc.line); wiki != tc.wiki || task != tc.task {
+			t.Errorf("lineSentinels(%q) = (%d, %d), want (%d, %d)", tc.line, wiki, task, tc.wiki, tc.task)
+		}
+	}
+}
+
 // previewEdit applies one seeded edit to d and returns the first line it may
 // have changed.
 func previewEdit(rng *rand.Rand, d *previewDoc) int {
@@ -431,7 +447,7 @@ func previewEdit(rng *rand.Rand, d *previewDoc) int {
 			}
 		}
 	}
-	switch rng.IntN(7) {
+	switch rng.IntN(9) {
 	case 0:
 		d.lines[i] = line()
 	case 1:
@@ -445,6 +461,8 @@ func previewEdit(rng *rand.Rand, d *previewDoc) int {
 		}
 	case 3:
 		d.lines[i] += " [[x]]"
+	case 7:
+		d.lines[i] += " #x"
 	case 4:
 		d.lines[i] = strings.ReplaceAll(strings.ReplaceAll(d.lines[i], "[[", ""), "]]", "")
 	case 5:
@@ -455,6 +473,13 @@ func previewEdit(rng *rand.Rand, d *previewDoc) int {
 		}
 	case 6:
 		d.insert(i, "[ref]: http://example.com/ref", d.crlf[i])
+	case 8:
+		// Destroy a tag: drop its '#', or wrap the line in a code span.
+		if rng.IntN(2) == 0 {
+			d.lines[i] = strings.Replace(d.lines[i], "#", "", 1)
+		} else if strings.Contains(d.lines[i], "#") {
+			d.lines[i] = "`" + d.lines[i] + "`"
+		}
 	}
 	return min(i, d.Len()-1)
 }

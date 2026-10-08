@@ -67,7 +67,7 @@ var helpGroups = []helpGroup{
 		{"g / G", "top / bottom"},
 	}},
 	{"Links", []helpRow{
-		{"n / N", "next / previous wiki-link"},
+		{"n / N", "next / previous link or tag"},
 		{"enter", "follow link under cursor"},
 	}},
 	{"History", []helpRow{
@@ -107,6 +107,7 @@ var helpGroups = []helpGroup{
 		{"ctrl-t", "cycle TODO / DONE on the current bullet"},
 		{"ctrl-r", "live preview ↔ source"},
 		{"[[", "link completion (↑/↓, enter/tab, esc)"},
+		{"#", "tag completion after # + letter"},
 	}},
 	{"Find", []helpRow{
 		{"ctrl-f", "open find"},

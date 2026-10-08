@@ -748,3 +748,28 @@ func TestPlaceAnchor(t *testing.T) {
 		})
 	}
 }
+
+func TestPageViewTagLinks(t *testing.T) {
+	pv := NewPageView(loadFixture(t), "Corpus", 100, 40)
+
+	pv.CycleLink(+1)
+	first := pv.FollowCursor()
+	if first != "kitchen" {
+		t.Fatalf("first link = %q, want kitchen", first)
+	}
+	for range 17 {
+		pv.CycleLink(+1)
+	}
+	if got := pv.FollowCursor(); got != first {
+		t.Errorf("after 17 more cycles = %q, want %q (17 links wrap)", got, first)
+	}
+	out := plain(pv.View())
+	for _, want := range []string{"#kitchen", "#Book Club"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("view lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "#[[") {
+		t.Errorf("view shows raw bracket tag:\n%s", out)
+	}
+}

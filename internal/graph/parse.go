@@ -2,10 +2,11 @@ package graph
 
 import (
 	"regexp"
+	"sort"
 	"strings"
 )
 
-// LinkHit is one wiki-link occurrence in a page body.
+// LinkHit is one link occurrence in a page body: a wiki link or a tag.
 type LinkHit struct {
 	Target string
 	Line   int // 1-based
@@ -50,7 +51,7 @@ func parseBody(body string) (lines []string, links []LinkHit, todos []TodoHit) {
 		if fence.Step(line) {
 			continue
 		}
-		links = appendWikiLinks(links, line, i+1)
+		links = appendLinks(links, line, i+1)
 		if m := openTaskMatch(line); m != nil {
 			todos = append(todos, TodoHit{
 				Marker:   m[1],
@@ -63,37 +64,56 @@ func parseBody(body string) (lines []string, links []LinkHit, todos []TodoHit) {
 	return lines, links, todos
 }
 
-// appendWikiLinks appends every [[link]] on line (1-based lineNo) to out.
-// Targets like [[A|alias]] are recorded as "A".
-func appendWikiLinks(out []LinkHit, line string, lineNo int) []LinkHit {
-	// Fast path: a line with no "[[" can't hold a link, so skip the backtick
-	// split + regex scan that every other line would otherwise pay for.
-	if !strings.Contains(line, "[[") {
+// appendLinks appends every [[link]] and simple #tag on line (1-based lineNo)
+// to out, in byte order. Targets like [[A|alias]] are recorded as "A"; a
+// bracket tag #[[X]] is its wiki link and is counted once.
+func appendLinks(out []LinkHit, line string, lineNo int) []LinkHit {
+	// Fast path: a line with neither "[[" nor "#" holds no link or tag, so
+	// skip the backtick split + regex scan that every other line would pay for.
+	hasWiki := strings.Contains(line, "[[")
+	if !hasWiki && strings.IndexByte(line, '#') < 0 {
 		return out
 	}
-	// Scan only OUTSIDE inline-backtick code spans, matching the renderer
-	// (render.replaceWikiLinksOutsideInlineCode): split on backticks, where
-	// even-indexed segments are literal text and odd-indexed are inline code.
-	// Keeps the backlink index and the rendered links in agreement, so a
-	// `[[Foo]]` written as a literal example isn't a phantom backlink.
-	for seg, part := range strings.Split(line, "`") {
-		if seg%2 == 1 {
-			continue // inside inline code
-		}
-		for _, m := range wikiLinkRe.FindAllStringSubmatch(part, -1) {
-			raw := strings.TrimSpace(m[1])
-			if raw == "" {
-				continue
+	type hit struct {
+		at     int
+		target string
+	}
+	var hits []hit
+	if hasWiki {
+		// Scan only OUTSIDE inline-backtick code spans, matching the renderer
+		// (render.replaceLinksOutsideInlineCode): split on backticks, where
+		// even-indexed segments are literal text and odd-indexed are inline
+		// code. Keeps the backlink index and the rendered links in agreement,
+		// so a `[[Foo]]` written as a literal example isn't a phantom backlink.
+		off := 0
+		for seg, part := range strings.Split(line, "`") {
+			if seg%2 == 0 {
+				for _, m := range wikiLinkRe.FindAllStringSubmatchIndex(part, -1) {
+					raw := strings.TrimSpace(part[m[2]:m[3]])
+					if raw == "" {
+						continue
+					}
+					hits = append(hits, hit{off + m[0], raw})
+				}
 			}
-			out = append(out, LinkHit{Target: raw, Line: lineNo})
+			off += len(part) + 1
 		}
+	}
+	for _, t := range FindTags(line) {
+		if !t.Bracket {
+			hits = append(hits, hit{t.Start, t.Name})
+		}
+	}
+	sort.SliceStable(hits, func(i, j int) bool { return hits[i].at < hits[j].at })
+	for _, h := range hits {
+		out = append(out, LinkHit{Target: h.target, Line: lineNo})
 	}
 	return out
 }
 
-// ExtractWikiLinks returns every [[link]] in body, skipping fenced code blocks.
-// Targets like [[A|alias]] are recorded as "A".
-func ExtractWikiLinks(body string) []LinkHit {
+// ExtractLinks returns every [[link]] and #tag in body, skipping fenced code.
+// Targets like [[A|alias]] are recorded as "A"; #name is recorded as "name".
+func ExtractLinks(body string) []LinkHit {
 	_, links, _ := parseBody(body)
 	return links
 }
