@@ -324,6 +324,10 @@ func (e *EditorView) Update(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
 	}
 
 	key := msg.String()
+	if key == "ctrl+r" {
+		e.toggleSource()
+		return EditorResult{}, nil
+	}
 	if e.find != nil {
 		if res, handled := e.updateFind(msg); handled {
 			return res, nil
@@ -369,6 +373,19 @@ func (e *EditorView) Update(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
 	e.afterKey(e.buf.Version() != before)
 	e.findSync()
 	return EditorResult{}, cmd
+}
+
+// toggleSource switches between live preview and the source look. The cursor's
+// line stays on its screen row and nothing else about the session changes.
+func (e *EditorView) toggleSource() {
+	sr := e.cursorScreenRow()
+	e.buf.Break()
+	e.source = !e.source
+	e.goalOK = false
+	if !e.source {
+		e.shown, e.revealCur = e.revealSpans(), e.buf.Cursor()
+	}
+	e.scrollCursorTo(sr)
 }
 
 // extendKeys maps each selection chord to the movement key it extends from.
@@ -554,8 +571,12 @@ func (e *EditorView) statusLine() string {
 	if e.dirty() {
 		mark = " ●"
 	}
-	left := styleTitle.Render(e.pageName) + styleFaint.Render(" [edit]"+mark)
-	right := styleFaint.Render("^S save · ^F find · esc exit")
+	look, other := "preview", "source"
+	if e.source {
+		look, other = other, look
+	}
+	left := styleTitle.Render(e.pageName) + styleFaint.Render(" [edit · "+look+"]"+mark)
+	right := styleFaint.Render("^S save · ^F find · ^R " + other + " · esc exit")
 	if e.find != nil {
 		right = styleFaint.Render(e.find.hints())
 	}

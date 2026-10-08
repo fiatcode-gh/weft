@@ -15,33 +15,43 @@ import (
 func TestWriteSideBySide(t *testing.T) {
 	dir := os.Getenv("WEFT_SIDE_BY_SIDE")
 	if dir == "" {
-		t.Skip("set WEFT_SIDE_BY_SIDE=<dir> to write read.ans, edit.ans and side.ans")
+		t.Skip("set WEFT_SIDE_BY_SIDE=<dir> to write read.ans, edit.ans (source look), live.ans, side.ans and side-live.ans")
 	}
 	const width = 100
 	a := newApp(t, map[string]string{"pages/Doc.md": parityDoc}, width, 60)
 	a.navigate("Doc")
 	read := strings.Split(a.View().Content, "\n")
+	a.editorSource = true // source look
 	a.Update(key("e"))
 	edit := strings.Split(a.View().Content, "\n")
+	a.Update(esc)
+	a.editorSource = false
+	a.Update(key("e"))
+	live := strings.Split(a.View().Content, "\n")
 
-	var side strings.Builder
-	for i := range max(len(read), len(edit)) {
-		var r, e string
-		if i < len(read) {
-			r = read[i]
+	sideBySide := func(right []string) string {
+		var side strings.Builder
+		for i := range max(len(read), len(right)) {
+			var r, e string
+			if i < len(read) {
+				r = read[i]
+			}
+			if i < len(right) {
+				e = right[i]
+			}
+			side.WriteString(r + strings.Repeat(" ", max(0, width-ansi.StringWidth(r))) + " │ " + e + "\n")
 		}
-		if i < len(edit) {
-			e = edit[i]
-		}
-		side.WriteString(r + strings.Repeat(" ", max(0, width-ansi.StringWidth(r))) + " │ " + e + "\n")
+		return side.String()
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	for name, content := range map[string]string{
-		"read.ans": strings.Join(read, "\n") + "\n",
-		"edit.ans": strings.Join(edit, "\n") + "\n",
-		"side.ans": side.String(),
+		"read.ans":      strings.Join(read, "\n") + "\n",
+		"edit.ans":      strings.Join(edit, "\n") + "\n",
+		"live.ans":      strings.Join(live, "\n") + "\n",
+		"side.ans":      sideBySide(edit),
+		"side-live.ans": sideBySide(live),
 	} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
 			t.Fatal(err)

@@ -105,6 +105,7 @@ var helpGroups = []helpGroup{
 		{"tab / shift-tab", "indent / de-indent with children"},
 		{"alt-↑ / alt-↓", "move bullet with children"},
 		{"ctrl-t", "cycle TODO / DONE on the current bullet"},
+		{"ctrl-r", "live preview ↔ source"},
 		{"[[", "link completion (↑/↓, enter/tab, esc)"},
 	}},
 	{"Find", []helpRow{

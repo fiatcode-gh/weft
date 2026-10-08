@@ -250,7 +250,8 @@ func TestEditorPagingMoves(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			e := editorAt(nil, "P", "/tmp/p.md", tc.content, false, tc.w, tc.h, tc.anchor) // the rule row and the status line leave h-2 text rows, as in v1
+			// Source look: the expected tables count source display rows.
+			e := sourceEditorAt(nil, "P", "/tmp/p.md", tc.content, false, tc.w, tc.h, tc.anchor) // the rule row and the status line leave h-2 text rows, as in v1
 			_ = e.View()
 			for range tc.right {
 				e.Update(tea.KeyPressMsg{Code: tea.KeyRight})

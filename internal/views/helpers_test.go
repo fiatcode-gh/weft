@@ -101,13 +101,23 @@ func writeGraph(t *testing.T, files map[string]string) (string, *graph.Index) {
 
 // editorAt opens an editor the way the pre-buffer tests did: line is the
 // body line to open on, the first row of the screen (the margin row stays for
-// line 0).
+// line 0). It opens in the look the suite runs in (editorStartsInSource).
 func editorAt(idx *graph.Index, name, path, content string, isNew bool, width, height, line int) *EditorView {
+	return editorAtLook(idx, name, path, content, isNew, width, height, line, editorStartsInSource)
+}
+
+// sourceEditorAt is editorAt pinned to the source look, for tests that assert
+// what the non-cursor rows look like.
+func sourceEditorAt(idx *graph.Index, name, path, content string, isNew bool, width, height, line int) *EditorView {
+	return editorAtLook(idx, name, path, content, isNew, width, height, line, true)
+}
+
+func editorAtLook(idx *graph.Index, name, path, content string, isNew bool, width, height, line int, source bool) *EditorView {
 	sr := 0
 	if line <= 0 {
 		sr = 1
 	}
-	return NewEditorView(idx, name, path, content, isNew, width, height, Anchor{Line: line, ScreenRow: sr}, nil, true)
+	return NewEditorView(idx, name, path, content, isNew, width, height, Anchor{Line: line, ScreenRow: sr}, nil, source)
 }
 
 // setText replaces the whole buffer and leaves the cursor at its end.

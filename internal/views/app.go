@@ -62,6 +62,10 @@ const hintTTL = 3 * time.Second
 // hint or keystroke has superseded the one that scheduled this tick.
 type hintExpireMsg struct{ gen int }
 
+// editorStartsInSource is the editor's look when weft starts: false is live
+// preview. Tests set it to run the suite in source mode.
+var editorStartsInSource bool
+
 type App struct {
 	graphPath string
 
@@ -74,6 +78,10 @@ type App struct {
 	editor *EditorView
 	// clip is the copy register the editor shares across sessions.
 	clip register
+	// editorSource is the editor's look, false for live preview. It outlives
+	// editor sessions, so Ctrl+R lasts until weft quits; it is never written
+	// to disk.
+	editorSource bool
 
 	// active is the overlay layered over the page, or nil when the page has
 	// focus. Set when an open-overlay key is pressed; cleared by terminal outcomes.
@@ -151,10 +159,11 @@ type historyEntry struct {
 // instead of freezing the terminal while a large graph is walked.
 func New(graphPath, version string) *App {
 	a := &App{
-		graphPath: graphPath,
-		histIdx:   -1,
-		version:   version,
-		nowFunc:   time.Now,
+		graphPath:    graphPath,
+		histIdx:      -1,
+		version:      version,
+		nowFunc:      time.Now,
+		editorSource: editorStartsInSource,
 	}
 	a.syncFunc = func(repoDir string) syncpkg.Result {
 		return syncpkg.Run(repoDir, a.nowFunc())
@@ -450,7 +459,7 @@ func (a *App) enterEditor() tea.Cmd {
 		at = Anchor{0, 0, 1}
 	}
 	at.Line += leadingTrimmedLines(content)
-	a.editor = NewEditorView(a.idx, name, path, content, isNew, a.width, a.height, at, &a.clip, true)
+	a.editor = NewEditorView(a.idx, name, path, content, isNew, a.width, a.height, at, &a.clip, a.editorSource)
 	return nil
 }
 
@@ -705,6 +714,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if res.Exit {
 				saved := a.editor.saved
 				at, place, keep := a.exitPlacement(saved)
+				a.editorSource = a.editor.source
 				a.editor = nil
 				switch {
 				case saved:

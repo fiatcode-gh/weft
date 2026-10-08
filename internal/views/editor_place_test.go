@@ -16,7 +16,7 @@ func TestEditorReplaceKeepsCursorScreenRow(t *testing.T) {
 		fmt.Fprintf(&b, "- line %d\n", i)
 	}
 	content := b.String()
-	e := NewEditorView(nil, "P", "/tmp/p.md", content, false, 40, 10, Anchor{Line: 150, ScreenRow: 4}, nil, true)
+	e := NewEditorView(nil, "P", "/tmp/p.md", content, false, 40, 10, Anchor{Line: 150, ScreenRow: 4}, nil, editorStartsInSource)
 	rows := strings.Split(plain(e.View()), "\n")
 	if got := strings.TrimSpace(rows[4]); got != "- line 150" {
 		t.Fatalf("setup: row 4 = %q, want %q", got, "- line 150")
