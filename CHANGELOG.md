@@ -14,10 +14,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Saving keeps the file's final-newline state instead of always ending with one. Migration: add or remove the last newline yourself.
 - `Ctrl+F` opens find in the editor. Migration: use `→` to move right.
 - `Ctrl+V` pastes what was copied inside weft, not the system clipboard. Migration: use the terminal's paste (`Ctrl+Shift+V` or similar) for the system clipboard.
+- The editor opens in live preview instead of showing raw source. Migration: press `Ctrl+R` for the source look; the choice lasts until weft quits.
 - Under `NO_COLOR` every screen now shows bold, italic, underline, strikethrough, faint and reverse video; only colour is dropped. Migration: use `TERM=dumb` for fully unstyled output.
 
 ### Added
 
+- Live preview in the in-app editor: the page is drawn as the read view draws it, with the line or block under the cursor shown as source. `Ctrl+R` switches to the source look and back; the status line shows `[edit · preview]` or `[edit · source]`. Find highlights matches on the rendered rows. Movement is by source line, and `PgDn` at the end of the buffer lands on the last line that has a display row.
 - Undo and redo in the in-app editor (`Ctrl+Z`, `Ctrl+Y`).
 - Selection with `Shift` plus the arrow, `Home`/`End`, `PgUp`/`PgDn` and word-move keys, and `Ctrl+A` for select all.
 - Copy, cut and paste (`Ctrl+C`, `Ctrl+X`, `Ctrl+V`); copies also reach the system clipboard through OSC 52. With nothing selected they act on the whole line.
