@@ -7,6 +7,8 @@ import (
 	"strings"
 	"unicode"
 
+	"charm.land/glamour/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/yuin/goldmark/ast"
 	gtext "github.com/yuin/goldmark/text"
 )
@@ -42,9 +44,17 @@ type PreviewStats struct{ Chunks, Lines int }
 type chunkSpan struct{ from, to int }
 
 // chunkRender is a rendered chunk: its own rows, or the reason it has none.
+// lines and own map each row to a line relative to the chunk's first line (see
+// sourceRows); share holds the relative line intervals that share a rendered
+// row; diverged marks a chunk whose row map is missing or unreliable.
 type chunkRender struct {
-	rows []string
-	err  error
+	rows     []string
+	err      error
+	lines    []int
+	own      []bool
+	share    [][2]int
+	diverged bool
+	attr     *chunkAttr // built on first use by attribution
 }
 
 // chunkFacts is what the sandwich needs to know about a chunk's own markdown.
@@ -96,12 +106,13 @@ type refEntry struct {
 
 // Preview: see the package comment above.
 type Preview struct {
-	theme Theme
-	width int
-	head  int   // rows above the first row of a document
-	tail  int   // rows below the last row of a document
-	err   error // head and tail could not be measured
-	stats PreviewStats
+	theme    Theme
+	width    int
+	head     int // rows above the first row of a document
+	headRows []string
+	tail     int   // rows below the last row of a document
+	err      error // head and tail could not be measured
+	stats    PreviewStats
 
 	version int
 
@@ -117,6 +128,9 @@ type Preview struct {
 	cand             []int // lines that may hold a link reference definition
 	candScanned      int
 
+	memo   map[int]memoEntry // rendered chunks by first line, valid when memoAt == version
+	memoAt int
+
 	facts   genCache[*chunkFacts]
 	renders genCache[*chunkRender]
 }
@@ -125,21 +139,22 @@ type Preview struct {
 // stub to learn how many rows Glamour puts above and below a document.
 func NewPreview(t Theme, width int) *Preview {
 	p := &Preview{theme: t, width: width, cum: []idBase{{}}, lastAt: -1, fcAt: -1, refsAt: -1}
-	p.head, p.tail, p.err = p.measure()
+	p.headRows, p.tail, p.err = p.measure()
+	p.head = len(p.headRows)
 	return p
 }
 
-func (p *Preview) measure() (head, tail int, err error) {
+func (p *Preview) measure() (headRows []string, tail int, err error) {
 	rows, err := p.renderRows(stubOpen+"\n", idBase{})
 	if err != nil {
-		return 0, 0, err
+		return nil, 0, err
 	}
 	for i, row := range rows {
 		if strings.Contains(row, stubOpen) {
-			return i, len(rows) - 1 - i, nil
+			return rows[:i], len(rows) - 1 - i, nil
 		}
 	}
-	return 0, 0, errStubMissing
+	return nil, 0, errStubMissing
 }
 
 // Head is the number of rows above the first row of a document: the read
@@ -360,19 +375,33 @@ type errorString string
 
 func (e errorString) Error() string { return string(e) }
 
-// renderRows runs the read view's pipeline over body and returns the rows of
-// the styled result.
-func (p *Preview) renderRows(body string, base idBase) ([]string, error) {
+// pipeline is what one run of the read view's pipeline over a body leaves:
+// the finished rows, and the pieces the row map needs.
+type pipeline struct {
+	rows   []string
+	f      frontend
+	r      *glamour.TermRenderer
+	styled string
+}
+
+func (p *Preview) pipeline(body string, base idBase) (pipeline, error) {
 	f := preprocess(body, "", base)
 	r, err := rendererFor(p.width)
 	if err != nil {
-		return nil, err
+		return pipeline{}, err
 	}
 	styled, err := glamourRender(r, f.pre)
 	if err != nil {
-		return nil, err
+		return pipeline{}, err
 	}
-	return strings.Split(finish(styled, f, p.theme, nil).Styled, "\n"), nil
+	return pipeline{rows: strings.Split(finish(styled, f, p.theme, nil).Styled, "\n"), f: f, r: r, styled: styled}, nil
+}
+
+// renderRows runs the read view's pipeline over body and returns the rows of
+// the styled result.
+func (p *Preview) renderRows(body string, base idBase) ([]string, error) {
+	pl, err := p.pipeline(body, base)
+	return pl.rows, err
 }
 
 // sandwich is what surrounds a chunk's text to recreate its context.
@@ -429,6 +458,81 @@ func (p *Preview) sandwichOf(src PreviewLines, sc *Scanner, c chunkSpan, first, 
 	return s
 }
 
+// cut returns the rows of a render of the sandwiched chunk that belong to the
+// chunk: between the rows the stubs land on, or the head and tail rows.
+func (p *Preview) cut(rows []string, s sandwich, lastChunk bool) (start, end int, err error) {
+	start, end = p.head, len(rows)-p.tail
+	if s.prefix != "" {
+		if start = rowWith(rows, stubOpen, false) + 1; start == 0 {
+			return 0, 0, errStubMissing
+		}
+	}
+	switch {
+	case s.suffix != "":
+		if end = rowWith(rows, stubClose, true); end < 0 {
+			return 0, 0, errStubMissing
+		}
+	case lastChunk:
+		end = len(rows)
+	}
+	start = min(start, len(rows))
+	return start, max(start, end), nil
+}
+
+// chunkRowMap is the read view's row map; a variable so tests can disturb it.
+var chunkRowMap = sourceRowsDetail
+
+// mapRows fills cr's row map from the pipeline of the sandwiched chunk c, whose
+// own rows are pl.rows[start:end].
+func (p *Preview) mapRows(cr *chunkRender, src PreviewLines, c chunkSpan, s sandwich, pl pipeline, start, end int, lastChunk bool) {
+	nt := c.to - c.from
+	only, n := 0, 0
+	for k := c.from; k < c.to && n < 2; k++ {
+		if strings.TrimSpace(src.Line(k)) != "" {
+			only, n = k-c.from, n+1
+		}
+	}
+	if n == 1 {
+		cr.lines = make([]int, len(cr.rows))
+		cr.own = make([]bool, len(cr.rows))
+		for k, row := range cr.rows {
+			cr.lines[k], cr.own[k] = only, strings.TrimSpace(ansi.Strip(row)) != ""
+		}
+		return
+	}
+
+	// Each line of pre sits in the sandwiched body: the prefix and the
+	// definitions above the chunk belong to its first line, the suffix and the
+	// definitions below it to its last.
+	np := strings.Count(s.prefix, "\n")
+	rel := make([]int, len(pl.f.src))
+	for j, b := range pl.f.src {
+		switch {
+		case b < np:
+			rel[j] = 0
+		case b < np+nt:
+			rel[j] = b - np
+		default:
+			rel[j] = nt - 1
+		}
+	}
+	m := chunkRowMap(pl.r, pl.styled, pl.f.pre, rel)
+	if m.lines == nil || len(m.lines) != len(pl.rows) {
+		cr.diverged = true
+		return
+	}
+	cr.lines, cr.own, cr.diverged = m.lines[start:end], m.own[start:end], m.diverged
+	if m.diverged {
+		return
+	}
+	ts, te, err := p.cut(m.tagged, s, lastChunk)
+	if err != nil || te-ts != end-start {
+		cr.diverged = true
+		return
+	}
+	cr.share = rowTagSpans(m.tagged[ts:te], nt-1)
+}
+
 // render renders chunk c in its sandwich and returns its own rows. A failure is
 // returned, not cached.
 func (p *Preview) render(src PreviewLines, sc *Scanner, c chunkSpan) *chunkRender {
@@ -441,31 +545,24 @@ func (p *Preview) render(src PreviewLines, sc *Scanner, c chunkSpan) *chunkRende
 	s := p.sandwichOf(src, sc, c, first, last, p.factsOf(text))
 	body := s.prefix + text + s.suffix + s.refsAfter
 
-	// The document's last chunk keeps the rows below its text, so it is cached apart.
-	key := strconv.Itoa(base.wiki) + "," + strconv.Itoa(base.task) + "," + strconv.FormatBool(c.to == last+1) + "\x00" + body
+	// The document's last chunk keeps the rows below its text, so it is cached
+	// apart. The row map is relative to the chunk, so its length is part of
+	// what it depends on.
+	lastChunk := c.to == last+1
+	key := strconv.Itoa(base.wiki) + "," + strconv.Itoa(base.task) + "," + strconv.FormatBool(lastChunk) + "," + strconv.Itoa(c.to-c.from) + "\x00" + body
 	if r, ok := p.renders.get(key); ok {
 		return r
 	}
-	rows, err := p.renderRows(body, base)
+	pl, err := p.pipeline(body, base)
 	if err != nil {
 		return &chunkRender{err: err}
 	}
-	start, end := p.head, len(rows)-p.tail
-	if s.prefix != "" {
-		if start = rowWith(rows, stubOpen, false) + 1; start == 0 {
-			return &chunkRender{err: errStubMissing}
-		}
+	start, end, err := p.cut(pl.rows, s, lastChunk)
+	if err != nil {
+		return &chunkRender{err: err}
 	}
-	switch {
-	case s.suffix != "":
-		if end = rowWith(rows, stubClose, true); end < 0 {
-			return &chunkRender{err: errStubMissing}
-		}
-	case c.to == last+1:
-		end = len(rows)
-	}
-	start = min(start, len(rows))
-	r := &chunkRender{rows: rows[start:max(start, end)]}
+	r := &chunkRender{rows: pl.rows[start:end]}
+	p.mapRows(r, src, c, s, pl, start, end, lastChunk)
 	p.stats.Chunks++
 	p.stats.Lines += c.to - c.from
 	p.renders.put(key, r)

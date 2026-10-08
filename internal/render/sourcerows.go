@@ -194,26 +194,57 @@ func SourceRows(body string, width int, emphasis string) (lines []int, own []boo
 		}
 		return f.src, own
 	}
-	return sourceRows(r, styled, f.pre, f.src)
+	m := sourceRowsDetail(r, styled, f.pre, f.src)
+	return m.lines, m.own
 }
 
-// sourceRows renders the tagged copy of pre with r and maps every row of
-// styled (raw Glamour output for pre) to a body line. Nil when
+// rowMap is sourceRows' result plus what the live preview needs: the tagged
+// rows and whether the real and tagged renders diverged. lines and own are nil
+// when no map could be produced.
+type rowMap struct {
+	lines    []int
+	own      []bool
+	tagged   []string
+	diverged bool
+}
+
+// sourceRowsDetail renders the tagged copy of pre with r and maps every row of
+// styled (raw Glamour output for pre) to a body line. The map is empty when
 // strings.Count(pre, "\n")+1 != len(src) (defensive: a future preprocessing
 // pass that changed line count must degrade, not panic) or when the tagged
 // render fails.
-func sourceRows(r *glamour.TermRenderer, styled, pre string, src []int) (lines []int, own []bool) {
+func sourceRowsDetail(r *glamour.TermRenderer, styled, pre string, src []int) rowMap {
 	if strings.Count(pre, "\n")+1 != len(src) {
-		return nil, nil
+		return rowMap{}
 	}
 	tagSrc, loose := tagSourceLines(pre, src)
 	tagged, err := glamourRender(r, tagSrc)
 	if err != nil {
-		return nil, nil
+		return rowMap{}
 	}
 	taggedRows := strings.Split(tagged, "\n")
 	taggedLines, taggedOwn := taggedRowLines(taggedRows, src[len(src)-1], loose)
-	return alignRows(strings.Split(styled, "\n"), taggedRows, taggedLines, taggedOwn)
+	lines, own, diverged := alignRows(strings.Split(styled, "\n"), taggedRows, taggedLines, taggedOwn)
+	return rowMap{lines: lines, own: own, tagged: taggedRows, diverged: diverged}
+}
+
+// rowTagSpans lists, for every tagged row whose tags (values up to maxLine)
+// name two or more lines, the interval [lowest, highest] of those lines: the
+// lines that share that rendered row.
+func rowTagSpans(rows []string, maxLine int) [][2]int {
+	var spans [][2]int
+	for _, row := range rows {
+		lo, hi := math.MaxInt, -1
+		for _, m := range rowTagRe.FindAllStringSubmatch(row, -1) {
+			if n := decodeRowTag(m[1]); n <= maxLine {
+				lo, hi = min(lo, n), max(hi, n)
+			}
+		}
+		if hi > lo {
+			spans = append(spans, [2]int{lo, hi})
+		}
+	}
+	return spans
 }
 
 // isTextRune is what a row tag can follow: a letter, a number or a sentinel.
@@ -290,8 +321,9 @@ func taggedRowLines(rows []string, maxLine int, loose []int) (lines []int, own [
 // alignRows maps real rows through tagged rows: common prefix p and suffix s
 // by ansi.Strip equality (p+s <= min(len(real), len(tagged))); unmatched
 // middle rows take lines[min(p, len(lines)-1)] and count as their own.
-// len(result) == len(real).
-func alignRows(real, tagged []string, lines []int, own []bool) (outLines []int, outOwn []bool) {
+// len(result) == len(real). diverged reports a non-empty unmatched middle
+// (p+s < len(real)).
+func alignRows(real, tagged []string, lines []int, own []bool) (outLines []int, outOwn []bool, diverged bool) {
 	realPlain := make([]string, len(real))
 	for i, row := range real {
 		realPlain[i] = ansi.Strip(row)
@@ -323,5 +355,5 @@ func alignRows(real, tagged []string, lines []int, own []bool) (outLines []int, 
 			outLines[i], outOwn[i] = middle, true
 		}
 	}
-	return outLines, outOwn
+	return outLines, outOwn, p+s < len(real)
 }
