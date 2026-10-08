@@ -71,3 +71,51 @@ func TestLiveRevealsWrappedJoinedUnits(t *testing.T) {
 		}
 	}
 }
+
+// The text of the resmoke's Lazy and Lazy2 pages. At width 100 the read view
+// wraps the first (with a period) in two stages, so the rows 'lazy' and
+// 'third' stand alone without the quote's bar and no row holds the end of one
+// line and the start of the next. In the second the quote's last line starts on
+// the row that ends the lazy line.
+var lazyOrphanPages = map[string][3]string{
+	"lazy period": {
+		"> lazy one quote first line has words and padding words to make it long enough to wrap here.",
+		"lazy continuation line zzfindlazy of the quote with more padding words to wrap here too.",
+		"> quote third line closes the quote here."},
+	"lazy no period": {
+		"> lazy one quote first line has words and padding words to make it long enough to wrap here",
+		"lazy continuation line zzfindlazy of the quote with more padding words to wrap here too",
+		"> quote third line closes the quote here"},
+}
+
+// A lazy quote whose rendered form has orphan rows is revealed whole, from any
+// of its lines and from a find jump: no rendered row of it stays on screen.
+func TestLiveRevealsLazyQuoteWithOrphanRows(t *testing.T) {
+	skipInSourceRun(t)
+	quietTerm(t)
+	for name, lines := range lazyOrphanPages {
+		t.Run(name, func(t *testing.T) {
+			page := strings.Join(lines[:], "\n") + "\n\nafter lazy\n"
+			want := slices.Concat(lines[:], []string{"after lazy"})
+			e := liveEditor(page, 100, 40)
+			goTo(e, 4)
+			if rendered := shownText(e); slices.Contains(rendered, lines[0]) || (name == "lazy period" && !slices.Contains(rendered, "lazy")) {
+				t.Fatalf("setup: the quote is not rendered, or has no orphan 'lazy' row at this width:\n%s", strings.Join(plainFrame(e), "\n"))
+			}
+			for l := range lines {
+				goTo(e, l)
+				if got := shownText(e); !slices.Equal(got, want) {
+					t.Errorf("cursor on line %d:\n got %q\nwant %q", l, got, want)
+				}
+			}
+			goTo(e, 4)
+			openFind(e, "zzfindlazy")
+			if got := e.buf.Cursor().Line; got != 1 {
+				t.Fatalf("find jumped to line %d, want 1", got)
+			}
+			if got := shownText(e); !slices.Equal(got, want) {
+				t.Errorf("find jump into the quote:\n got %q\nwant %q", got, want)
+			}
+		})
+	}
+}

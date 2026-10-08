@@ -249,10 +249,11 @@ func unpaired(run []string, z []int) []string {
 }
 
 // Unit returns the lines [from, to) that are revealed together with line i:
-// the lines of a table, a fence, a quote or a hidden block, a setext heading
-// with its underline, and lines that share a rendered row, merged
-// transitively. A line outside the trimmed document or in a chunk that failed
-// to render is its own unit; a chunk whose row map is unusable is one unit.
+// the lines of a table, a fence, a quote with its lazy continuation lines or a
+// hidden block, a setext heading with its underline, and lines that share a
+// rendered row, merged transitively. A line outside the trimmed document or in
+// a chunk that failed to render is its own unit; a chunk whose row map is
+// unusable is one unit.
 func (p *Preview) Unit(src PreviewLines, sc *Scanner, i int) (from, to int) {
 	c, ok := p.chunkAt(src, sc, i)
 	if !ok {
@@ -274,11 +275,19 @@ func (p *Preview) Unit(src PreviewLines, sc *Scanner, i int) (from, to int) {
 			iv = append(iv, [2]int{runStart, k - 1})
 		}
 	}
+	lazy := false // the quote's last line ends in paragraph text, so a plain text line below continues it
 	for k := c.from; k < c.to; k++ {
 		info := sc.Info(src, k)
-		if info.Kind != runKind || (info.Kind != KindTable && info.Kind != KindQuote && info.Kind != KindHidden) {
+		line := src.Line(k)
+		continues := runKind == KindQuote && lazy && info.Kind == KindText && !info.InList && paraLike(line)
+		if !continues && (info.Kind != runKind || (info.Kind != KindTable && info.Kind != KindQuote && info.Kind != KindHidden)) {
 			endRun(k)
 			runStart, runKind = k, info.Kind
+		}
+		if info.Kind == KindQuote {
+			lazy = quoteEndsInText(line)
+		} else if !continues {
+			lazy = false
 		}
 		switch info.Kind {
 		case KindFence, KindCode:
@@ -304,4 +313,13 @@ func (p *Preview) Unit(src PreviewLines, sc *Scanner, i int) (from, to int) {
 		}
 	}
 	return i, i + 1
+}
+
+// quoteEndsInText reports whether the quote line ends in plain paragraph text,
+// which a following line without '>' continues (a lazy continuation line): its
+// content after the marker is not blank, not indented code and not the start
+// of another block.
+func quoteEndsInText(line string) bool {
+	content := line[len(quoteRe.FindString(line)):]
+	return strings.TrimSpace(content) != "" && !strings.HasPrefix(content, "    ") && !strings.HasPrefix(content, "\t") && paraLike(content)
 }

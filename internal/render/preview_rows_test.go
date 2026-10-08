@@ -170,6 +170,16 @@ func TestPreviewUnits(t *testing.T) {
 			[][2]int{{0, 1}, {1, 2}, {2, 3}, {3, 4}}, []int{0, 1, 2, 3}},
 		{"image whose url words are the next line's first words", "![x](a.png)\n> a png", 100,
 			[][2]int{{0, 1}, {1, 2}}, []int{0, 1}},
+		{"lazy quote with orphan rows", "> lazy one quote first line has words and padding words to make it long enough to wrap here.\n" +
+			"lazy continuation line zzfindlazy of the quote with more padding words to wrap here too.\n" +
+			"> quote third line closes the quote here.\n\nafter lazy", 100,
+			[][2]int{{0, 3}, {0, 3}, {0, 3}, {3, 4}, {4, 5}}, []int{0, 1, 2, 3, 4}},
+		{"lazy quote, two lazy lines", "> quote one\nlazy two\nlazy three\n\nx", 40,
+			[][2]int{{0, 3}, {0, 3}, {0, 3}, {3, 4}}, []int{0, 1, 2, 3}},
+		{"text after a quote heading is not lazy", "> # Head\ntext\n\nx", 40,
+			[][2]int{{0, 1}, {1, 2}, {2, 3}}, []int{0, 1, 2}},
+		{"list item after a quote is not lazy", "> quote\n- item\n\nx", 40,
+			[][2]int{{0, 1}, {1, 2}, {2, 3}}, []int{0, 1, 2}},
 		{"list item continuation", "- item\n  cont\n- next", 40, [][2]int{{0, 1}, {1, 2}, {2, 3}}, []int{0, 1, 2}},
 		{"wrapped bullet", "- " + strings.Repeat("wrap me ", 8) + "\n- next", 30, [][2]int{{0, 1}, {1, 2}}, []int{0, 1}},
 		{"blank line", "a\n\nb", 40, [][2]int{{0, 1}, {1, 2}, {2, 3}}, []int{0, 1, 2}},
