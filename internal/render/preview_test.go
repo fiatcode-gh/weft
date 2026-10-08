@@ -257,8 +257,11 @@ func runPreviewDifferential(t *testing.T) {
 			compared++
 		}
 	}
-	for i, doc := range generatedDocs(2000) {
-		if checkPreviewMatchesRender(t, doc, previewWidths[i%len(previewWidths)]) {
+	// Every sampleStride-th generated document: the fixed-seed corpus stays
+	// the same, every case kind recurs, and only the count shrinks.
+	generated := generatedDocs(2000)
+	for i := 0; i < len(generated); i += sampleStride {
+		if checkPreviewMatchesRender(t, generated[i], previewWidths[i%len(previewWidths)]) {
 			compared++
 		}
 		if t.Failed() {
@@ -457,8 +460,9 @@ func previewEdit(rng *rand.Rand, d *previewDoc) int {
 
 func TestPreviewInvalidateMatchesFresh(t *testing.T) {
 	rng := rand.New(rand.NewPCG(11, 13))
-	for n, raw := range generatedDocs(50) {
-		d := newPreviewDoc(raw)
+	docs := generatedDocs(50)
+	for n := 0; n < len(docs); n += invalidateStride {
+		d := newPreviewDoc(docs[n])
 		sc, p := NewScanner(), NewPreview(mustTheme(t), 60)
 		previewChunkRows(t, d, sc, p)
 		for e := range 20 {

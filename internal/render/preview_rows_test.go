@@ -103,8 +103,9 @@ func runRowsPartition(t *testing.T) {
 			t.Fatalf("stopping at fixture %s", name)
 		}
 	}
-	for i, doc := range generatedDocs(rowsDocCount) {
-		fallbacks += checkRowsPartition(t, doc, previewWidths[i%len(previewWidths)])
+	generated := generatedDocs(rowsDocCount)
+	for i := 0; i < len(generated); i += sampleStride {
+		fallbacks += checkRowsPartition(t, generated[i], previewWidths[i%len(previewWidths)])
 		chunks++
 		if t.Failed() {
 			t.Fatalf("stopping at generated document %d", i)

@@ -20,9 +20,16 @@ func TestMain(m *testing.M) {
 // TestSuiteInSourceMode re-runs every other test of the package with the
 // editor opening in source mode, so each behaviour test proves both looks:
 // the parent run is live preview, the child is the unit 3 source look.
+//
+// Under the race detector the child costs as much again as the parent (about a
+// minute), so it is skipped there; CI's plain `go test ./...` step runs it, and
+// the race run's own purpose, data races, is served by the live-preview run.
 func TestSuiteInSourceMode(t *testing.T) {
 	if testing.Short() {
 		t.Skip("short mode")
+	}
+	if raceDetector {
+		t.Skip("the race run covers live preview; the plain run covers source mode")
 	}
 	if os.Getenv(sourceModeEnv) != "" {
 		t.Skip("already the source-mode run")

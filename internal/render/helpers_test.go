@@ -17,6 +17,8 @@ func inFreshProcess(t *testing.T, env map[string]string) bool {
 	if os.Getenv("WEFT_TEST_CHILD") == t.Name() {
 		return true
 	}
+	// The parent only waits for its child, so the three looks run side by side.
+	t.Parallel()
 	args := []string{"-test.run=^" + t.Name() + "$"}
 	if f := flag.Lookup("update"); f != nil && f.Value.String() == "true" {
 		args = append(args, "-update")

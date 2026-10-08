@@ -451,15 +451,27 @@ func TestLiveCursorClampsAtTopMargin(t *testing.T) {
 	}
 }
 
+// The editors here are built live explicitly, so the source-mode run would
+// repeat the default run's work. Under the race detector every screen row is
+// too slow for the whole page: a third of them, seeded per line, still pins
+// each line, row and both ends.
 func TestLivePlaceAndExitAnchor(t *testing.T) {
+	skipInSourceRun(t)
 	quietTerm(t)
 	const h = 9
 	page := liveTokenPage() + "- " + strings.Repeat("wrapping words ", 8) + "\n"
 	probe := NewEditorView(nil, "P", "/tmp/p.md", page, false, 40, h+2, Anchor{ScreenRow: 1}, nil, false)
 	for l := range probe.buf.Len() {
 		rows := len(probe.line(l).rows)
+		srs := make([]int, h)
+		for sr := range srs {
+			srs[sr] = sr
+		}
+		if raceDetector {
+			srs = sampleRange(h-1, uint64(l), 3)
+		}
 		for _, k := range []int{0, rows - 1, rows + 3} {
-			for sr := range h {
+			for _, sr := range srs {
 				at := Anchor{Line: l, RowInLine: k, ScreenRow: sr}
 				e := NewEditorView(nil, "P", "/tmp/p.md", page, false, 40, h+2, at, nil, false)
 				want := Anchor{Line: l, RowInLine: min(k, rows-1), ScreenRow: sr}
@@ -472,6 +484,33 @@ func TestLivePlaceAndExitAnchor(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// D6: a page down walks display rows, and the trailing empty line of a file
+// that ends in a newline has none while the cursor is elsewhere, so PgDn at
+// the end of the buffer stops on the last line that does. Down is by source
+// line and still reaches the empty line.
+func TestLivePgDownStopsOnLastDrawnLine(t *testing.T) {
+	skipInSourceRun(t)
+	quietTerm(t)
+	e := liveEditor("alpha BeTa gamma\nsecond line\n- item\n", 40, 10)
+	if e.buf.Len() != 4 {
+		t.Fatalf("setup: %d lines, want 3 and the empty one after the final newline", e.buf.Len())
+	}
+	setCursor(e, 0, 3)
+	e.syncReveal()
+	tap(e, tea.KeyPgDown)
+	if l, _ := cursorRowCol(e); l != 2 {
+		t.Fatalf("PgDn from line 0 left the cursor on line %d, want 2, the last line with a display row", l)
+	}
+	tap(e, tea.KeyPgDown)
+	if l, _ := cursorRowCol(e); l != 2 {
+		t.Errorf("PgDn at the end moved the cursor to line %d, want it to stay on line 2", l)
+	}
+	tap(e, tea.KeyDown)
+	if l, c := cursorRowCol(e); l != 3 || c != 0 {
+		t.Errorf("Down from line 2 = (%d,%d), want the trailing empty line (3,0)", l, c)
 	}
 }
 

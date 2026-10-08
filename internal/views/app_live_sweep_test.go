@@ -30,18 +30,21 @@ func sameCells(a, b []uv.Cell) bool {
 	return true
 }
 
-// liveReadSweep: at every scroll offset of the read view, e opens live preview
-// and every text row above the cursor unit and below it is the read view's
-// row, cell for cell, as far as the window shows.
+// liveReadSweep: at sampled scroll offsets of the read view (all of them
+// would cost minutes under the race detector; see sweepOffsets), e opens live
+// preview and every text row above the cursor unit and below it is the read
+// view's row, cell for cell, as far as the window shows.
 func liveReadSweep(t *testing.T) {
 	compared := 0
-	for name, page := range map[string]string{"rowless": rowlessPage(), "round trip": roundTripPage()} {
+	pages := []struct{ name, text string }{{"rowless", rowlessPage()}, {"round trip", roundTripPage()}}
+	for p, page := range pages {
 		for _, width := range []int{40, 80} {
-			t.Run(fmt.Sprintf("%s width %d", name, width), func(t *testing.T) {
-				a := newApp(t, map[string]string{"pages/Doc.md": page}, width, 20)
+			t.Run(fmt.Sprintf("%s width %d", page.name, width), func(t *testing.T) {
+				a := newApp(t, map[string]string{"pages/Doc.md": page.text}, width, 20)
 				a.navigate("Doc")
-				tally := tallyRows(page, width)
-				for off := 0; off < 400; off++ {
+				tally := tallyRows(page.text, width)
+				last := -1
+				for off := range 400 {
 					a.page.Restore(off, -1)
 					if a.page.Offset() != off {
 						if off == 0 {
@@ -49,6 +52,10 @@ func liveReadSweep(t *testing.T) {
 						}
 						break
 					}
+					last = off
+				}
+				for _, off := range sweepOffsets(last, uint64(p*100+width)) {
+					a.page.Restore(off, -1)
 					read := frameCells(a.View().Content, width, colorprofile.TrueColor)
 					a.Update(key("e"))
 					e := a.editor
