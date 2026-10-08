@@ -13,33 +13,67 @@ import (
 // Unicode simple folding; otherwise case must match (ripgrep --smart-case, as `/` search).
 // An empty query, or one containing "\n", returns nil.
 func (b *Buffer) Find(query string) []Range {
-	if query == "" || strings.Contains(query, "\n") {
+	m, ok := newMatcher(query)
+	if !ok {
 		return nil
 	}
-	exact := strings.IndexFunc(query, unicode.IsUpper) >= 0
-	var qr []rune
-	if !exact {
-		qr = []rune(query)
-	}
 	var out []Range
-	for i, line := range b.lines {
-		if exact {
-			out = findExact(out, i, line, query)
-		} else {
-			out = findFold(out, i, line, qr)
+	var line [][2]int // one line's matches, reused
+	for i, text := range b.lines {
+		line = m.appendIn(line[:0], text)
+		for _, r := range line {
+			out = append(out, Range{Pos{i, r[0]}, Pos{i, r[1]}})
 		}
 	}
 	return out
 }
 
-func findExact(out []Range, ln int, line, query string) []Range {
+// MatchIn returns the byte ranges of the non-overlapping matches of query in s under
+// Find's rules (smart case, simple folding, matches start at grapheme boundaries). An
+// empty query, or one containing "\n", returns nil.
+func MatchIn(s, query string) [][2]int {
+	m, ok := newMatcher(query)
+	if !ok {
+		return nil
+	}
+	return m.appendIn(nil, s)
+}
+
+// matcher is a query prepared once for many lines: smart case decides between
+// exact bytes and rune-wise folding.
+type matcher struct {
+	query string
+	fold  []rune // the query's runes when it ignores case, else nil
+}
+
+// newMatcher prepares query; false for a query that matches nothing (empty, or
+// containing "\n").
+func newMatcher(query string) (matcher, bool) {
+	if query == "" || strings.Contains(query, "\n") {
+		return matcher{}, false
+	}
+	if strings.IndexFunc(query, unicode.IsUpper) >= 0 {
+		return matcher{query: query}, true
+	}
+	return matcher{query: query, fold: []rune(query)}, true
+}
+
+// appendIn appends the byte ranges of the matches in s to out.
+func (m matcher) appendIn(out [][2]int, s string) [][2]int {
+	if m.fold == nil {
+		return findExact(out, s, m.query)
+	}
+	return findFold(out, s, m.fold)
+}
+
+func findExact(out [][2]int, line, query string) [][2]int {
 	for from := 0; from <= len(line)-len(query); {
 		j := strings.Index(line[from:], query)
 		if j < 0 {
 			break
 		}
 		s := from + j
-		out = append(out, Range{Pos{ln, s}, Pos{ln, s + len(query)}})
+		out = append(out, [2]int{s, s + len(query)})
 		from = s + len(query)
 	}
 	return out
@@ -47,7 +81,7 @@ func findExact(out []Range, ln int, line, query string) []Range {
 
 // findFold matches qr rune by rune under simple folding, starting only at grapheme
 // boundaries; offsets are bytes of line itself.
-func findFold(out []Range, ln int, line string, qr []rune) []Range {
+func findFold(out [][2]int, line string, qr []rune) [][2]int {
 	ascii := true
 	for i := 0; i < len(line); i++ {
 		if line[i] >= utf8.RuneSelf {
@@ -67,7 +101,7 @@ func findFold(out []Range, ln int, line string, qr []rune) []Range {
 	}
 	for i := 0; i < len(line); {
 		if end, ok := foldMatchAt(line, i, qr); ok {
-			out = append(out, Range{Pos{ln, i}, Pos{ln, end}})
+			out = append(out, [2]int{i, end})
 			i = end
 			continue
 		}

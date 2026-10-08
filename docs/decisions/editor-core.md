@@ -12,9 +12,9 @@ tabs, CRLF or more than 10000 lines, and under Bubbles v2 made typing on long
 pages about ten times slower. Every editor workaround in the codebase existed
 because of it. The goal is an editor that can replace nvim for note work.
 
-Out of scope: live preview (rendering rows while editing), mouse, Vim mode,
-kitty keyboard enhancements, multiple cursors, reading the system clipboard on
-`Ctrl+V`, reloading while editing.
+Out of scope: live preview (rendering rows while editing; added later, see
+`live-preview.md`), mouse, Vim mode, kitty keyboard enhancements, multiple
+cursors, reading the system clipboard on `Ctrl+V`, reloading while editing.
 
 ## Decisions
 
@@ -38,7 +38,7 @@ kitty keyboard enhancements, multiple cursors, reading the system clipboard on
   Glamour's style cascade, using goldmark for inline structure and chroma for
   code fences. Syntax the read view hides is dimmed; that is the only colour
   the editor adds. All of this sits behind a `SourceLines` interface, so live
-  preview can reuse it without touching editing code.
+  preview could reuse it without touching editing code (see `live-preview.md`).
 - **Equal windows.** The editor draws the read view's faint rule row above its
   status line, so both text windows are the same height and the bottom rows
   line up.

@@ -30,14 +30,20 @@ func rowlessPage() string {
 }
 
 // roundTripSweep: with no edit, e then Esc leaves the read frame byte for byte
-// as it was, at every scroll offset.
+// as it was, at every scroll offset of the first 120 (sampled under the race
+// detector, see sweepOffsets).
 func roundTripSweep(t *testing.T) {
+	const offsets = 120
 	for _, width := range []int{40, 80} {
 		t.Run(fmt.Sprintf("width %d", width), func(t *testing.T) {
 			a := newApp(t, map[string]string{"pages/Doc.md": rowlessPage()}, width, 20)
 			a.navigate("Doc")
+			a.page.Restore(offsets-1, -1)
+			if a.page.Offset() != offsets-1 {
+				t.Fatalf("setup: offset %d not reachable, got %d", offsets-1, a.page.Offset())
+			}
 			checked := 0
-			for off := range 120 {
+			for _, off := range sweepOffsets(offsets-1, uint64(width)) {
 				a.page.Restore(off, -1)
 				if a.page.Offset() != off {
 					t.Fatalf("setup: offset %d not reachable, got %d", off, a.page.Offset())
@@ -57,8 +63,11 @@ func roundTripSweep(t *testing.T) {
 				}
 				checked++
 			}
-			if checked != 120 {
-				t.Fatalf("checked %d offsets, want 120", checked)
+			if !raceDetector && checked != offsets {
+				t.Fatalf("checked %d offsets, want %d", checked, offsets)
+			}
+			if checked < 2 {
+				t.Fatalf("checked %d offsets", checked)
 			}
 		})
 	}

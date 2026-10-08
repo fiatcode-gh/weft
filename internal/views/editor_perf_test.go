@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -44,6 +45,7 @@ const (
 	perfPageMS    = 4
 	perfSlack     = 4 // machine slack over the v1 numbers
 	perfBestOfRun = 5
+	perfPageMoves = 20 // fresh page moves whose mean is bounded
 )
 
 func bestOf(n int, f func()) time.Duration {
@@ -56,6 +58,16 @@ func bestOf(n int, f func()) time.Duration {
 	return best
 }
 
+// perfModes are the two looks the bounds hold for.
+var perfModes = []struct {
+	name   string
+	source bool
+}{{"live", false}, {"source", true}}
+
+func perfEditor(content string, anchor int, source bool) *EditorView {
+	return NewEditorView(nil, "P", "/tmp/p.md", content, false, perfW, perfH, Anchor{anchor, 0, 10}, nil, source)
+}
+
 // The wall-clock bounds are the v1 numbers (56/26/4 ms) times a machine slack
 // and the race factor; the real proof of independence from the buffer length
 // is TestEditorWorkIsWindowBounded.
@@ -64,100 +76,153 @@ func TestEditorSpeed10000(t *testing.T) {
 	content := perfContent(10000)
 	bound := func(ms int) time.Duration { return time.Duration(ms*perfSlack*raceFactor) * time.Millisecond }
 
-	t.Run("open", func(t *testing.T) {
-		got := bestOf(perfBestOfRun, func() {
-			e := NewEditorView(nil, "P", "/tmp/p.md", content, false, perfW, perfH, Anchor{9000, 0, 10}, nil)
+	for _, mode := range perfModes {
+		t.Run(mode.name, func(t *testing.T) {
+			t.Run("open", func(t *testing.T) {
+				got := bestOf(perfBestOfRun, func() {
+					e := perfEditor(content, 9000, mode.source)
+					_ = e.View()
+				})
+				if got > bound(perfOpenMS) {
+					t.Errorf("open took %v, bound %v", got, bound(perfOpenMS))
+				}
+			})
+			e := perfEditor(content, 9000, mode.source)
 			_ = e.View()
+			t.Run("keystroke", func(t *testing.T) {
+				got := bestOf(perfBestOfRun, func() {
+					e.Update(key("x"))
+					_ = e.View()
+				})
+				if got > bound(perfKeyMS) {
+					t.Errorf("keystroke took %v, bound %v", got, bound(perfKeyMS))
+				}
+			})
+			t.Run("reveal", func(t *testing.T) {
+				got := bestOf(perfBestOfRun, func() {
+					e.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+					_ = e.View()
+				})
+				if got > bound(perfKeyMS) {
+					t.Errorf("reveal took %v, bound %v", got, bound(perfKeyMS))
+				}
+			})
+			// Fresh page moves from the top: every move shows rows no earlier
+			// move rendered, so a cached window cannot hide a slow one. The
+			// mean is bounded, not the best of a few, so a slowdown of the
+			// typical move fails.
+			t.Run("page", func(t *testing.T) {
+				p := perfEditor(content, 0, mode.source)
+				_ = p.View()
+				times := make([]time.Duration, perfPageMoves)
+				var sum time.Duration
+				for i := range times {
+					t0 := time.Now()
+					p.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
+					_ = p.View()
+					times[i] = time.Since(t0)
+					sum += times[i]
+				}
+				mean := sum / perfPageMoves
+				slices.Sort(times)
+				t.Logf("%d page moves: mean %v, p90 %v, max %v", perfPageMoves, mean, times[perfPageMoves*9/10], times[perfPageMoves-1])
+				// The shared slack (16 ms) leaves room for CI's slower runners;
+				// algorithmic regressions are caught by TestEditorWorkIsWindowBounded.
+				if limit := time.Duration(perfPageMS*perfSlack*raceFactor) * time.Millisecond; mean > limit {
+					t.Errorf("mean page move took %v, bound %v", mean, limit)
+				}
+			})
 		})
-		if got > bound(perfOpenMS) {
-			t.Errorf("open took %v, bound %v", got, bound(perfOpenMS))
-		}
-	})
-	e := NewEditorView(nil, "P", "/tmp/p.md", content, false, perfW, perfH, Anchor{9000, 0, 10}, nil)
-	_ = e.View()
-	t.Run("keystroke", func(t *testing.T) {
-		got := bestOf(perfBestOfRun, func() {
-			e.Update(key("x"))
-			_ = e.View()
-		})
-		if got > bound(perfKeyMS) {
-			t.Errorf("keystroke took %v, bound %v", got, bound(perfKeyMS))
-		}
-	})
-	t.Run("page", func(t *testing.T) {
-		got := bestOf(perfBestOfRun, func() {
-			e.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
-			_ = e.View()
-		})
-		if got > bound(perfPageMS) {
-			t.Errorf("page took %v, bound %v", got, bound(perfPageMS))
-		}
-	})
+	}
 }
 
 // Per-operation work is bounded by the window, not the buffer: the same
 // bounds hold at 2500 and 20000 lines.
 func TestEditorWorkIsWindowBounded(t *testing.T) {
 	quietTerm(t)
-	for _, n := range []int{2500, 20000} {
-		t.Run(fmt.Sprint(n), func(t *testing.T) {
-			content := perfContent(n)
-			anchor := n * 9 / 10
-			e := NewEditorView(nil, "P", "/tmp/p.md", content, false, perfW, perfH, Anchor{anchor, 0, 10}, nil)
-			_ = e.View()
-			h := e.textHeight()
-			if h != perfWindowH {
-				t.Fatalf("text height %d, want %d", h, perfWindowH)
-			}
-			if got := e.stats.wrapped; got > 3*h {
-				t.Errorf("open wrapped %d lines, bound %d", got, 3*h)
-			}
-			if got := e.scanner.Scanned(); got > anchor+h+2 {
-				t.Errorf("open scanned %d lines, bound anchor+H+2 = %d", got, anchor+h+2)
-			}
+	for _, mode := range perfModes {
+		for _, n := range []int{2500, 20000} {
+			t.Run(fmt.Sprintf("%s/%d", mode.name, n), func(t *testing.T) {
+				content := perfContent(n)
+				anchor := n * 9 / 10
+				e := perfEditor(content, anchor, mode.source)
+				_ = e.View()
+				h := e.textHeight()
+				if h != perfWindowH {
+					t.Fatalf("text height %d, want %d", h, perfWindowH)
+				}
+				scanSlack := 2
+				if !mode.source {
+					scanSlack = 8
+				}
+				rendered := func() int { return e.preview.Stats().Lines }
+				if got := e.stats.wrapped; got > 3*h {
+					t.Errorf("open wrapped %d lines, bound %d", got, 3*h)
+				}
+				if got := e.scanner.Scanned(); got > anchor+h+scanSlack {
+					t.Errorf("open scanned %d lines, bound anchor+H+%d = %d", got, scanSlack, anchor+h+scanSlack)
+				}
+				if got := rendered(); !mode.source && got > 3*h+8 {
+					t.Errorf("open rendered %d preview lines, bound %d", got, 3*h+8)
+				}
 
-			for range 5 {
-				w0, p0, s0 := e.stats.wrapped, e.stats.painted, e.scanner.Scanned()
-				e.Update(key("x"))
-				_ = e.View()
-				if work := e.stats.wrapped - w0 + e.stats.painted - p0; work > 3*h {
-					t.Errorf("keystroke wrapped+painted %d, bound %d", work, 3*h)
+				for range 5 {
+					w0, p0, s0, r0 := e.stats.wrapped, e.stats.painted, e.scanner.Scanned(), rendered()
+					e.Update(key("x"))
+					_ = e.View()
+					if work := e.stats.wrapped - w0 + e.stats.painted - p0; work > 3*h {
+						t.Errorf("keystroke wrapped+painted %d, bound %d", work, 3*h)
+					}
+					if grown := e.scanner.Scanned() - s0; grown > h+scanSlack {
+						t.Errorf("keystroke scanned %d lines, bound %d", grown, h+scanSlack)
+					}
+					if got := rendered() - r0; got > h {
+						t.Errorf("keystroke rendered %d preview lines, bound %d", got, h)
+					}
 				}
-				if grown := e.scanner.Scanned() - s0; grown > h+2 {
-					t.Errorf("keystroke scanned %d lines, bound %d", grown, h+2)
+				for range 5 {
+					r0 := rendered()
+					e.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+					_ = e.View()
+					if got := rendered() - r0; got > 8 {
+						t.Errorf("reveal rendered %d preview lines, bound 8", got)
+					}
 				}
-			}
-			for _, code := range []rune{tea.KeyPgDown, tea.KeyPgDown, tea.KeyPgUp} {
-				w0, p0 := e.stats.wrapped, e.stats.painted
-				e.Update(tea.KeyPressMsg{Code: code})
-				_ = e.View()
-				if work := e.stats.wrapped - w0 + e.stats.painted - p0; work > 4*h {
-					t.Errorf("page wrapped+painted %d, bound %d", work, 4*h)
+				for _, code := range []rune{tea.KeyPgDown, tea.KeyPgDown, tea.KeyPgUp} {
+					w0, p0, r0 := e.stats.wrapped, e.stats.painted, rendered()
+					e.Update(tea.KeyPressMsg{Code: code})
+					_ = e.View()
+					if work := e.stats.wrapped - w0 + e.stats.painted - p0; work > 4*h {
+						t.Errorf("page wrapped+painted %d, bound %d", work, 4*h)
+					}
+					if got := rendered() - r0; got > 2*h {
+						t.Errorf("page rendered %d preview lines, bound %d", got, 2*h)
+					}
 				}
-			}
-		})
+			})
+		}
 	}
 }
 
-func benchEditor(b *testing.B) (*EditorView, string) {
+func benchEditor(b *testing.B, source bool) (*EditorView, string) {
 	b.Setenv("NO_COLOR", "1")
 	content := perfContent(10000)
-	e := NewEditorView(nil, "P", "/tmp/p.md", content, false, perfW, perfH, Anchor{9000, 0, 10}, nil)
+	e := perfEditor(content, 9000, source)
 	_ = e.View()
 	return e, content
 }
 
-func BenchmarkEditorOpen10000(b *testing.B) {
-	_, content := benchEditor(b)
+func benchOpen(b *testing.B, source bool) {
+	_, content := benchEditor(b, source)
 	b.ResetTimer()
 	for range b.N {
-		e := NewEditorView(nil, "P", "/tmp/p.md", content, false, perfW, perfH, Anchor{9000, 0, 10}, nil)
+		e := perfEditor(content, 9000, source)
 		_ = e.View()
 	}
 }
 
-func BenchmarkEditorKeystroke10000(b *testing.B) {
-	e, _ := benchEditor(b)
+func benchKeystroke(b *testing.B, source bool) {
+	e, _ := benchEditor(b, source)
 	b.ResetTimer()
 	for range b.N {
 		e.Update(key("x"))
@@ -165,15 +230,41 @@ func BenchmarkEditorKeystroke10000(b *testing.B) {
 	}
 }
 
-func BenchmarkEditorPageDown10000(b *testing.B) {
-	e, _ := benchEditor(b)
+// benchPageDown pages down through fresh rows: the window reaches the end only
+// after hundreds of pages, far more than the preview caches, then starts over.
+func benchPageDown(b *testing.B, source bool) {
+	e, _ := benchEditor(b, source)
+	b.ResetTimer()
+	for range b.N {
+		if e.buf.Cursor().Line > 9900 {
+			e.Update(tea.KeyPressMsg{Code: tea.KeyHome, Mod: tea.ModCtrl})
+		} else {
+			e.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
+		}
+		_ = e.View()
+	}
+}
+
+// benchReveal alternates Down and Up so the cursor stays in the window.
+func benchReveal(b *testing.B, source bool) {
+	e, _ := benchEditor(b, source)
 	b.ResetTimer()
 	for i := range b.N {
-		code := tea.KeyPgDown
+		code := tea.KeyDown
 		if i%2 == 1 {
-			code = tea.KeyPgUp
+			code = tea.KeyUp
 		}
 		e.Update(tea.KeyPressMsg{Code: code})
 		_ = e.View()
 	}
 }
+
+func BenchmarkEditorOpen10000(b *testing.B)      { benchOpen(b, true) }
+func BenchmarkEditorKeystroke10000(b *testing.B) { benchKeystroke(b, true) }
+func BenchmarkEditorPageDown10000(b *testing.B)  { benchPageDown(b, true) }
+func BenchmarkEditorReveal10000(b *testing.B)    { benchReveal(b, true) }
+
+func BenchmarkEditorLiveOpen10000(b *testing.B)      { benchOpen(b, false) }
+func BenchmarkEditorLiveKeystroke10000(b *testing.B) { benchKeystroke(b, false) }
+func BenchmarkEditorLivePageDown10000(b *testing.B)  { benchPageDown(b, false) }
+func BenchmarkEditorLiveReveal10000(b *testing.B)    { benchReveal(b, false) }

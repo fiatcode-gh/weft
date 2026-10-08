@@ -159,7 +159,7 @@ func TestEditorWindowMatchesReadWindow(t *testing.T) {
 	if rule := frame[a.height-2]; rule != strings.Repeat("─", a.width) {
 		t.Errorf("editor's second-to-last row = %q, want the rule row", rule)
 	}
-	if status := frame[a.height-1]; !strings.Contains(status, "[edit]") {
+	if status := frame[a.height-1]; !strings.Contains(status, "[edit · ") {
 		t.Errorf("editor's last row = %q, want the status line", status)
 	}
 	want := glyphless(frame[lastEdit])

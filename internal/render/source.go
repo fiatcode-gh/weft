@@ -43,6 +43,13 @@ type LineInfo struct {
 	Fence  int    // Fence/Code: index of the opening delimiter line
 	Lang   string // Fence/Code: first word of the opener's info string
 	Strip  int    // Code: display column of the fence characters on the opener line
+
+	// Live preview (see chunkState): Start marks a line a chunk may begin at;
+	// Bullet is the marker when that line is a top-level bullet item; Subst
+	// marks a line the read view's wiki-link and task-marker passes see.
+	Start  bool
+	Bullet byte
+	Subst  bool
 }
 
 var (
@@ -81,6 +88,7 @@ type scanState struct {
 	hidden    hiddenState
 	setext    int // level of the setext heading just classified; 0 = none
 	table     tableState
+	chunk     chunkState
 }
 
 // Scanner classifies source lines in one forward pass and caches the result,
@@ -121,6 +129,7 @@ func (s *Scanner) Info(src SourceLines, i int) LineInfo {
 		}
 		st := s.states[n]
 		info := classify(&st, n, src.Line(n), next, n+1 < src.Len())
+		info.Start, info.Bullet, info.Subst = st.chunk.step(src.Line(n))
 		s.infos = append(s.infos, info)
 		s.states = append(s.states, st)
 		s.scanned++

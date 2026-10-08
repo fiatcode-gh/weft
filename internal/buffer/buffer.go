@@ -94,13 +94,13 @@ func parseRaw(raw string) ([]string, []bool) {
 func (b *Buffer) String() string {
 	n := 0
 	for i, l := range b.lines {
-		n += len(l) + len(b.lineTerminator(i))
+		n += len(l) + len(b.Terminator(i))
 	}
 	var sb strings.Builder
 	sb.Grow(n)
 	for i, l := range b.lines {
 		sb.WriteString(l)
-		sb.WriteString(b.lineTerminator(i))
+		sb.WriteString(b.Terminator(i))
 	}
 	return sb.String()
 }
@@ -112,7 +112,7 @@ func (b *Buffer) EqualString(s string) bool {
 			return false
 		}
 		s = s[len(l):]
-		t := b.lineTerminator(i)
+		t := b.Terminator(i)
 		if !strings.HasPrefix(s, t) {
 			return false
 		}
@@ -163,8 +163,8 @@ func (b *Buffer) Changed() (from int, ok bool) {
 	return from, ok
 }
 
-// lineTerminator is the exact terminator of line i ("" for the last line).
-func (b *Buffer) lineTerminator(i int) string {
+// Terminator is the exact terminator of line i ("" for the last line).
+func (b *Buffer) Terminator(i int) string {
 	switch {
 	case i >= len(b.lines)-1:
 		return ""
@@ -182,10 +182,10 @@ func (b *Buffer) raw(r Range) string {
 	}
 	var sb strings.Builder
 	sb.WriteString(b.lines[r.Start.Line][r.Start.Col:])
-	sb.WriteString(b.lineTerminator(r.Start.Line))
+	sb.WriteString(b.Terminator(r.Start.Line))
 	for i := r.Start.Line + 1; i < r.End.Line; i++ {
 		sb.WriteString(b.lines[i])
-		sb.WriteString(b.lineTerminator(i))
+		sb.WriteString(b.Terminator(i))
 	}
 	sb.WriteString(b.lines[r.End.Line][:r.End.Col])
 	return sb.String()

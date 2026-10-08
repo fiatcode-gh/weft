@@ -334,7 +334,7 @@ func mapLinesOutsideFences(body string, f func(line string) string) string {
 // The `subs` slice is appended to as matches are found; the id-encoded sentinel
 // is the same shape `preprocessWikiLinks` uses so the rest of the pipeline
 // (Glamour → sentinel substitution) is unchanged.
-func replaceWikiLinksOutsideInlineCode(line string, subs *[]linkSubst) string {
+func replaceWikiLinksOutsideInlineCode(line string, base int, subs *[]linkSubst) string {
 	parts := strings.Split(line, "`")
 	for i, part := range parts {
 		if i%2 == 1 {
@@ -357,7 +357,7 @@ func replaceWikiLinksOutsideInlineCode(line string, subs *[]linkSubst) string {
 			if m[2] != "" {
 				display = m[2]
 			}
-			id := len(*subs)
+			id := base + len(*subs)
 			*subs = append(*subs, linkSubst{target: target, display: display})
 			core := wikiSentinelStart + encodeSentinelID(id) + wikiSentinelEnd
 			// Pad sentinel to the rendered link's display width so Glamour's
@@ -381,10 +381,14 @@ func replaceWikiLinksOutsideInlineCode(line string, subs *[]linkSubst) string {
 // Scanning the *original* body (instead of the post-render styled output)
 // avoids Glamour's habit of interleaving ANSI escapes between the two opening
 // brackets — which silently breaks any regex that requires a contiguous "[[".
-func preprocessWikiLinks(body string) (string, []linkSubst) {
+//
+// base is the id of the first substitution: a chunk of a larger document
+// numbers its sentinels from the count the document has before it, because a
+// sentinel's width depends on the digits of its id.
+func preprocessWikiLinks(body string, base int) (string, []linkSubst) {
 	var subs []linkSubst
 	body = mapLinesOutsideFences(body, func(line string) string {
-		return replaceWikiLinksOutsideInlineCode(line, &subs)
+		return replaceWikiLinksOutsideInlineCode(line, base, &subs)
 	})
 	return body, subs
 }
@@ -440,7 +444,8 @@ func hideMarkdownLinkURLsOutsideInlineCode(line string) string {
 // preprocessTaskMarkers replaces leading TODO/DOING/etc. markers on non-fenced
 // bullet lines with sentinels, returning the rewritten body and the captured
 // marker text indexed by sentinel id.
-func preprocessTaskMarkers(body string) (string, []taskInfo) {
+// base is the id of the first marker, as in preprocessWikiLinks.
+func preprocessTaskMarkers(body string, base int) (string, []taskInfo) {
 	var markers []taskInfo
 	body = mapLinesOutsideFences(body, func(line string) string {
 		m := taskMarkerRe.FindStringSubmatch(line)
@@ -449,7 +454,7 @@ func preprocessTaskMarkers(body string) (string, []taskInfo) {
 		}
 		prefix := m[1]
 		marker := m[2]
-		id := len(markers)
+		id := base + len(markers)
 		rest := line[len(prefix)+len(marker):]
 		// Graph owns open-task classification so dashboard ordinals and
 		// rendered task offsets stay aligned.
@@ -603,8 +608,7 @@ func Render(body string, width int) (Result, error) {
 // RenderWithEmphasis is Render plus highlighting whole-word occurrences of
 // emphasis (recorded in Result.Finds). emphasis == "" is identical to Render.
 func RenderWithEmphasis(body string, width int, emphasis string) (Result, error) {
-	f := preprocess(body, emphasis)
-	wikiSubs, taskMarkers, emphSubs := f.wikiSubs, f.taskMarkers, f.emphSubs
+	f := preprocess(body, emphasis, idBase{})
 
 	theme, err := CurrentTheme()
 	if err != nil {
@@ -620,6 +624,16 @@ func RenderWithEmphasis(body string, width int, emphasis string) (Result, error)
 		// the caller can skip its cache and log the cause.
 		styled = f.pre
 	}
+
+	res := finish(styled, f, theme, fallbackErr)
+	return res, nil
+}
+
+// finish turns Glamour's output for f.pre into the Result: hanging indents
+// for wrapped bullets, then every sentinel restored to its styled text.
+// fallbackErr is recorded on the Result.
+func finish(styled string, f frontend, theme Theme, fallbackErr error) Result {
+	wikiSubs, taskMarkers, emphSubs := f.wikiSubs, f.taskMarkers, f.emphSubs
 
 	// indentWrappedBullets must run before sentinel substitution so the byte
 	// positions recorded for links, tasks, and finds reflect the final output.
@@ -637,7 +651,8 @@ func RenderWithEmphasis(body string, width int, emphasis string) (Result, error)
 		switch {
 		case m[2] >= 0: // wiki-link sentinel
 			id, ok := decodeSentinelID(styled[m[2]:m[3]])
-			if !ok || id >= len(wikiSubs) {
+			id -= f.base.wiki
+			if !ok || id < 0 || id >= len(wikiSubs) {
 				out.WriteString(styled[m[0]:m[1]])
 				continue
 			}
@@ -652,7 +667,8 @@ func RenderWithEmphasis(body string, width int, emphasis string) (Result, error)
 			})
 		case m[4] >= 0: // task-marker sentinel
 			id, ok := decodeSentinelID(styled[m[4]:m[5]])
-			if !ok || id >= len(taskMarkers) {
+			id -= f.base.task
+			if !ok || id < 0 || id >= len(taskMarkers) {
 				out.WriteString(styled[m[0]:m[1]])
 				continue
 			}
@@ -677,5 +693,5 @@ func RenderWithEmphasis(body string, width int, emphasis string) (Result, error)
 	}
 	orphanPadReplacer.WriteString(&out, styled[last:])
 
-	return Result{Styled: out.String(), Links: links, Tasks: tasks, Finds: finds, FallbackErr: fallbackErr}, nil
+	return Result{Styled: out.String(), Links: links, Tasks: tasks, Finds: finds, FallbackErr: fallbackErr}
 }

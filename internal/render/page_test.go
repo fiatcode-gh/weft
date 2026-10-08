@@ -561,7 +561,7 @@ func TestPreprocessTaskMarkersUsesGraphOpenTaskPredicate(t *testing.T) {
 	for _, line := range lines {
 		t.Run(line, func(t *testing.T) {
 			// act
-			_, markers := preprocessTaskMarkers(line)
+			_, markers := preprocessTaskMarkers(line, 0)
 
 			// assert
 			if len(markers) != 1 {

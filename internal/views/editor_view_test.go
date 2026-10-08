@@ -120,7 +120,9 @@ func TestEditorViewAnchorKeepsCursorVisible(t *testing.T) {
 	quietTerm(t)
 	lines := fillerLines(100)
 	lines[50] = "ANCHORED LINE\n"
-	e := editorAt(nil, "Page", "/tmp/page.md", strings.Join(lines, ""), false, 80, 12, 50)
+	// Source look: live preview joins the filler lines into one paragraph, so
+	// the window holds more lines than rows.
+	e := sourceEditorAt(nil, "Page", "/tmp/page.md", strings.Join(lines, ""), false, 80, 12, 50)
 	if got := cursorPos(e).Line; got != 50 {
 		t.Fatalf("got row %d, want 50", got)
 	}
@@ -264,15 +266,25 @@ func TestEditorUpdate_TypingInsertsAndIsDirty(t *testing.T) {
 	}
 }
 
+// The goldens pin the source look: live preview draws every row but the
+// cursor's with the read view's renderer, which its own tests cover.
 func TestEditorView_Golden(t *testing.T) {
 	quietTerm(t)
-	e := editorAt(nil, "Alpha", "/tmp/a.md", "- first bullet\n- [[Beta]] link\n", false, 80, 12, 0)
+	e := sourceEditorAt(nil, "Alpha", "/tmp/a.md", "- first bullet\n- [[Beta]] link\n", false, 80, 12, 0)
+	teatest.RequireEqualOutput(t, []byte(plain(e.View())))
+}
+
+// The live golden: every row but the cursor's unit is the read view's own.
+func TestEditorView_LiveGolden(t *testing.T) {
+	quietTerm(t)
+	content := "# Alpha\n\nIntro with **bold** and [[Beta]].\n\n- first bullet\n- [[Beta]] link\n\n> a quote\n"
+	e := NewEditorView(nil, "Alpha", "/tmp/a.md", content, false, 80, 14, Anchor{Line: 5, ScreenRow: 7}, nil, false)
 	teatest.RequireEqualOutput(t, []byte(plain(e.View())))
 }
 
 func TestEditorView_ConfirmGolden(t *testing.T) {
 	quietTerm(t)
-	e := editorAt(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 12, 0)
+	e := sourceEditorAt(nil, "Alpha", "/tmp/a.md", "x\n", false, 80, 12, 0)
 	setText(e, "x\nedited\n")
 	e.Update(tea.KeyPressMsg{Code: tea.KeyEsc}) // -> confirmingExit
 	teatest.RequireEqualOutput(t, []byte(plain(e.View())))
@@ -330,7 +342,7 @@ func TestEditorView_MarkSavedClearsError(t *testing.T) {
 
 func TestEditorView_CompletionGolden(t *testing.T) {
 	quietTerm(t)
-	e := editorAt(loadFixture(t), "Note", "/tmp/n.md", "", true, 80, 16, 0)
+	e := sourceEditorAt(loadFixture(t), "Note", "/tmp/n.md", "", true, 80, 16, 0)
 	typeRunes(e, "link to [[A")
 	if !e.completer.active {
 		t.Fatalf("completer should be active for the golden")
@@ -758,7 +770,7 @@ func TestEditorRepositionsAfterContinuation(t *testing.T) {
 		sb.WriteString("filler\n")
 	}
 	sb.WriteString("- ANCHOR")
-	e := NewEditorView(nil, "Note", "/tmp/n.md", sb.String(), false, 80, 24, Anchor{Line: 60, ScreenRow: 22}, nil)
+	e := NewEditorView(nil, "Note", "/tmp/n.md", sb.String(), false, 80, 24, Anchor{Line: 60, ScreenRow: 22}, nil, editorStartsInSource)
 	e.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
 	e.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	rows := strings.Split(plain(e.View()), "\n")

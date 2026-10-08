@@ -79,7 +79,14 @@ func TestEditorKeyTable(t *testing.T) {
 				content = "alpha BeTa gamma\nsecond line\n  - item\n"
 				tc.line, tc.col = 2, 6
 			}
-			e := editorAt(nil, "P", "/tmp/p.md", content, false, 40, 10, 0)
+			open := editorAt
+			if tc.name == "pgdown clamps to the last row" {
+				// Source look: live preview has no display row on the empty
+				// last line, so a page down stops on the line above it
+				// (TestLivePgDownStopsOnLastDrawnLine).
+				open = sourceEditorAt
+			}
+			e := open(nil, "P", "/tmp/p.md", content, false, 40, 10, 0)
 			setCursor(e, tc.line, tc.col)
 			e.Update(tc.msg)
 			if got := text(e); got != tc.want {
@@ -108,7 +115,6 @@ func TestEditorUnboundChordsAreInert(t *testing.T) {
 	quietTerm(t)
 	chords := []tea.KeyPressMsg{
 		ctrl('g'),
-		ctrl('r'),
 		{Code: 'c', Mod: tea.ModCtrl | tea.ModShift},
 		{Code: tea.KeyBackspace, Mod: tea.ModCtrl},
 		{Code: tea.KeyDelete, Mod: tea.ModCtrl},

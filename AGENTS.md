@@ -18,7 +18,7 @@ that inserts a link to the not-yet-created page without writing to disk.
 Enter continues a `- ` bullet at the same indent (empty bullet ends the list);
 `Ctrl+T` cycles the current bullet's workflow marker (plain → TODO → DONE);
 `Tab` / `Shift+Tab` indent / de-indent a bullet with its children; `Alt+↑/↓` move it.
-The editor opens with the cursor on the source line behind the read view's top visible line (or the visible link cursor) on the same screen row; `Esc` returns the same way.
+The editor has two looks: live preview (default; `internal/views/editor_live.go`) and source, switched with `Ctrl+R`. The App owns the choice per run (`editorSource`). The editor opens with the cursor on the source line behind the read view's top visible line (or the visible link cursor) on the same screen row; `Esc` returns the same way.
 
 Press `S` to sync the graph to git — commit local changes, `pull --rebase`,
 then push — run asynchronously off the UI thread with the outcome in the status
@@ -58,7 +58,11 @@ an intentional UI change, run with `-update` and visually diff the golden before
   workflow-marker colouring, `:LOGBOOK:` stripping). Has a `Warmup()` paid before the
   TUI takes the screen to avoid chroma init flicker. `theme.go` is the shared
   `Theme`; `source*.go` scan, wrap and paint raw source lines for the editor
-  (`SourceLines`, `Scanner`, `Geometry`, `Painter`, `DrawRow`). `ColorProfile`
+  (`SourceLines`, `Scanner`, `Geometry`, `Painter`, `DrawRow`); `preview.go`,
+  `preview_chunk.go`, `preview_rows.go` render a page in chunks through the read
+  view's pipeline (byte-identical to the full render) and attribute rows to source
+  lines and reveal units (`Preview`); `rowstyle.go` highlights find matches on rendered
+  rows (revealed rows are painted by the editor's source painter). `ColorProfile`
   (NO_COLOR → `Ascii`: colours dropped, attributes kept; `TERM=dumb` → `NoTTY`;
   any colour terminal → TrueColor); Glamour v2 hyperlinks are stripped.
 - `internal/buffer/` — the editor's text model (lines + terminators, cursor,
@@ -108,6 +112,15 @@ an intentional UI change, run with `-update` and visually diff the golden before
   asserts "no styling" must convert with the `NoTTY` profile explicitly. Run the
   suite both with and without `NO_COLOR` set: `go test ./... -count=1` and
   `NO_COLOR=1 go test ./... -count=1`.
+- The live-preview differential and sweep tests are exhaustive. Under `-race`, which
+  slows each case by an order of magnitude, they sample their corpora instead
+  (`sampleStride` 17 and `invalidateStride` 7 in `internal/render`; `sweepStride`
+  16 in `internal/views`; without `-race` all three are 1, set in the
+  `race_off_test.go` files, and `raceDetector` is in `internal/views/race_on_test.go`),
+  so the race suite fits CI. The views suite also
+  runs in source mode through a child process with `WEFT_TEST_EDITOR_SOURCE`
+  set (`TestSuiteInSourceMode`); it is skipped under `-race` and CI runs it in the
+  non-race `go test ./...` step.
 - `testdata/fake-editor.sh` is a POSIX shell script that stands in for a real
   editor in the App integration tests for the `E` key (`$EDITOR` handoff).
 
