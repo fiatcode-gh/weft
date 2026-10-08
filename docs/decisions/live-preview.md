@@ -72,12 +72,14 @@ Out of scope: mouse, Vim mode, multiple cursors, editing in rendered rows
 - **Both-look test harness.** The views suite runs in live preview by default.
   A child process with `WEFT_TEST_EDITOR_SOURCE` set runs it in source mode
   (`TestSuiteInSourceMode`). That child run is skipped under `-race`; CI runs it
-  in the non-race `go test ./...` step. The differential and sweep tests sample
-  their corpora (`sampleStride` 7, or 17 under `-race`; `sweepStride` 8, or 16)
-  so the race suite fits CI.
-- **Speed at 10000 lines.** Live open about 28 ms, a keystroke about 3 ms, a
-  page down about 3.5 ms on average (cold moves 2.2 to 4.9 ms), a reveal about
-  0.08 ms. Source-mode open grew from about 7 ms to about 17 ms, because the
+  in the non-race `go test ./...` step. The differential and sweep tests are
+  exhaustive without `-race`; under `-race` they sample their corpora
+  (`sampleStride` 17, `invalidateStride` 7, `sweepStride` 16) so the race suite
+  fits CI.
+- **Speed at 10000 lines.** Live open about 28 to 37 ms, a keystroke about
+  3 ms, a reveal about 0.08 ms. A fresh page down averages about 4.3 ms (p90
+  about 5.3 ms, worst about 6.5 ms) against v1's 4 ms; the user accepted that
+  as is. Source-mode open grew from about 7 ms to about 17 ms, because the
   scanner now also tracks chunk state.
 
 ## Traps
@@ -88,7 +90,9 @@ Out of scope: mouse, Vim mode, multiple cursors, editing in rendered rows
   chunk text carries each line's real terminator. A lone `"\r"` makes the rest
   of the page one chunk.
 - Unsplittable blocks re-render whole on a keystroke (linear in the block's
-  size).
+  size): a 500-item task list costs about 32 ms per key, 2000 items about
+  160 ms; `- TODO` bullets are unaffected. Accepted by the user and logged in
+  the weft backlog.
 - Reference definitions whose label, destination or title contain wiki syntax
   are not carried to other chunks. A page with a Glamour context dependency
   outside the tested vocabulary would show a wrong row, never lose text.

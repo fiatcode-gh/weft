@@ -13,13 +13,16 @@ import (
 // Unicode simple folding; otherwise case must match (ripgrep --smart-case, as `/` search).
 // An empty query, or one containing "\n", returns nil.
 func (b *Buffer) Find(query string) []Range {
-	if query == "" || strings.Contains(query, "\n") {
+	m, ok := newMatcher(query)
+	if !ok {
 		return nil
 	}
 	var out []Range
-	for i, line := range b.lines {
-		for _, m := range MatchIn(line, query) {
-			out = append(out, Range{Pos{i, m[0]}, Pos{i, m[1]}})
+	var line [][2]int // one line's matches, reused
+	for i, text := range b.lines {
+		line = m.appendIn(line[:0], text)
+		for _, r := range line {
+			out = append(out, Range{Pos{i, r[0]}, Pos{i, r[1]}})
 		}
 	}
 	return out
@@ -29,13 +32,38 @@ func (b *Buffer) Find(query string) []Range {
 // Find's rules (smart case, simple folding, matches start at grapheme boundaries). An
 // empty query, or one containing "\n", returns nil.
 func MatchIn(s, query string) [][2]int {
-	if query == "" || strings.Contains(query, "\n") {
+	m, ok := newMatcher(query)
+	if !ok {
 		return nil
 	}
-	if strings.IndexFunc(query, unicode.IsUpper) >= 0 {
-		return findExact(nil, s, query)
+	return m.appendIn(nil, s)
+}
+
+// matcher is a query prepared once for many lines: smart case decides between
+// exact bytes and rune-wise folding.
+type matcher struct {
+	query string
+	fold  []rune // the query's runes when it ignores case, else nil
+}
+
+// newMatcher prepares query; false for a query that matches nothing (empty, or
+// containing "\n").
+func newMatcher(query string) (matcher, bool) {
+	if query == "" || strings.Contains(query, "\n") {
+		return matcher{}, false
 	}
-	return findFold(nil, s, []rune(query))
+	if strings.IndexFunc(query, unicode.IsUpper) >= 0 {
+		return matcher{query: query}, true
+	}
+	return matcher{query: query, fold: []rune(query)}, true
+}
+
+// appendIn appends the byte ranges of the matches in s to out.
+func (m matcher) appendIn(out [][2]int, s string) [][2]int {
+	if m.fold == nil {
+		return findExact(out, s, m.query)
+	}
+	return findFold(out, s, m.fold)
 }
 
 func findExact(out [][2]int, line, query string) [][2]int {

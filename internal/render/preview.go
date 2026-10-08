@@ -13,21 +13,6 @@ import (
 	gtext "github.com/yuin/goldmark/text"
 )
 
-// Preview renders the chunks of a document for the editor's live preview.
-//
-// A chunk is a run of source lines that starts at a chunk start (chunkState)
-// and ends before the next one. It is rendered on its own by the read view's
-// own pipeline, wrapped in a sandwich that recreates what the whole document
-// gives it, and the chunk's own rows are cut out of the result, so every row is
-// byte-identical to the row Render gives the same line in the whole page.
-// Rendering the whole document per keystroke would cost 0.4-0.7 s at 10000
-// lines; a chunk costs about 43 µs per source line. See
-// docs/decisions/live-preview.md.
-//
-// A Preview belongs to one width and one document; the owner calls
-// Invalidate with the first changed line after every edit, together with
-// Scanner.Invalidate.
-
 // PreviewLines is a document with its line terminators: the chunk text is each
 // line plus its real terminator, because the read view renders a CRLF page
 // differently from an LF one.
@@ -104,7 +89,20 @@ type refEntry struct {
 	refs []string
 }
 
-// Preview: see the package comment above.
+// Preview renders the chunks of a document for the editor's live preview.
+//
+// A chunk is a run of source lines that starts at a chunk start (chunkState)
+// and ends before the next one. It is rendered on its own by the read view's
+// own pipeline, wrapped in a sandwich that recreates what the whole document
+// gives it, and the chunk's own rows are cut out of the result, so every row is
+// byte-identical to the row Render gives the same line in the whole page.
+// Rendering the whole document per keystroke would cost 0.4-0.7 s at 10000
+// lines; a chunk costs about 43 µs per source line. See
+// docs/decisions/live-preview.md.
+//
+// A Preview belongs to one width and one document; the owner calls
+// Invalidate with the first changed line after every edit, together with
+// Scanner.Invalidate.
 type Preview struct {
 	theme    Theme
 	width    int
@@ -145,10 +143,11 @@ func NewPreview(t Theme, width int) *Preview {
 }
 
 func (p *Preview) measure() (headRows []string, tail int, err error) {
-	rows, err := p.renderRows(stubOpen+"\n", idBase{})
+	pl, err := p.pipeline(stubOpen+"\n", idBase{})
 	if err != nil {
 		return nil, 0, err
 	}
+	rows := pl.rows
 	for i, row := range rows {
 		if strings.Contains(row, stubOpen) {
 			return rows[:i], len(rows) - 1 - i, nil
@@ -395,13 +394,6 @@ func (p *Preview) pipeline(body string, base idBase) (pipeline, error) {
 		return pipeline{}, err
 	}
 	return pipeline{rows: strings.Split(finish(styled, f, p.theme, nil).Styled, "\n"), f: f, r: r, styled: styled}, nil
-}
-
-// renderRows runs the read view's pipeline over body and returns the rows of
-// the styled result.
-func (p *Preview) renderRows(body string, base idBase) ([]string, error) {
-	pl, err := p.pipeline(body, base)
-	return pl.rows, err
 }
 
 // sandwich is what surrounds a chunk's text to recreate its context.

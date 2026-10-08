@@ -153,3 +153,31 @@ func TestFindLarge(t *testing.T) {
 		t.Fatalf("got %d", n)
 	}
 }
+
+// Find's allocations are the result slice's growth, not a function of the line
+// count: no per-line query conversion or result slice.
+func TestFindAllocationsDoNotGrowWithLines(t *testing.T) {
+	doc := func(lines int) *Buffer {
+		var sb strings.Builder
+		for i := range lines {
+			if i%10 == 0 {
+				sb.WriteString("a needle in a line of words\n")
+			} else {
+				sb.WriteString("some other words here\n")
+			}
+		}
+		return New(sb.String())
+	}
+	for _, query := range []string{"needle", "Needle", "neédle"} {
+		small, large := doc(1000), doc(10000)
+		a := testing.AllocsPerRun(5, func() { small.Find(query) })
+		b := testing.AllocsPerRun(5, func() { large.Find(query) })
+		// Ten times the lines and matches: only the result slice's doubling adds.
+		if b > a+8 {
+			t.Errorf("Find(%q): %.0f allocs for 1000 lines, %.0f for 10000; want it independent of the line count", query, a, b)
+		}
+		if b > 40 {
+			t.Errorf("Find(%q): %.0f allocs for 10000 lines, want a handful", query, b)
+		}
+	}
+}

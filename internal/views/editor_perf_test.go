@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -44,6 +45,7 @@ const (
 	perfPageMS    = 4
 	perfSlack     = 4 // machine slack over the v1 numbers
 	perfBestOfRun = 5
+	perfPageMoves = 20 // fresh page moves whose mean is bounded
 )
 
 func bestOf(n int, f func()) time.Duration {
@@ -105,13 +107,29 @@ func TestEditorSpeed10000(t *testing.T) {
 					t.Errorf("reveal took %v, bound %v", got, bound(perfKeyMS))
 				}
 			})
+			// Fresh page moves from the top: every move shows rows no earlier
+			// move rendered, so a cached window cannot hide a slow one. The
+			// mean is bounded, not the best of a few, so a slowdown of the
+			// typical move fails.
 			t.Run("page", func(t *testing.T) {
-				got := bestOf(perfBestOfRun, func() {
-					e.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
-					_ = e.View()
-				})
-				if got > bound(perfPageMS) {
-					t.Errorf("page took %v, bound %v", got, bound(perfPageMS))
+				p := perfEditor(content, 0, mode.source)
+				_ = p.View()
+				times := make([]time.Duration, perfPageMoves)
+				var sum time.Duration
+				for i := range times {
+					t0 := time.Now()
+					p.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
+					_ = p.View()
+					times[i] = time.Since(t0)
+					sum += times[i]
+				}
+				mean := sum / perfPageMoves
+				slices.Sort(times)
+				t.Logf("%d page moves: mean %v, p90 %v, max %v", perfPageMoves, mean, times[perfPageMoves*9/10], times[perfPageMoves-1])
+				// The shared slack (16 ms) leaves room for CI's slower runners;
+				// algorithmic regressions are caught by TestEditorWorkIsWindowBounded.
+				if limit := time.Duration(perfPageMS*perfSlack*raceFactor) * time.Millisecond; mean > limit {
+					t.Errorf("mean page move took %v, bound %v", mean, limit)
 				}
 			})
 		})

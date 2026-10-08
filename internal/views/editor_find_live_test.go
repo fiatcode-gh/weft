@@ -142,3 +142,38 @@ func TestFindLiveCloseRestoresRows(t *testing.T) {
 		}
 	}
 }
+
+// A match on a later line of a paragraph or quote that the read view joins
+// into one row is highlighted on that row, though the row belongs to the unit's
+// first line.
+func TestFindLiveHighlightsJoinedRows(t *testing.T) {
+	skipInSourceRun(t)
+	quietTerm(t)
+	for _, tc := range []struct{ name, page, row string }{
+		{"paragraph", "# T\n\nfirst line of para\nsecond zebra line\n\n- other zebra\n", "first line of para second zebra line"},
+		{"lazy quote", "# T\n\n> quoted first line\ncontinued zebra line\n\n- other zebra\n", "quoted first line continued zebra line"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := liveEditor(tc.page, 60, 24)
+			last := e.buf.Len() - 2 // the bullet, the other occurrence
+			goTo(e, last)
+			openFind(e, "zebra")
+			if e.buf.Cursor().Line != last {
+				t.Fatalf("cursor on line %d, want %d", e.buf.Cursor().Line, last)
+			}
+			rows := frameText(e)
+			i := rowIndex(rows, tc.row)
+			if i < 0 {
+				t.Fatalf("joined row %q missing:\n%s", tc.row, strings.Join(plain2(rows), "\n"))
+			}
+			cells := frameCells(strings.Join(rows, "\n"), 60, colorprofile.Ascii)[i]
+			pl := plain(rows[i])
+			start := ansi.StringWidth(pl[:strings.Index(pl, "zebra")])
+			for x, c := range cells {
+				if want := x >= start && x < start+len("zebra"); underlined(c) != want {
+					t.Errorf("cell %d %q: underlined = %v, want %v", x, c.Content, underlined(c), want)
+				}
+			}
+		})
+	}
+}

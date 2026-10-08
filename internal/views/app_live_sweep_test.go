@@ -30,10 +30,10 @@ func sameCells(a, b []uv.Cell) bool {
 	return true
 }
 
-// liveReadSweep: at sampled scroll offsets of the read view (all of them
-// would cost minutes under the race detector; see sweepOffsets), e opens live
-// preview and every text row above the cursor unit and below it is the read
-// view's row, cell for cell, as far as the window shows.
+// liveReadSweep: at every scroll offset of the read view (a sample of them
+// under the race detector, where all would cost minutes; see sweepOffsets), e
+// opens live preview and every text row above the cursor unit and below it is
+// the read view's row, cell for cell, as far as the window shows.
 func liveReadSweep(t *testing.T) {
 	compared := 0
 	pages := []struct{ name, text string }{{"rowless", rowlessPage()}, {"round trip", roundTripPage()}}

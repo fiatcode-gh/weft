@@ -61,7 +61,8 @@ an intentional UI change, run with `-update` and visually diff the golden before
   (`SourceLines`, `Scanner`, `Geometry`, `Painter`, `DrawRow`); `preview.go`,
   `preview_chunk.go`, `preview_rows.go` render a page in chunks through the read
   view's pipeline (byte-identical to the full render) and attribute rows to source
-  lines and reveal units (`Preview`); `rowstyle.go` styles revealed rows. `ColorProfile`
+  lines and reveal units (`Preview`); `rowstyle.go` highlights find matches on rendered
+  rows (revealed rows are painted by the editor's source painter). `ColorProfile`
   (NO_COLOR → `Ascii`: colours dropped, attributes kept; `TERM=dumb` → `NoTTY`;
   any colour terminal → TrueColor); Glamour v2 hyperlinks are stripped.
 - `internal/buffer/` — the editor's text model (lines + terminators, cursor,
@@ -111,10 +112,12 @@ an intentional UI change, run with `-update` and visually diff the golden before
   asserts "no styling" must convert with the `NoTTY` profile explicitly. Run the
   suite both with and without `NO_COLOR` set: `go test ./... -count=1` and
   `NO_COLOR=1 go test ./... -count=1`.
-- The live-preview differential and sweep tests sample their corpora
-  (`sampleStride` 7, or 17 under `-race`, in `internal/render`; `sweepStride`
-  8, or 16 under `-race`, in `internal/views`; `raceDetector` in
-  `internal/views/race_on_test.go`) so the race suite fits CI. The views suite also
+- The live-preview differential and sweep tests are exhaustive. Under `-race`, which
+  slows each case by an order of magnitude, they sample their corpora instead
+  (`sampleStride` 17 and `invalidateStride` 7 in `internal/render`; `sweepStride`
+  16 in `internal/views`; without `-race` all three are 1, set in the
+  `race_off_test.go` files, and `raceDetector` is in `internal/views/race_on_test.go`),
+  so the race suite fits CI. The views suite also
   runs in source mode through a child process with `WEFT_TEST_EDITOR_SOURCE`
   set (`TestSuiteInSourceMode`); it is skipped under `-race` and CI runs it in the
   non-race `go test ./...` step.

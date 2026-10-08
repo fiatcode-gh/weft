@@ -257,8 +257,9 @@ func runPreviewDifferential(t *testing.T) {
 			compared++
 		}
 	}
-	// Every sampleStride-th generated document: the fixed-seed corpus stays
-	// the same, every case kind recurs, and only the count shrinks.
+	// Every sampleStride-th generated document: all of them without -race; under
+	// it the fixed-seed corpus stays the same, every case kind recurs, and only
+	// the count shrinks.
 	generated := generatedDocs(2000)
 	for i := 0; i < len(generated); i += sampleStride {
 		if checkPreviewMatchesRender(t, generated[i], previewWidths[i%len(previewWidths)]) {

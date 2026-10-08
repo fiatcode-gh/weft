@@ -8,5 +8,5 @@ const raceFactor = 1
 const raceDetector = false
 
 // sweepStride is the average step between the scroll offsets an exhaustive
-// sweep visits.
-const sweepStride = 8
+// sweep visits: 1, so without the race detector every offset is visited.
+const sweepStride = 1

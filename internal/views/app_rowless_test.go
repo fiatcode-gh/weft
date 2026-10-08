@@ -30,7 +30,8 @@ func rowlessPage() string {
 }
 
 // roundTripSweep: with no edit, e then Esc leaves the read frame byte for byte
-// as it was, at sampled scroll offsets of the first 120 (see sweepOffsets).
+// as it was, at every scroll offset of the first 120 (sampled under the race
+// detector, see sweepOffsets).
 func roundTripSweep(t *testing.T) {
 	const offsets = 120
 	for _, width := range []int{40, 80} {
@@ -61,6 +62,9 @@ func roundTripSweep(t *testing.T) {
 						off, a.page.Offset(), plain(want), plain(got))
 				}
 				checked++
+			}
+			if !raceDetector && checked != offsets {
+				t.Fatalf("checked %d offsets, want %d", checked, offsets)
 			}
 			if checked < 2 {
 				t.Fatalf("checked %d offsets", checked)

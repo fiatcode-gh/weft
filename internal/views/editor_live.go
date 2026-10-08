@@ -88,15 +88,17 @@ func (e *EditorView) drawDisplayRow(p viewPos) string {
 }
 
 // findRestyle draws every occurrence of the find query in a rendered Body row of
-// line with matchStyle, when the open bar has a match on that line. Other rows
-// come back unchanged.
+// line with matchStyle, when the open bar has a match on any line of line's
+// reveal unit: the read view joins the lines of a paragraph or quote into rows
+// that belong to the first. Other rows come back unchanged.
 func (e *EditorView) findRestyle(line int, row string) string {
 	f := e.find
 	if f == nil || f.version != e.buf.Version() {
 		return row
 	}
-	i := sort.Search(len(f.matches), func(i int) bool { return f.matches[i].Start.Line >= line })
-	if i == len(f.matches) || f.matches[i].Start.Line != line {
+	from, to := e.preview.Unit(e.buf, e.scanner, line)
+	i := sort.Search(len(f.matches), func(i int) bool { return f.matches[i].Start.Line >= from })
+	if i == len(f.matches) || f.matches[i].Start.Line >= to {
 		return row
 	}
 	return render.RestyleRow(row, func(p string) [][2]int { return buffer.MatchIn(p, f.query) }, matchStyle)
@@ -195,7 +197,9 @@ func (e *EditorView) rawRow() (row, x int) {
 
 // moveRowsLive is moveRows in live preview: a step by one goes through the
 // cursor line's raw rows and then to the neighbouring source line, whatever
-// it looks like; a page walks display rows of the current layout.
+// it looks like; a page walks display rows of the current layout and lands on
+// the raw row of the row it stopped on when that line is drawn raw, else on
+// the line's first raw row.
 func (e *EditorView) moveRowsLive(dir, n int, extend bool) {
 	cur := e.buf.Cursor()
 	c := e.line(cur.Line)
@@ -242,7 +246,11 @@ func (e *EditorView) moveRowsLive(dir, n int, extend bool) {
 		p = q
 	}
 	d := e.line(p.line)
-	e.buf.MoveTo(buffer.Pos{Line: p.line, Col: e.geo.OffsetAt(d.text, d.info, d.rows, 0, e.goalX)}, extend)
+	r := 0 // a line drawn rendered is entered on its first raw row
+	if _, raw := e.liveRows(p.line); raw || p.line == cur.Line {
+		r = clampInt(p.row-e.leadRows(p.line), 0, len(d.rows)-1)
+	}
+	e.buf.MoveTo(buffer.Pos{Line: p.line, Col: e.geo.OffsetAt(d.text, d.info, d.rows, r, e.goalX)}, extend)
 }
 
 // placeLive is place in live preview: the anchor's unit is revealed first, then
