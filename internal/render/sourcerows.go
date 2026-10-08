@@ -142,6 +142,7 @@ func rowTagCut(line string) int {
 // that Glamour sees plus the substitution tables RenderWithEmphasis restores
 // afterwards. src[j] is the line of the original body behind line j of pre.
 type frontend struct {
+	base        idBase
 	pre         string
 	src         []int
 	wikiSubs    []linkSubst
@@ -149,10 +150,14 @@ type frontend struct {
 	emphSubs    []string
 }
 
+// idBase is where a chunk's wiki-link and task-marker sentinel ids start:
+// the number of each kind the whole document has before the chunk.
+type idBase struct{ wiki, task int }
+
 // preprocess runs the strip passes and the line-preserving substitutions.
 // RenderWithEmphasis and SourceRows both call it so their inputs to Glamour
 // cannot drift.
-func preprocess(body, emphasis string) frontend {
+func preprocess(body, emphasis string, base idBase) frontend {
 	body, keptLog := stripLogbookBlocks(body)
 	body, keptQuery := stripQueryAndEmbedBlocks(body)
 	src := make([]int, len(keptQuery))
@@ -160,10 +165,10 @@ func preprocess(body, emphasis string) frontend {
 		src[i] = keptLog[k]
 	}
 	body = hideMarkdownLinkURLs(body)
-	pre, wikiSubs := preprocessWikiLinks(body)
-	pre, taskMarkers := preprocessTaskMarkers(pre)
+	pre, wikiSubs := preprocessWikiLinks(body, base.wiki)
+	pre, taskMarkers := preprocessTaskMarkers(pre, base.task)
 	pre, emphSubs := preprocessEmphasis(pre, emphasis)
-	return frontend{pre: pre, src: src, wikiSubs: wikiSubs, taskMarkers: taskMarkers, emphSubs: emphSubs}
+	return frontend{base: base, pre: pre, src: src, wikiSubs: wikiSubs, taskMarkers: taskMarkers, emphSubs: emphSubs}
 }
 
 // SourceRows maps each row of the Styled output that RenderWithEmphasis
@@ -172,7 +177,7 @@ func preprocess(body, emphasis string) frontend {
 // only borrows the line below it (a blank margin or a table's outer border).
 // Both are nil when the map cannot be produced; callers treat nil as "no map".
 func SourceRows(body string, width int, emphasis string) (lines []int, own []bool) {
-	f := preprocess(body, emphasis)
+	f := preprocess(body, emphasis, idBase{})
 	r, err := rendererFor(width)
 	if err != nil {
 		return nil, nil

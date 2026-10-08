@@ -16,6 +16,8 @@ func scanAll(src SourceLines) []LineInfo {
 	out := make([]LineInfo, src.Len())
 	for i := range out {
 		out[i] = sc.Info(src, i)
+		// The live-preview fields have their own tests (TestChunkStartRules).
+		out[i].Start, out[i].Bullet, out[i].Subst = false, 0, false
 	}
 	return out
 }
