@@ -17,14 +17,14 @@ aids beyond completion. A tag's page is an ordinary page and can hold notes.
 
 - **One grammar, one definition.** A tag starts at the line start or after
   whitespace or `(`. The simple form `#name` begins with a letter and continues
-  with letters, digits, `-`, `_` and `/`; any other name needs the bracket form
+  with letters, digits, combining marks, `-`, `_` and `/`; any other name needs the bracket form
   `#[[Name]]`. A simple name shaped like a hex colour (3, 4, 6 or 8 hex digits
   with at least one decimal digit, as `#FAF3E7`) is not a tag. Never a tag: issue numbers (`#18`, `PR #5`),
   headings, `#+…` and `#!` lines, text inside `[[…]]`, URL fragments, code spans
   and fences. `internal/graph/tag.go` (`FindTags`, `TagStartAt`,
   `IsSimpleTagName`) is the one definition; the index, the read view, the
   editor's source painter, live preview, unlinked mentions, linkify and
-  completion all call it, so they cannot disagree.
+  completion all call it, so they agree except for the limits under Traps.
 - **A markdown destination never holds a tag.** A `#` inside a markdown link
   destination (`graph.MarkdownLinkRe` group 3) does not start a tag. The read
   view rewrites destinations to `#` before it substitutes tags, so the index must
@@ -50,3 +50,5 @@ aids beyond completion. A tag's page is an ordinary page and can hold notes.
   have the same limits.
 - The name rule is literal: a trailing `-`, `_` or `/` stays in the name
   (`#todo-` links to `todo-`).
+- A whitespace-only `[[ ]]` or `#[[ ]]` is not a link or tag target; this is
+  inherited from wiki links.

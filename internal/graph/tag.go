@@ -22,9 +22,12 @@ type Tag struct {
 	Bracket    bool   // #[[…]]: line[Start+1:End] is a wiki link whose target is the page
 }
 
-// IsTagNameRune reports whether r may appear in a simple tag name.
+// IsTagNameRune reports whether r may appear in a simple tag name: a letter,
+// digit, combining mark, '-', '_' or '/'. A combining mark keeps decomposed
+// and Indic text whole; it can continue a name but never start one.
 func IsTagNameRune(r rune) bool {
-	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' || r == '/'
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.In(r, unicode.Mn, unicode.Mc, unicode.Me) ||
+		r == '-' || r == '_' || r == '/'
 }
 
 // IsSimpleTagName reports whether name can be written as #name: non-empty,

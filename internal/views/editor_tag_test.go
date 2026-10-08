@@ -20,6 +20,8 @@ func TestExtractTagPartial(t *testing.T) {
 		{"after paren", "(#kit", "", "kit", true},
 		{"nested path after tab", "\t#kb/no", "", "kb/no", true},
 		{"unicode", "#café", "", "café", true},
+		{"combining marks", "#हिन्", "", "हिन्", true},
+		{"mark cannot start", "#\u0301k", "", "", false},
 		{"hex-shaped is still a query", "#f2e", "", "f2e", true},
 		{"bare hash", "#", "", "", false},
 		{"heading", "# ", "", "", false},

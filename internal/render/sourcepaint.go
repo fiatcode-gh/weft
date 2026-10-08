@@ -497,8 +497,9 @@ func (w *inliner) node(n ast.Node, ov *gansi.StylePrimitive) {
 	}
 }
 
-// linkSpan is one [[...]] in a line: its bytes [start, end) and the display
-// text [textStart, textEnd), the alias when there is one, else the target.
+// linkSpan is one link-styled run on a line: a wiki link, a simple tag, or the
+// `#` of a bracket tag. Its bytes are [start, end); [textStart, textEnd) is
+// styled as a link and the rest is dimmed.
 type linkSpan struct{ start, end, textStart, textEnd int }
 
 // maskLinks replaces every wiki-link and tag outside code spans with the same

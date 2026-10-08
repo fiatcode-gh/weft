@@ -447,7 +447,7 @@ func previewEdit(rng *rand.Rand, d *previewDoc) int {
 			}
 		}
 	}
-	switch rng.IntN(8) {
+	switch rng.IntN(9) {
 	case 0:
 		d.lines[i] = line()
 	case 1:
@@ -473,6 +473,13 @@ func previewEdit(rng *rand.Rand, d *previewDoc) int {
 		}
 	case 6:
 		d.insert(i, "[ref]: http://example.com/ref", d.crlf[i])
+	case 8:
+		// Destroy a tag: drop its '#', or wrap the line in a code span.
+		if rng.IntN(2) == 0 {
+			d.lines[i] = strings.Replace(d.lines[i], "#", "", 1)
+		} else if strings.Contains(d.lines[i], "#") {
+			d.lines[i] = "`" + d.lines[i] + "`"
+		}
 	}
 	return min(i, d.Len()-1)
 }
