@@ -11,12 +11,12 @@
 │                                                                                    │
 │  Workbench                                                                         │
 │     LATER [#C] Sharpen the lathe chisels                                           │
-│     LATER Wax the bench top                                                        │
-│     LATER Plane the walnut slab                                                    │
+│     LATER Wax the bench top  scheduled 2026-05-20                                  │
+│     LATER Plane the walnut slab  scheduled 2026-05-28 · deadline 2026-05-27        │
 │                                                                                    │
 │  kb/notes                                                                          │
 │     LATER Index the kb namespace                                                   │
 │                                                                                    │
-│  ↑/↓ select · t cycle filter · enter open · esc back                               │
+│  ↑/↓ select · x done/undo · t cycle filter · enter open · esc back                 │
 │                                                                                    │
 ╰────────────────────────────────────────────────────────────────────────────────────╯

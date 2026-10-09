@@ -20,6 +20,6 @@
 │     DOING Write the parser                                                         │
 │     ↓ 16 more below                                                                │
 │                                                                                    │
-│  ↑/↓ select · t cycle filter · enter open · esc back                               │
+│  ↑/↓ select · x done/undo · t cycle filter · enter open · esc back                 │
 │                                                                                    │
 ╰────────────────────────────────────────────────────────────────────────────────────╯

@@ -15,10 +15,12 @@ type Todos struct {
 	idx     *graph.Index
 	filter  string // "", "TODO", "LATER", "DOING", "WAITING"
 	visible []graph.TodoBullet
+	done    doneRows // tasks marked DONE this session, kept listed so they can be undone
+	errMsg  string   // failure feedback, rendered inside the panel
 }
 
 func NewTodos(idx *graph.Index, width, height int) *Todos {
-	t := &Todos{listBox: listBox{width: width, height: height}, idx: idx}
+	t := &Todos{listBox: listBox{width: width, height: height}, idx: idx, done: doneRows{}}
 	t.recompute()
 	return t
 }
@@ -38,10 +40,22 @@ func (t *Todos) cycleFilter() {
 func (t *Todos) recompute() {
 	t.visible = t.visible[:0]
 	for _, b := range t.idx.Todos {
-		if t.filter != "" && b.Marker != t.filter {
+		if _, kept := t.done[taskKey{b.Page, b.LineNumber}]; kept {
 			continue
 		}
 		t.visible = append(t.visible, b)
+	}
+	for _, b := range t.done {
+		t.visible = append(t.visible, b)
+	}
+	if t.filter != "" {
+		kept := t.visible[:0]
+		for _, b := range t.visible {
+			if b.Marker == t.filter {
+				kept = append(kept, b)
+			}
+		}
+		t.visible = kept
 	}
 	sort.SliceStable(t.visible, func(i, j int) bool {
 		if t.visible[i].Page != t.visible[j].Page {
@@ -54,7 +68,55 @@ func (t *Todos) recompute() {
 	}
 }
 
+// SetError records a message to show inside the panel, above the footer.
+func (t *Todos) SetError(msg string) { t.errMsg = msg }
+
+// selectedKey is the page+line identity of the selected row.
+func (t *Todos) selectedKey() (taskKey, bool) {
+	if t.sel < 0 || t.sel >= len(t.visible) {
+		return taskKey{}, false
+	}
+	b := t.visible[t.sel]
+	return taskKey{b.Page, b.LineNumber}, true
+}
+
+// marked folds a successful write of m (the task now sits on line) into the
+// panel: a task marked DONE stays listed as a done row, an undone one returns
+// from the fresh index, and the selection and filter survive the rebuild.
+func (t *Todos) marked(m taskMark, line int, idx *graph.Index) {
+	oldSel := t.sel
+	selKey, hadSel := t.selectedKey()
+	from := taskKey{m.page, m.line}
+	to := taskKey{m.page, line}
+	if m.to == "DONE" {
+		for _, b := range t.visible {
+			if b.Page == from.page && b.LineNumber == from.line {
+				b.LineNumber = line
+				t.done[to] = b
+				break
+			}
+		}
+	} else {
+		delete(t.done, from)
+	}
+	if hadSel && selKey == from {
+		selKey = to
+	}
+	t.idx = idx
+	t.recompute()
+	t.sel = min(oldSel, max(0, len(t.visible)-1))
+	if hadSel {
+		for i, b := range t.visible {
+			if (taskKey{b.Page, b.LineNumber}) == selKey {
+				t.sel = i
+				break
+			}
+		}
+	}
+}
+
 func (t *Todos) Update(key string) OverlayResult {
+	t.errMsg = ""
 	switch key {
 	case keyEsc, keyQ:
 		return overlayCancel()
@@ -64,10 +126,26 @@ func (t *Todos) Update(key string) OverlayResult {
 		t.moveUp()
 	case keyDown, keyJ:
 		t.moveDown(len(t.visible))
-	case keyEnter:
-		if t.sel >= 0 && t.sel < len(t.visible) {
-			return overlayOpenTask(t.visible[t.sel].Page, t.visible[t.sel].Ordinal)
+	case "x":
+		if t.sel < 0 || t.sel >= len(t.visible) {
+			break
 		}
+		b := t.visible[t.sel]
+		m := taskMark{page: b.Page, line: b.LineNumber, from: b.Marker, to: "DONE", tail: graph.TaskTail(b.Priority, b.Text)}
+		if _, isDone := t.done[taskKey{b.Page, b.LineNumber}]; isDone {
+			m.from, m.to = "DONE", b.Marker
+		}
+		return overlayMarkTask(m)
+	case keyEnter:
+		if t.sel < 0 || t.sel >= len(t.visible) {
+			break
+		}
+		b := t.visible[t.sel]
+		if _, isDone := t.done[taskKey{b.Page, b.LineNumber}]; isDone {
+			// The task is no longer an open todo, so its ordinal is gone.
+			return overlayOpen(b.Page)
+		}
+		return overlayOpenTask(b.Page, b.Ordinal)
 	}
 	return OverlayResult{}
 }
@@ -101,60 +179,7 @@ func (t *Todos) visibleRows() int {
 // that t.sel is always inside it, accounting for the row cost of group
 // headers and inter-group blank lines (1 row each).
 func (t *Todos) computeWindow() (start, end int) {
-	n := len(t.visible)
-	if n == 0 {
-		return 0, 0
-	}
-	budget := t.visibleRows()
-	if budget <= 0 {
-		return 0, 0
-	}
-
-	// Per-position incremental row cost when i follows prevPage at i-1.
-	// Returns the rows the i-th bullet adds: 1 for the bullet, +1 if it
-	// starts a new group (header), +1 for the blank line before the new
-	// group when prevPage is non-empty.
-	cost := func(i int, prevPage string) int {
-		c := 1
-		if t.visible[i].Page != prevPage {
-			c++
-			if prevPage != "" {
-				c++
-			}
-		}
-		return c
-	}
-
-	walkForward := func(s int) int {
-		used := 0
-		prev := ""
-		e := s
-		for i := s; i < n; i++ {
-			c := cost(i, prev)
-			if used+c > budget {
-				break
-			}
-			used += c
-			prev = t.visible[i].Page
-			e = i + 1
-		}
-		return e
-	}
-
-	// Centre the selection in the window. If t.sel ends up past the
-	// rendered end (because the chosen start left too little budget),
-	// nudge start forward until t.sel fits — guaranteed to terminate
-	// because start can rise to t.sel.
-	start = t.sel - budget/2
-	if start < 0 {
-		start = 0
-	}
-	end = walkForward(start)
-	for end <= t.sel && start < t.sel {
-		start++
-		end = walkForward(start)
-	}
-	return start, end
+	return groupedWindow(len(t.visible), t.sel, t.visibleRows(), func(i int) string { return t.visible[i].Page })
 }
 
 func (t *Todos) View() string {
@@ -172,8 +197,7 @@ func (t *Todos) View() string {
 	if len(t.visible) == 0 {
 		sb.WriteString(styleFaint.Render("  nothing open"))
 		sb.WriteString("\n")
-		sb.WriteString("\n")
-		sb.WriteString(styleFaint.Render(clamp("↑/↓ select · t cycle filter · enter open · esc back", inner)))
+		t.writeFooter(&sb, inner)
 		return renderBordered(inner+4, sb.String())
 	}
 
@@ -197,10 +221,6 @@ func (t *Todos) View() string {
 			sb.WriteString("\n")
 			lastPage = b.Page
 		}
-		prio := ""
-		if b.Priority != "" {
-			prio = "[#" + b.Priority + "] "
-		}
 		// Clamp the row content to one line. Without this, a long todo
 		// wraps inside the panel without hanging indent — continuation
 		// lines start flush at column 0 and look like sibling bullets,
@@ -208,19 +228,12 @@ func (t *Todos) View() string {
 		// ▶ marker. Matches the picker/search/backlinks single-line policy.
 		rowBudget := inner - 3 // marker prefix is 3 cells
 		marker := "   "        // 3-cell to match selected " ▶ " width
-		var row string
 		if i == t.sel {
 			marker = styleSel.Render(" ▶ ")
-			row = styleSel.Render(clamp(fmt.Sprintf("%s %s%s", b.Marker, prio, b.Text), rowBudget))
-		} else {
-			styledMarker := b.Marker
-			if st, ok := todosMark[b.Marker]; ok {
-				styledMarker = st.Render(b.Marker)
-			}
-			row = clamp(styledMarker+" "+prio+b.Text, rowBudget)
 		}
+		_, isDone := t.done[taskKey{b.Page, b.LineNumber}]
 		sb.WriteString(marker)
-		sb.WriteString(row)
+		sb.WriteString(taskRow(b, isDone, i == t.sel, taskDates(b), rowBudget))
 		sb.WriteString("\n")
 	}
 
@@ -229,7 +242,17 @@ func (t *Todos) View() string {
 		sb.WriteString("\n")
 	}
 
-	sb.WriteString("\n")
-	sb.WriteString(styleFaint.Render(clamp("↑/↓ select · t cycle filter · enter open · esc back", inner)))
+	t.writeFooter(&sb, inner)
 	return renderBordered(inner+4, sb.String())
+}
+
+// writeFooter writes the blank separator, the pending error (if any) and the
+// key legend, the way Picker does.
+func (t *Todos) writeFooter(sb *strings.Builder, inner int) {
+	sb.WriteString("\n")
+	if t.errMsg != "" {
+		sb.WriteString(styleTitle.Render(clamp(t.errMsg, inner)))
+		sb.WriteString("\n")
+	}
+	sb.WriteString(styleFaint.Render(clamp("↑/↓ select · x done/undo · t cycle filter · enter open · esc back", inner)))
 }

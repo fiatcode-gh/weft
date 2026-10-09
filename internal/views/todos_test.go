@@ -2,6 +2,7 @@ package views
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -240,4 +241,103 @@ func countTodoBlockLines(view, pageHeader string) int {
 		n++
 	}
 	return n
+}
+
+// todosAt builds the dashboard over the fixture, filtered to LATER, with the
+// row for text selected.
+func todosAt(t *testing.T, filter, text string) (*Todos, *graph.Index) {
+	t.Helper()
+	quietTerm(t)
+	idx := loadFixture(t)
+	td := NewTodos(idx, 100, 30)
+	for td.filter != filter {
+		td.Update("t")
+	}
+	for i, b := range td.visible {
+		if b.Text == text {
+			td.sel = i
+			return td, idx
+		}
+	}
+	t.Fatalf("no row %q under filter %q", text, filter)
+	return nil, nil
+}
+
+// withoutTask is a copy of idx whose open todos lack the task at page+line, as
+// after a reindex that follows marking it DONE.
+func withoutTask(idx *graph.Index, page string, line int) *graph.Index {
+	cp := *idx
+	cp.Todos = nil
+	for _, b := range idx.Todos {
+		if b.Page == page && b.LineNumber == line {
+			continue
+		}
+		cp.Todos = append(cp.Todos, b)
+	}
+	return &cp
+}
+
+func TestTodosRowShowsDates(t *testing.T) {
+	td, _ := todosAt(t, "LATER", "Plane the walnut slab")
+	if v := plain(td.View()); !strings.Contains(v, "Plane the walnut slab") ||
+		!strings.Contains(v, "scheduled 2026-05-28 · deadline 2026-05-27") {
+		t.Errorf("dated row missing its label:\n%s", v)
+	}
+}
+
+func TestTodosXReturnsMarkTask(t *testing.T) {
+	td, _ := todosAt(t, "", "Replace the dust collector filter")
+	b := td.visible[td.sel]
+
+	res := td.Update("x")
+
+	want := taskMark{page: b.Page, line: b.LineNumber, from: "TODO", to: "DONE", tail: "[#B] Replace the dust collector filter"}
+	if res.kind != overlayResultMarkTask || res.mark != want {
+		t.Errorf("x result = %+v, want mark %+v", res, want)
+	}
+}
+
+func TestTodosMarkedRowStaysStruck(t *testing.T) {
+	td, idx := todosAt(t, "LATER", "Plane the walnut slab")
+	b := td.visible[td.sel]
+	m := td.Update("x").mark
+
+	td.marked(m, b.LineNumber, withoutTask(idx, b.Page, b.LineNumber))
+
+	var row string
+	for _, l := range strings.Split(td.View(), "\n") {
+		if strings.Contains(plain(l), "DONE Plane the walnut slab") {
+			row = l
+		}
+	}
+	if row == "" {
+		t.Fatalf("done row missing:\n%s", plain(td.View()))
+	}
+	if !regexp.MustCompile(`\x1b\[(?:[0-9]+;)*9(?:;[0-9]+)*m`).MatchString(row) {
+		t.Errorf("done row has no strikethrough SGR: %q", row)
+	}
+	if res := td.Update("enter"); res.kind != overlayResultOpen || res.page != b.Page {
+		t.Errorf("enter on a done row = %+v, want open %q", res, b.Page)
+	}
+	back := td.Update("x").mark
+	if back.from != "DONE" || back.to != "LATER" || back.line != b.LineNumber {
+		t.Errorf("undo mark = %+v, want DONE→LATER at line %d", back, b.LineNumber)
+	}
+}
+
+func TestTodosRebuildKeepsSelectionAndFilter(t *testing.T) {
+	td, idx := todosAt(t, "LATER", "Plane the walnut slab")
+	b := td.visible[td.sel]
+	m := td.Update("x").mark
+
+	// A line shift in the rebuilt index must not lose the selection either.
+	td.marked(m, b.LineNumber, withoutTask(idx, b.Page, b.LineNumber))
+
+	if td.filter != "LATER" {
+		t.Errorf("filter = %q, want LATER", td.filter)
+	}
+	got := td.visible[td.sel]
+	if got.Page != b.Page || got.LineNumber != b.LineNumber {
+		t.Errorf("selection = %s:%d, want %s:%d", got.Page, got.LineNumber, b.Page, b.LineNumber)
+	}
 }

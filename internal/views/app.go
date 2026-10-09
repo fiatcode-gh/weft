@@ -763,6 +763,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return a, cmd
 				}
 				return a, a.linkify(res.ref, res.target)
+			case overlayResultMarkTask:
+				if cmd, blocked := a.blockIfSyncing(); blocked {
+					return a, cmd
+				}
+				return a, a.markTask(res.mark)
 			case overlayResultCreate:
 				if cmd, blocked := a.blockIfSyncing(); blocked {
 					return a, cmd
@@ -998,6 +1003,9 @@ func (a *App) blockIfSyncing() (cmd tea.Cmd, blocked bool) {
 		o.SetError(msg)
 		return nil, true
 	case *Picker:
+		o.SetError(msg)
+		return nil, true
+	case taskPanel:
 		o.SetError(msg)
 		return nil, true
 	default:
