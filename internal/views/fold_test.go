@@ -150,8 +150,16 @@ func TestZCyclesLevels(t *testing.T) {
 	if a.hint != "fold: headings only" {
 		t.Errorf("hint = %q", a.hint)
 	}
-	wantAbsent(t, a, "top1", "H2", "text")
-	wantPresent(t, a, "H1")
+	wantAbsent(t, a, "top1", "child1", "text")
+	wantPresent(t, a, "H1", "H2")
+	if m := markerRow(a); !strings.Contains(m, "▸") {
+		t.Errorf("no marker at level 2: %q", m)
+	}
+	tab(a) // the cursor is on H1: Tab at level 2 folds or unfolds only its body
+	wantPresent(t, a, "top1", "top2", "H2")
+	wantAbsent(t, a, "text")
+	tab(a)
+	wantAbsent(t, a, "top1")
 
 	a.Update(key("z"))
 	if a.hint != "fold: all shown" {
@@ -411,5 +419,94 @@ func TestEFromFoldedPageKeepsLineAndScreenRow(t *testing.T) {
 	a.Update(esc)
 	if got := frame(a); got != before {
 		t.Errorf("Esc did not restore the folded frame:\n%s\nwant\n%s", plain(got), plain(before))
+	}
+}
+
+// Level 2 is an outline: a title with nested headings still shows every
+// heading, and hides only the text under each.
+func TestZLevelTwoShowsEveryHeading(t *testing.T) {
+	a := foldApp(t, "# Title\nintro line\n## Alpha\nalpha text\n### Alpha One\none text\n## Beta\nbeta text\n")
+	a.Update(key("z"))
+	a.Update(key("z"))
+	if a.hint != "fold: headings only" {
+		t.Fatalf("hint = %q", a.hint)
+	}
+	wantPresent(t, a, "Title", "Alpha", "Alpha One", "Beta")
+	wantAbsent(t, a, "intro line", "alpha text", "one text", "beta text")
+	n := 0
+	for _, l := range frameLines(a) {
+		if strings.Contains(l, "▸") {
+			n++
+		}
+	}
+	if n != 4 {
+		t.Errorf("%d marked headings, want 4:\n%s", n, appText(a))
+	}
+}
+
+// Children that render as nothing (a logbook, a query drawer) are not folds:
+// Tab says so and z level 1 leaves the row unmarked.
+func TestHiddenOnlyChildrenAreNotFoldable(t *testing.T) {
+	a := foldApp(t, "- DONE task\n  :LOGBOOK:\n  CLOCK: [2026-01-01 Thu 10:00]\n  :END:\n- next\n")
+	tab(a)
+	if a.hint != "nothing to fold here" {
+		t.Errorf("hint = %q, want nothing to fold here", a.hint)
+	}
+	if m := markerRow(a); m != "" {
+		t.Errorf("marker after Tab: %q", m)
+	}
+	a.Update(key("z"))
+	if m := markerRow(a); m != "" {
+		t.Errorf("z level 1 marks a row with only hidden children: %q", m)
+	}
+}
+
+// wantTermEmphasised fails unless the frame row holding term draws exactly the
+// term in the find emphasis (reverse video alone), distinct from the cursor
+// row's own selection style.
+func wantTermEmphasised(t *testing.T, a *App, term string) {
+	t.Helper()
+	for _, l := range strings.Split(frame(a), "\n") {
+		if !strings.Contains(plain(l), term) {
+			continue
+		}
+		if !strings.Contains(l, "\x1b[7m"+term+"\x1b[m") {
+			t.Errorf("row %q does not draw %q in the find emphasis", l, term)
+		}
+		return
+	}
+	t.Fatalf("no row shows %q", term)
+}
+
+// The find jump lands the cursor on the first hit's row; the term keeps its
+// highlight there instead of dissolving into the selection style.
+func TestFindEmphasisSurvivesOnCursorRow(t *testing.T) {
+	a := foldApp(t, "## A\nthe needle sits here\n## B\ntext\n")
+	a.navigateHighlighting("P", "needle")
+	if got := cursorText(a); !strings.Contains(got, "needle") {
+		t.Fatalf("cursor row = %q, want the find's row", got)
+	}
+	wantTermEmphasised(t, a, "needle")
+}
+
+func TestFindEmphasisSurvivesOnCursorRowInColour(t *testing.T) {
+	if !inFreshProcess(t, map[string]string{"NO_COLOR": "", "WEFT_STYLE": "dark"}) {
+		return
+	}
+	t.Setenv("NO_COLOR", "")
+	a := newApp(t, map[string]string{"pages/P.md": "## A\nthe needle sits here\n## B\ntext\n"}, 80, 24)
+	a.navigateHighlighting("P", "needle")
+	wantTermEmphasised(t, a, "needle")
+}
+
+// z on a page with nothing to fold says so instead of cycling through levels
+// that change nothing.
+func TestZOnPageWithNothingFoldableSaysSo(t *testing.T) {
+	a := foldApp(t, "just text\nmore text\n- a leaf\n")
+	for range 3 {
+		a.Update(key("z"))
+		if a.hint != "nothing to fold here" {
+			t.Fatalf("hint = %q, want nothing to fold here", a.hint)
+		}
 	}
 }

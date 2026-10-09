@@ -18,11 +18,17 @@ const (
 // Fold is a line that can hide the lines under it: a heading's section or a
 // list item's children. The hidden lines are [Start, End); End-Start is the
 // count the read view's fold marker shows.
+//
+// A heading also has a body, [BodyStart, BodyEnd): its own content up to the
+// next heading of any level. The read view's outline level folds that range so
+// every heading stays visible. BodyEnd <= BodyStart means no body of its own.
 type Fold struct {
 	Line       int
 	Kind       FoldKind
 	Level      int // heading level 1–6; list depth (0 = top level) for bullets
 	Start, End int
+	BodyStart  int
+	BodyEnd    int
 }
 
 type lineSlice []string
@@ -36,15 +42,23 @@ func (l lineSlice) Line(i int) string { return l[i] }
 // SourceRows lines directly.
 func Outline(body string) []Fold {
 	lines := strings.Split(body, "\n")
+	sc := NewScanner()
+	src := lineSlice(lines)
+	infos := make([]LineInfo, len(lines))
+	for i := range lines {
+		infos[i] = sc.Info(src, i)
+	}
 	blank := make([]bool, len(lines))
 	for i, l := range lines {
 		blank[i] = strings.TrimSpace(l) == ""
 	}
-	// lastContent is the end (exclusive) of the last non-blank line in
-	// [from, to), or -1 when the range holds none.
+	// lastContent is the end (exclusive) of the last line in [from, to) that
+	// renders something, or -1 when the range holds none. Blank lines and
+	// hidden blocks (logbook, query drawers) render nothing, so a fold over
+	// only those would show a marker and a count with nothing under it.
 	lastContent := func(from, to int) int {
 		for i := to - 1; i >= from; i-- {
-			if !blank[i] {
+			if !blank[i] && infos[i].Kind != KindHidden {
 				return i + 1
 			}
 		}
@@ -71,14 +85,20 @@ func Outline(body string) []Fold {
 			}
 		}
 		if end := lastContent(start, raw); end >= 0 {
-			folds = append(folds, Fold{Line: h.Line, Kind: FoldHeading, Level: h.Level, Start: start, End: end})
+			fold := Fold{Line: h.Line, Kind: FoldHeading, Level: h.Level, Start: start, End: end}
+			bodyRaw := len(lines)
+			if i+1 < len(headings) {
+				bodyRaw = headings[i+1].Line
+			}
+			if be := lastContent(start, bodyRaw); be >= 0 {
+				fold.BodyStart, fold.BodyEnd = start, be
+			}
+			folds = append(folds, fold)
 		}
 	}
 
-	sc := NewScanner()
-	src := lineSlice(lines)
 	for b := range lines {
-		info := sc.Info(src, b)
+		info := infos[b]
 		if info.Kind != KindBullet && info.Kind != KindOrdered {
 			continue
 		}
@@ -87,7 +107,7 @@ func Outline(body string) []Fold {
 			if blank[j] {
 				continue
 			}
-			c := sc.Info(src, j)
+			c := infos[j]
 			if isHeading[j] || (c.Indent <= info.Indent && endsChildren(c, b, j)) {
 				raw = j
 				break

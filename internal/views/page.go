@@ -3,6 +3,7 @@ package views
 import (
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -626,7 +627,8 @@ func (p *PageView) ScrollToTask(ordinal int) {
 // ScrollToHeading puts the cursor on the first heading whose text matches
 // heading (graph.HeadingKey), unfolding what hides it and its own section, with
 // the heading one row below the top of the window. false when the page has no
-// such heading or no row map; the view then stays at the top.
+// such heading. Without a row map the heading cannot be placed: the view stays
+// at the top and the heading still counts as found.
 func (p *PageView) ScrollToHeading(heading string) bool {
 	key := graph.HeadingKey(heading)
 	var h *graph.Heading
@@ -641,6 +643,9 @@ func (p *PageView) ScrollToHeading(heading string) bool {
 		return false
 	}
 	lines := p.sourceRows()
+	if len(lines) == 0 {
+		return true // found, but not placeable without a row map: the view stays at the top
+	}
 	fr := -1
 	for r := range min(len(lines), len(p.full)) {
 		if lines[r] == h.Line && nonBlank(p.full[r]) {
@@ -765,9 +770,17 @@ func (p *PageView) markRow(row string, n int) string {
 	return ansi.Truncate(row, p.markerFit(ansi.Strip(row), m), "") + styleFaint.Render(m)
 }
 
+// cursorSpan is a run of display columns [from, to) of the cursor row drawn in
+// its own style instead of the selection style.
+type cursorSpan struct {
+	from, to int
+	style    lipgloss.Style
+}
+
 // cursorRow draws the cursor row: its plain text padded to the page width in
-// the selection style, with the selected link, if it starts here, in cs. A
-// folded row's marker is part of the text.
+// the selection style, with the selected link, if it starts here, in cs and
+// the find highlights on the row in the emphasis style. A folded row's marker
+// is part of the text.
 func (p *PageView) cursorRow(link *render.Link, linkRow int, cs lipgloss.Style) string {
 	st := styleSel
 	if p.noColor {
@@ -776,34 +789,53 @@ func (p *PageView) cursorRow(link *render.Link, linkRow int, cs lipgloss.Style) 
 	fr := p.fullIdx(p.row)
 	row := p.full[fr]
 	text := ansi.Strip(row)
-	col, end := 0, 0
+	var spans []cursorSpan
+	for _, f := range p.result.Finds {
+		rel := f - p.rowStart[fr]
+		if rel < 0 || rel >= len(row) {
+			continue
+		}
+		stop := len(row)
+		if i := strings.Index(row[rel:], "\x1b[m"); i >= 0 {
+			stop = rel + i
+		}
+		from := ansi.StringWidth(row[:rel])
+		spans = append(spans, cursorSpan{from, from + ansi.StringWidth(row[rel:stop]), render.EmphasisStyle})
+	}
 	if link != nil && linkRow == p.row {
-		col = ansi.StringWidth(row[:link.Start-p.rowStart[fr]])
-		end = col + ansi.StringWidth(link.Display)
-	} else {
-		link = nil
+		col := ansi.StringWidth(row[:link.Start-p.rowStart[fr]])
+		// The selected link wins over a find that overlaps it.
+		spans = slices.DeleteFunc(spans, func(s cursorSpan) bool {
+			return s.from < col+ansi.StringWidth(link.Display) && col < s.to
+		})
+		spans = append(spans, cursorSpan{col, col + ansi.StringWidth(link.Display), cs})
 	}
 	if n, ok := p.marks[p.row]; ok {
 		m := foldMarker(n)
 		keep := p.markerFit(text, m)
 		text = ansi.Truncate(text, keep, "") + m
-		if end > keep {
-			link = nil // the marker covers the link; it stays selected, unpainted
-		}
+		// The marker covers what it cuts off; a link it cuts stays selected,
+		// unpainted.
+		spans = slices.DeleteFunc(spans, func(s cursorSpan) bool { return s.to > keep })
 	}
 	if pad := p.width - ansi.StringWidth(text); pad > 0 {
 		text += strings.Repeat(" ", pad)
 	}
-	paint := func(s string) string {
-		if s == "" {
-			return ""
+	slices.SortFunc(spans, func(a, b cursorSpan) int { return a.from - b.from })
+	var out strings.Builder
+	paint := func(s string, sty lipgloss.Style) {
+		if s != "" {
+			out.WriteString(sty.Render(s))
 		}
-		return st.Render(s)
 	}
-	if link == nil {
-		return paint(text)
+	width, at := ansi.StringWidth(text), 0
+	for _, s := range spans {
+		paint(ansi.Cut(text, at, s.from), st)
+		paint(ansi.Cut(text, s.from, s.to), s.style)
+		at = s.to
 	}
-	return paint(ansi.Cut(text, 0, col)) + cs.Render(link.Display) + paint(ansi.Cut(text, end, ansi.StringWidth(text)))
+	paint(ansi.Cut(text, at, width), st)
+	return out.String()
 }
 
 func (p *PageView) load() {

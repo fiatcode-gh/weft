@@ -42,6 +42,9 @@ func worstOf(n int, f func()) time.Duration {
 }
 
 func TestFoldSpeed10000(t *testing.T) {
+	if raceDetector {
+		t.Skip("wall-clock bound; the race detector's slowdown makes it meaningless, the non-race CI step checks timing")
+	}
 	quietTerm(t)
 	for _, tc := range []struct{ name, content string }{
 		{"mixed", perfContent(10000)},

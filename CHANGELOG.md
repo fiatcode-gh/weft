@@ -24,7 +24,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - A row cursor in the read view, drawn as a highlighted row.
-- Folding: `Tab` folds a heading's section or a bullet's children, `z` cycles top-level bullets → headings only → all. Folds last for the session, are dropped when the page's text changes, and are never saved.
+- Folding: `Tab` folds a heading's section or a bullet's children, `z` cycles top-level bullets → an outline of headings (each heading stays visible, its text folded) → all. Folds last for the session, are dropped when the page's text changes, and are never saved.
 - `[[Page#Heading]]` (and `#[[Page#Heading]]`) opens the page at that heading, counts as a backlink of the page and is not unresolved in `weft doctor`. A page literally named `Page#Heading` still wins.
 - A journal template: a `Journal Template` page's content starts every new journal created with `E`, capture or the first save in the in-app editor, as well as `.`.
 - Quick capture (`c`) from the read view and the dashboard, agenda, backlinks, calendar and on-this-day overlays: one line appended to today's journal, `Tab` for `TODO`.

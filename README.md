@@ -89,7 +89,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | `Ctrl-d/u` | half-screen cursor move             |
 | `g` / `G`  | cursor to top / bottom of page      |
 | `Tab`      | fold / unfold the heading or bullet under the cursor |
-| `z`        | fold the page: top-level bullets → headings only → all shown |
+| `z`        | fold the page: top-level bullets → outline of headings → all shown |
 | `R`        | rebuild the index                   |
 | `S`        | sync the graph with git (commit → pull → push) |
 | `e`        | edit current page in-app at the cursor row |
@@ -141,8 +141,8 @@ A task is a bullet that starts with a marker (`TODO`, `LATER`, `DOING`, `WAITING
 ## What gets rendered
 
 - `[[wiki-links]]` are styled inline, navigable with `n`/`N`, and follow with `Enter`. Aliased links (`[[Target|alias]]`) show the alias.
-- `[[Page#Heading]]` (and `#[[Page#Heading]]`) opens the page with that heading at the top. The heading is matched by its text, ignoring case and emphasis marks; the first match wins, and a missing heading leaves you at the top with a hint. The link counts as a backlink of the page. A page literally named `Page#Heading` still wins over the heading reading.
-- Folding: `Tab` on a heading hides its section, on a bullet or numbered item hides its children; a folded row ends with `▸ N lines`. `z` cycles the whole page through top-level bullets folded, headings only, and everything shown. Folds are view-only, last for the session and are dropped when the page's text changes; nothing is saved to the file. Following a link, backlink or task to a hidden line unfolds it, and `n`/`N` skip hidden links.
+- `[[Page#Heading]]` (and `#[[Page#Heading]]`) opens the page with that heading near the top (one row below it). The heading is matched by its text, ignoring case and emphasis marks; the first match wins, and a missing heading leaves you at the top with a hint. The link counts as a backlink of the page. A page literally named `Page#Heading` still wins over the heading reading.
+- Folding: `Tab` on a heading hides its section, on a bullet or numbered item hides its children; a folded row ends with `▸ N lines`. `z` cycles the whole page through top-level bullets folded, an outline (every heading stays visible with its text folded, and `Tab` on a heading then folds or unfolds just its text), and everything shown; on a page with nothing foldable it says so. Folds are view-only, last for the session and are dropped when the page's text changes; nothing is saved to the file. Following a link, backlink or task to a hidden line unfolds it, and `n`/`N` skip hidden links.
 - A tag is a link to the page of that name: `#kitchen` or `#[[Book Club]]`. It starts at the line start or after whitespace or `(`, the name begins with a letter and continues with letters, digits, combining marks (so `#café` and `#हिन्दी` stay whole), `-`, `_` and `/`; any other name needs the bracket form. The `#` stays visible, and tags are navigable with `n`/`N` and `Enter` like wiki-links. Never a tag: issue numbers (`#18`, `PR #5`), hex colours (`#FAF3E7`), headings, `#+…` and `#!` lines, text inside `[[…]]`, URL fragments, code spans and fences.
 - Workflow markers at the start of a bullet are colour-coded (`TODO` red, `DOING` yellow, `LATER` blue, `WAITING` dim, `DONE` green, `CANCELED`/`CANCELLED` strikethrough, `NOW` magenta).
 - `:LOGBOOK: ... :END:` blocks are hidden — they're metadata, not content.

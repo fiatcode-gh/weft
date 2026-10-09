@@ -487,8 +487,8 @@ func anchorLongPage(prefix string) string {
 
 var anchorLineRe = regexp.MustCompile(`line (\d+)`)
 
-// topRowLine parses N from the "line N" bullet on the page's cursor row.
-func topRowLine(t *testing.T, p *PageView) int {
+// cursorRowLine parses N from the "line N" bullet on the page's cursor row.
+func cursorRowLine(t *testing.T, p *PageView) int {
 	t.Helper()
 	row := p.rowText(p.CursorRow())
 	m := anchorLineRe.FindStringSubmatch(row)
@@ -516,7 +516,7 @@ func TestPageViewAnchorFollowsScroll(t *testing.T) {
 	if p.Offset() <= 0 {
 		t.Fatalf("expected scrolled view, offset=%d", p.Offset())
 	}
-	k := topRowLine(t, p)
+	k := cursorRowLine(t, p)
 
 	at, ok := p.ReadingAnchor()
 
@@ -547,7 +547,7 @@ func TestPageViewAnchorAtTopNeedsNoMap(t *testing.T) {
 	}
 }
 
-func TestPageViewAnchorPrefersVisibleLinkCursor(t *testing.T) {
+func TestPageViewAnchorIsCursorRowOnLink(t *testing.T) {
 	quietTerm(t)
 	_, idx := writeGraph(t, map[string]string{
 		"pages/A.md": "- a\n- b\n- c\n- see [[B]]\n- d\n",
@@ -575,7 +575,7 @@ func TestPageViewAnchorIgnoresOffscreenLinkCursor(t *testing.T) {
 	p := NewPageView(idx, "A", 80, 10)
 	p.CycleLink(+1)
 	scrollDown(p, 20)
-	k := topRowLine(t, p)
+	k := cursorRowLine(t, p)
 
 	at, ok := p.ReadingAnchor()
 
@@ -584,7 +584,7 @@ func TestPageViewAnchorIgnoresOffscreenLinkCursor(t *testing.T) {
 	}
 }
 
-func TestPageViewAnchorPrefersVisibleLinkCursorWhenScrolled(t *testing.T) {
+func TestPageViewAnchorIsCursorRowWhenLinkSelectedAfterScroll(t *testing.T) {
 	quietTerm(t)
 	var b strings.Builder
 	for n := range 30 {
@@ -596,17 +596,13 @@ func TestPageViewAnchorPrefersVisibleLinkCursorWhenScrolled(t *testing.T) {
 	}
 	_, idx := writeGraph(t, map[string]string{"pages/A.md": b.String(), "pages/B.md": "- b\n"})
 	p := NewPageView(idx, "A", 80, 10)
-	p.CycleLink(+1)
-	for {
-		r, _ := p.linkRow(p.Cursor())
-		if p.Offset() == 0 || r-p.Offset() >= 3 {
-			break
-		}
-		p.LineUp()
-	}
+	p.CycleLink(+1) // the view scrolls to the link and the cursor lands on its row
 	row, found := p.linkRow(p.Cursor())
 	if !found || p.Offset() <= 0 || row <= p.Offset() || row > p.Offset()+p.vp.Height()-1 {
 		t.Fatalf("setup: link row %d must be visible below top %d", row, p.Offset())
+	}
+	if p.CursorRow() != row {
+		t.Fatalf("setup: cursor row %d, want the link row %d", p.CursorRow(), row)
 	}
 
 	at, ok := p.ReadingAnchor()

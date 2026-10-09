@@ -301,7 +301,7 @@ func bullets(n int) string {
 	return b.String()
 }
 
-func assertEditorOnReadTop(t *testing.T, raw string) {
+func assertEditorOnCursorRow(t *testing.T, raw string) {
 	t.Helper()
 	quietTerm(t)
 	dir, _ := writeGraph(t, map[string]string{"pages/Long.md": raw})
@@ -338,11 +338,11 @@ func assertEditorOnReadTop(t *testing.T, raw string) {
 }
 
 func TestE_OpensAtReadingPosition(t *testing.T) {
-	assertEditorOnReadTop(t, bullets(80))
+	assertEditorOnCursorRow(t, bullets(80))
 }
 
 func TestE_OpensAtReadingPositionAfterLeadingBlankLines(t *testing.T) {
-	assertEditorOnReadTop(t, "\n\n\n"+bullets(80))
+	assertEditorOnCursorRow(t, "\n\n\n"+bullets(80))
 }
 
 // rowText is a frame row as compared across the read and edit views: trimmed,

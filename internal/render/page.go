@@ -53,9 +53,9 @@ var (
 	taskMarkerRe = regexp.MustCompile(`^(\s*-\s+)(TODO|DOING|LATER|WAITING|DONE|CANCELED|CANCELLED|NOW)\b`)
 )
 
-// emphasisStyle highlights a searched/arrived-at term on the page. Reverse
+// EmphasisStyle highlights a searched/arrived-at term on the page. Reverse
 // video stands out from Theme.Link and degrades to plain text under NO_COLOR.
-var emphasisStyle = lipgloss.NewStyle().Reverse(true)
+var EmphasisStyle = lipgloss.NewStyle().Reverse(true)
 
 type taskInfo struct {
 	marker, priority, gap string
@@ -763,7 +763,7 @@ func finish(styled string, f frontend, theme Theme, fallbackErr error) Result {
 				continue
 			}
 			finds = append(finds, out.Len())
-			out.WriteString(emphasisStyle.Render(emphSubs[id]))
+			out.WriteString(EmphasisStyle.Render(emphSubs[id]))
 		}
 	}
 	orphanPadReplacer.WriteString(&out, styled[last:])

@@ -2,10 +2,12 @@
 
 The read view moves a row cursor with `j`/`k`, `Ctrl+D`/`Ctrl+U` and `g`/`G`.
 `Tab` folds the heading section or list item under the cursor, and `z` cycles
-the whole page through top-level bullets folded, headings only, and all shown.
+the whole page through top-level bullets folded, an outline, and all shown. The
+outline folds each heading's own text, so every heading at every level stays
+visible.
 A folded row ends with a faint `▸ N lines`. Folds are view-only: they last for
 the session and nothing is written to the file. `[[Page#Heading]]` (and
-`#[[Page#Heading]]`) opens the page with that heading at the top, counts as a
+`#[[Page#Heading]]`) opens the page with that heading near the top (one row below it), counts as a
 backlink of the page, and is not unresolved in `weft doctor`. `e` opens the
 editor on the cursor row's line.
 
@@ -52,6 +54,17 @@ faster row map.
   `End-Start`. A row is hidden when its `SourceRows` line is hidden. Both the
   outline and the row map come from the source text, so a fold never re-renders
   the page.
+- **`z` outline level.** Level 2 is an outline, not "top headings only": each
+  heading folds its body (`Fold.BodyStart`/`BodyEnd`, its own lines up to the
+  next heading of any level), so an H1 title with nested `##`/`###` still shows
+  every heading, each with a marker. `Tab` on a heading at level 2 toggles that
+  body; at the other levels it toggles the whole section. A heading with no body
+  of its own (only sub-headings under it) has nothing to fold at level 2. `z` on
+  a page with nothing foldable answers `nothing to fold here` and does not
+  change level.
+- **Hidden-only children are not children.** `Outline` ignores blank and hidden
+  (logbook, query/embed drawer) lines when finding where a fold ends, so an item
+  whose only children are hidden metadata has no fold and no phantom count.
 - **Fold lifetime.** `foldStore` on `App`, keyed by `PageMeta.Path`, holds the
   body the entry applies to, the folded owner lines, the `z` level and the
   plain render's row-map memo. A load whose body differs from the stored body
@@ -72,7 +85,9 @@ faster row map.
   and the page must have a heading with that `HeadingKey`. The first matching
   heading is the destination. `[[#x]]`, `[[C#]]` and `[[Lab #inner]]` keep
   their old meaning. A heading that has gone when the page opens leaves the page
-  at the top with the hint `heading not found: …`.
+  at the top with the hint `heading not found: …`; a page with no row map also
+  opens at the top, silently, since the heading exists but cannot be placed.
+  The index keys headings with the same `graph.HeadingKey` the read view uses.
 - **Two-phase index keying.** `BuildIndex` parses every page first (headings,
   links, todos) and keys links afterwards, because a link may point at a page
   not yet walked. A link that resolves only as a heading is keyed under its
@@ -133,5 +148,8 @@ faster row map.
   and do not use or fill the memo in the fold store.
 - A fold on a page with no row map (rendering failed to produce one) answers
   `cannot fold this page` and keeps the folds it has.
+- A column-0 lazy line after a nested bullet (`- a\n  - a1\ntext`) renders as
+  part of `a1`'s paragraph but is not an indented child, so it stays visible
+  under a fold of `a`. Known edge case; no code handles it.
 - A link written `[[Page#Heading]]` on a page where `Page` has no such
   heading is unresolved, exactly as a missing page is.

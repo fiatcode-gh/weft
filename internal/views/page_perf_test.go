@@ -54,6 +54,9 @@ func TestReadKeysNeverBuildRowMap(t *testing.T) {
 }
 
 func TestReadViewSpeed10000(t *testing.T) {
+	if raceDetector {
+		t.Skip("wall-clock bound; the race detector's slowdown makes it meaningless, the non-race CI step checks timing")
+	}
 	quietTerm(t)
 	_, idx := writeGraph(t, map[string]string{"pages/P.md": perfContent(10000)})
 	body := strings.TrimSpace(perfContent(10000)) + "\n"

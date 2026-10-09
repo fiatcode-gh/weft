@@ -38,3 +38,14 @@ func TestResolveLink(t *testing.T) {
 		}
 	}
 }
+
+// The index and the read view key a heading with the same function, even for
+// markup that one pass of displayText does not fully strip.
+func TestResolveLinkKeysHeadingsWithHeadingKey(t *testing.T) {
+	idx := buildTempIndex(t, map[string]string{"Nest.md": "## [[[[a]]]]\n"})
+	hs := Headings("## [[[[a]]]]\n")
+	key := HeadingKey(hs[0].Text)
+	if _, ok := idx.ResolveLink("Nest#" + key); !ok {
+		t.Errorf("ResolveLink(Nest#%s) unresolved, but HeadingKey(%q) = %q", key, hs[0].Text, key)
+	}
+}

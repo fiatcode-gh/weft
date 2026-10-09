@@ -102,7 +102,7 @@ func TestHeadingLinkUnfoldsTarget(t *testing.T) {
 	a.navigate("X")
 	a.Update(key("z"))
 	a.Update(key("z"))
-	wantAbsent(t, a, "filler 0")
+	wantAbsent(t, a, "filler 0", "after 0")
 	a.navigate("Note")
 	followFirstLink(a)
 	wantAtHeading(t, a, "Target Section")
@@ -175,5 +175,21 @@ func TestBacklinkFromHeadingLinkLandsOnReference(t *testing.T) {
 	}
 	if got := a.page.FollowCursor(); got != "X#target section" {
 		t.Errorf("FollowCursor = %q", got)
+	}
+}
+
+// Without a row map the heading cannot be placed, but it is not missing: the
+// page opens at the top and says nothing false.
+func TestHeadingLinkWithoutRowMapOpensAtTopSilently(t *testing.T) {
+	a := headingApp(t, targetPage("## Target Section"), "- [[X#target section]]\n")
+	orig := sourceRowsFor
+	t.Cleanup(func() { sourceRowsFor = orig })
+	sourceRowsFor = func(string, int, string) ([]int, []bool) { return nil, nil }
+	followFirstLink(a)
+	if a.page.Page() != "X" || a.page.Offset() != 0 {
+		t.Errorf("page = %q offset %d, want X at top", a.page.Page(), a.page.Offset())
+	}
+	if a.hint != "" {
+		t.Errorf("hint = %q, want none", a.hint)
 	}
 }

@@ -30,6 +30,16 @@ func (e *pageFolds) foldsOf() []render.Fold {
 	return e.outline
 }
 
+// span is the body lines [start, end) fold f hides now. At level 2 (the
+// outline) a heading hides only its own body, so every heading stays shown;
+// ok is false for a heading without one.
+func (e *pageFolds) span(f render.Fold) (start, end int, ok bool) {
+	if f.Kind == render.FoldHeading && e.level == 2 {
+		return f.BodyStart, f.BodyEnd, f.BodyEnd > f.BodyStart
+	}
+	return f.Start, f.End, true
+}
+
 // entry is the store's record for the loaded page; with create it makes one.
 func (p *PageView) entry(create bool) *pageFolds {
 	if p.folds == nil || p.path == "" || p.body == "" {
@@ -80,13 +90,14 @@ func (p *PageView) hideFolded(e *pageFolds) {
 	outline := e.foldsOf()
 	var hid []bool
 	for _, f := range outline {
-		if !e.folded[f.Line] {
+		s, end, ok := e.span(f)
+		if !ok || !e.folded[f.Line] {
 			continue
 		}
-		if len(hid) < f.End {
-			hid = append(hid, make([]bool, f.End-len(hid))...)
+		if len(hid) < end {
+			hid = append(hid, make([]bool, end-len(hid))...)
 		}
-		for l := f.Start; l < f.End; l++ {
+		for l := s; l < end; l++ {
 			hid[l] = true
 		}
 	}
@@ -110,7 +121,8 @@ func (p *PageView) hideFolded(e *pageFolds) {
 	marks := map[int]int{}
 	for _, f := range outline {
 		if r, ok := last[f.Line]; ok && e.folded[f.Line] {
-			marks[visOf[r]] = f.End - f.Start
+			s, end, _ := e.span(f)
+			marks[visOf[r]] = end - s
 		}
 	}
 	p.vis, p.visOf, p.marks = vis, visOf, marks
@@ -159,7 +171,7 @@ func (p *PageView) ToggleFold() string {
 	line, e := lines[r], p.entry(true)
 	known := false
 	for _, f := range e.foldsOf() {
-		if f.Line == line {
+		if _, _, ok := e.span(f); ok && f.Line == line {
 			known = true
 			break
 		}
@@ -178,7 +190,8 @@ func (p *PageView) ToggleFold() string {
 }
 
 // CycleFoldLevel steps the whole page through all shown, top-level bullets
-// folded, headings only, replacing any folds set one by one.
+// folded, and an outline of headings with their text folded, replacing any
+// folds set one by one.
 func (p *PageView) CycleFoldLevel() string {
 	if p.body == "" {
 		return hintNothingToFold
@@ -187,10 +200,16 @@ func (p *PageView) CycleFoldLevel() string {
 		return hintCannotFold
 	}
 	e := p.entry(true)
+	if len(e.foldsOf()) == 0 {
+		return hintNothingToFold
+	}
 	e.level = (e.level + 1) % 3
 	p.refold(func() {
 		e.folded = map[int]bool{}
 		for _, f := range e.foldsOf() {
+			if _, _, ok := e.span(f); !ok {
+				continue
+			}
 			if e.level == 2 && f.Kind == render.FoldHeading || e.level == 1 && f.Kind == render.FoldBullet && f.Level == 0 {
 				e.folded[f.Line] = true
 			}
@@ -207,7 +226,7 @@ func (p *PageView) reveal(line int) {
 	}
 	changed := false
 	for _, f := range e.foldsOf() {
-		if e.folded[f.Line] && line >= f.Start && line < f.End {
+		if s, end, ok := e.span(f); ok && e.folded[f.Line] && line >= s && line < end {
 			delete(e.folded, f.Line)
 			changed = true
 		}

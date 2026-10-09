@@ -133,7 +133,7 @@ func BuildIndex(graphPath string) (*Index, error) {
 		if hs := Headings(string(body)); len(hs) > 0 {
 			keys := make(map[string]struct{}, len(hs))
 			for _, h := range hs {
-				keys[strings.ToLower(h.Text)] = struct{}{}
+				keys[HeadingKey(h.Text)] = struct{}{}
 			}
 			idx.headingKeys[p.Path] = keys
 		}
