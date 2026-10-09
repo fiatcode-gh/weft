@@ -67,6 +67,12 @@ type PageView struct {
 	rowOwn   []bool // rows[i]'s row is one of its line's own, not borrowed
 	rowsDone bool
 	noColor  bool // the style names no colours, so the link cursor needs reverse video
+
+	path  string      // PageMeta.Path of the loaded page; "" when none
+	folds foldStore   // the App's session fold state; see fold.go
+	vis   []int       // visible row → row of full; nil when no row is hidden
+	visOf []int       // row of full → visible row, -1 when hidden; nil with vis
+	marks map[int]int // visible row → count of lines its fold hides
 }
 
 type cachedPage struct {
@@ -76,9 +82,16 @@ type cachedPage struct {
 	width   int
 }
 
+// NewPageView is a view with its own fold state; the App shares one store
+// across the views it rebuilds (newPageView).
 func NewPageView(idx *graph.Index, page string, width, height int) *PageView {
+	return newPageView(idx, page, width, height, foldStore{})
+}
+
+func newPageView(idx *graph.Index, page string, width, height int, folds foldStore) *PageView {
 	pv := &PageView{
 		idx:    idx,
+		folds:  folds,
 		page:   page,
 		width:  width,
 		height: height,
@@ -132,11 +145,32 @@ func (p *PageView) SetSize(w, h int) {
 	p.Reposition(p.top, p.row)
 }
 
-// rowCount is how many rows the page has.
-func (p *PageView) rowCount() int { return len(p.full) }
+// rowCount is how many rows are visible: the page's rows less folded ones.
+func (p *PageView) rowCount() int {
+	if p.vis != nil {
+		return len(p.vis)
+	}
+	return len(p.full)
+}
 
-// rowText is row i of the page, styled.
-func (p *PageView) rowText(i int) string { return p.full[i] }
+// fullIdx is the row of full that visible row i shows.
+func (p *PageView) fullIdx(i int) int {
+	if p.vis != nil {
+		return p.vis[i]
+	}
+	return i
+}
+
+// visRow is the visible row showing row fr of full, -1 when it is folded away.
+func (p *PageView) visRow(fr int) int {
+	if p.visOf != nil {
+		return p.visOf[fr]
+	}
+	return fr
+}
+
+// rowText is visible row i of the page, styled.
+func (p *PageView) rowText(i int) string { return p.full[p.fullIdx(i)] }
 
 // indexRows splits the rendered page into rows and records where each starts.
 func (p *PageView) indexRows() {
@@ -154,9 +188,17 @@ func (p *PageView) indexRows() {
 	}
 }
 
-// rowOf is the row holding byte offset off of the rendered page.
-func (p *PageView) rowOf(off int) int {
+// fullRowOf is the row of full holding byte offset off of the rendered page.
+func (p *PageView) fullRowOf(off int) int {
 	return max(0, sort.SearchInts(p.rowStart, off+1)-1)
+}
+
+// rowOf is the visible row holding byte offset off, -1 when it is folded away.
+func (p *PageView) rowOf(off int) int {
+	if len(p.full) == 0 {
+		return 0
+	}
+	return p.visRow(p.fullRowOf(off))
 }
 
 func (p *PageView) rowBlank(i int) bool { return !nonBlank(p.rowText(i)) }
@@ -227,19 +269,33 @@ func (p *PageView) centreOn(r int) {
 // cursor onto its row, scrolling so the new cursor target is visible.
 // dir=+1 forwards, dir=-1 backwards.
 func (p *PageView) CycleLink(dir int) {
-	if len(p.result.Links) == 0 {
-		return
-	}
-	if p.cursor == -1 {
-		if dir > 0 {
-			p.cursor = 0
+	n := len(p.result.Links)
+	c := p.cursor
+	for range n {
+		if c == -1 {
+			if dir > 0 {
+				c = 0
+			} else {
+				c = n - 1
+			}
 		} else {
-			p.cursor = len(p.result.Links) - 1
+			c = (c + dir + n) % n
 		}
-	} else {
-		p.cursor = (p.cursor + dir + len(p.result.Links)) % len(p.result.Links)
+		if !p.linkHidden(c) {
+			p.cursor = c
+			p.scrollToCursor()
+			return
+		}
 	}
-	p.scrollToCursor()
+}
+
+// linkHidden reports whether link i sits on a row folded away.
+func (p *PageView) linkHidden(i int) bool {
+	if p.vis == nil || i < 0 || i >= len(p.result.Links) {
+		return false
+	}
+	l := p.result.Links[i]
+	return l.Start >= 0 && l.Start <= len(p.result.Styled) && p.rowOf(l.Start) < 0
 }
 
 // scrollToCursor puts the row cursor on the link at p.cursor and scrolls so it
@@ -268,7 +324,8 @@ func (p *PageView) linkRow(i int) (int, bool) {
 	if l.Start < 0 || l.Start > len(p.result.Styled) {
 		return 0, false
 	}
-	return p.rowOf(l.Start), true
+	r := p.rowOf(l.Start)
+	return r, r >= 0
 }
 
 // Anchor says where the in-app editor opens: row RowInLine of body line Line
@@ -288,16 +345,22 @@ func (p *PageView) ReadingAnchor() (Anchor, bool) {
 	if p.row < 0 {
 		return Anchor{}, true
 	}
-	if p.top == 0 && p.row == p.snap(0, +1) {
+	if p.vis == nil && p.top == 0 && p.row == p.snap(0, +1) {
 		return Anchor{0, 0, p.row}, true
 	}
 	lines := p.sourceRows()
 	if len(lines) == 0 {
 		return Anchor{}, false
 	}
-	n := min(len(lines), p.rowCount())
+	n := p.rowCount()
+	for n > 0 && p.fullIdx(n-1) >= len(lines) {
+		n--
+	}
+	if n == 0 {
+		return Anchor{}, false
+	}
 	a := min(p.row, n-1)
-	own := func(i int) bool { return !p.rowBlank(i) && p.rowOwned(i) }
+	own := func(i int) bool { return !p.rowBlank(i) && p.rowOwned(p.fullIdx(i)) }
 	found := false
 	for i := a; i < n && !found; i++ {
 		if own(i) {
@@ -309,14 +372,14 @@ func (p *PageView) ReadingAnchor() (Anchor, bool) {
 			a, found = i, true
 		}
 	}
-	line := lines[a]
-	f, owned := a, p.rowOwned(a)
-	for r := a - 1; r >= 0 && lines[r] == line; r-- {
+	line := lines[p.fullIdx(a)]
+	f, owned := a, p.rowOwned(p.fullIdx(a))
+	for r := a - 1; r >= 0 && lines[p.fullIdx(r)] == line; r-- {
 		if p.rowBlank(r) {
 			continue
 		}
-		if p.rowOwned(r) || !owned {
-			f, owned = r, p.rowOwned(r)
+		if o := p.rowOwned(p.fullIdx(r)); o || !owned {
+			f, owned = r, o
 		}
 	}
 	return Anchor{Line: line, RowInLine: a - f, ScreenRow: a - p.top}, true
@@ -334,18 +397,28 @@ func (p *PageView) PlaceAnchor(a Anchor) {
 	if len(lines) == 0 {
 		return
 	}
+	p.revealLine(a.Line, lines)
+	lineAt := func(i int) int {
+		if fi := p.fullIdx(i); fi < len(lines) {
+			return lines[fi]
+		}
+		return -1
+	}
 	first := map[int]int{} // body line → first non-blank row of its own
 	borrowed := map[int]int{}
-	for r := range min(len(lines), p.rowCount()) {
+	for r := range p.rowCount() {
+		if lineAt(r) < 0 {
+			break
+		}
 		if p.rowBlank(r) {
 			continue
 		}
 		set := first
-		if !p.rowOwned(r) {
+		if !p.rowOwned(p.fullIdx(r)) {
 			set = borrowed
 		}
-		if _, seen := set[lines[r]]; !seen {
-			set[lines[r]] = r
+		if _, seen := set[lineAt(r)]; !seen {
+			set[lineAt(r)] = r
 		}
 	}
 	for l, r := range borrowed { // a line with only borrowed rows still has rows
@@ -371,7 +444,7 @@ func (p *PageView) PlaceAnchor(a Anchor) {
 	}
 	f := first[line]
 	n := 0
-	for r := f; r < len(lines) && lines[r] == line; r++ {
+	for r := f; r < p.rowCount() && lineAt(r) == line; r++ {
 		n++
 	}
 	t := f + min(max(a.RowInLine, 0), n-1)
@@ -386,12 +459,23 @@ func nonBlank(row string) bool { return strings.TrimSpace(ansi.Strip(row)) != ""
 // one of its line's own (a letterless margin or border row only borrows the
 // line below it).
 func (p *PageView) sourceRows() []int {
-	if !p.rowsDone {
-		p.rowsDone = true
-		if p.body != "" {
-			p.rows, p.rowOwn = sourceRowsFor(p.body, p.width, p.emphasis)
-		}
+	if p.rowsDone {
+		return p.rows
 	}
+	p.rowsDone = true
+	if p.body == "" {
+		return nil
+	}
+	if e := p.entry(true); e != nil && p.emphasis == "" {
+		// The plain render's map outlives this load: one per (body, width).
+		if e.width != p.width || p.width == 0 {
+			e.rows, e.own = sourceRowsFor(p.body, p.width, "")
+			e.width = p.width
+		}
+		p.rows, p.rowOwn = e.rows, e.own
+		return p.rows
+	}
+	p.rows, p.rowOwn = sourceRowsFor(p.body, p.width, p.emphasis)
 	return p.rows
 }
 
@@ -412,6 +496,9 @@ func (p *PageView) FollowCursor() string {
 func (p *PageView) FocusLinkTo(name string) {
 	for i, l := range p.result.Links {
 		if resolved, ok := p.idx.Resolve(l.Target); ok && resolved.Name == name {
+			if l.Start >= 0 && l.Start <= len(p.result.Styled) && len(p.full) > 0 {
+				p.revealFull(p.fullRowOf(l.Start))
+			}
 			p.cursor = i
 			p.scrollToCursor()
 			return
@@ -533,7 +620,15 @@ func (p *PageView) ScrollToTask(ordinal int) {
 	if off < 0 || off > len(p.result.Styled) {
 		return
 	}
-	p.centreOn(p.rowOf(off))
+	p.centreOnOffset(off)
+}
+
+// centreOnOffset centres the view on the row holding byte offset off, first
+// unfolding whatever hides it.
+func (p *PageView) centreOnOffset(off int) {
+	fr := p.fullRowOf(off)
+	p.revealFull(fr)
+	p.centreOn(p.visRow(fr))
 }
 
 // cursorStyle: bright background + dark foreground + bold + underline so the
@@ -577,7 +672,9 @@ func (p *PageView) View() string {
 	}
 	lo, hi := p.top, min(p.rowCount(), p.top+p.vp.Height())
 	window := make([]string, hi-lo)
-	copy(window, p.full[lo:hi])
+	for i := lo; i < hi; i++ {
+		window[i-lo] = p.rowText(i)
+	}
 
 	var link *render.Link
 	linkRow := -1
@@ -591,8 +688,14 @@ func (p *PageView) View() string {
 		cs = cs.Reverse(true)
 	}
 	if linkRow >= lo && linkRow < hi && linkRow != p.row {
-		row, rs := p.full[linkRow], p.rowStart[linkRow]
+		fr := p.fullIdx(linkRow)
+		row, rs := p.full[fr], p.rowStart[fr]
 		window[linkRow-lo] = row[:link.Start-rs] + cs.Render(link.Display) + row[min(link.End-rs, len(row)):]
+	}
+	for i, n := range p.marks {
+		if i >= lo && i < hi && i != p.row {
+			window[i-lo] = p.markRow(window[i-lo], n)
+		}
 	}
 	if p.row >= lo && p.row < hi {
 		window[p.row-lo] = p.cursorRow(link, linkRow, cs)
@@ -601,15 +704,53 @@ func (p *PageView) View() string {
 	return p.vp.View()
 }
 
+// foldMarker is the text a folded row ends with.
+func foldMarker(n int) string {
+	if n == 1 {
+		return " ▸ 1 line"
+	}
+	return fmt.Sprintf(" ▸ %d lines", n)
+}
+
+// markerFit is how many cells of a row of plain text keep their place when
+// the marker m is added: its trailing blanks go, and the text gives way when
+// the two would not fit the page width.
+func (p *PageView) markerFit(plain, m string) int {
+	return min(ansi.StringWidth(strings.TrimRight(plain, " ")), max(0, p.width-ansi.StringWidth(m)))
+}
+
+// markRow ends row with the faint fold marker for n hidden lines.
+func (p *PageView) markRow(row string, n int) string {
+	m := foldMarker(n)
+	return ansi.Truncate(row, p.markerFit(ansi.Strip(row), m), "") + styleFaint.Render(m)
+}
+
 // cursorRow draws the cursor row: its plain text padded to the page width in
-// the selection style, with the selected link, if it starts here, in cs.
+// the selection style, with the selected link, if it starts here, in cs. A
+// folded row's marker is part of the text.
 func (p *PageView) cursorRow(link *render.Link, linkRow int, cs lipgloss.Style) string {
 	st := styleSel
 	if p.noColor {
 		st = lipgloss.NewStyle().Bold(true).Reverse(true)
 	}
-	row := p.full[p.row]
+	fr := p.fullIdx(p.row)
+	row := p.full[fr]
 	text := ansi.Strip(row)
+	col, end := 0, 0
+	if link != nil && linkRow == p.row {
+		col = ansi.StringWidth(row[:link.Start-p.rowStart[fr]])
+		end = col + ansi.StringWidth(link.Display)
+	} else {
+		link = nil
+	}
+	if n, ok := p.marks[p.row]; ok {
+		m := foldMarker(n)
+		keep := p.markerFit(text, m)
+		text = ansi.Truncate(text, keep, "") + m
+		if end > keep {
+			link = nil // the marker covers the link; it stays selected, unpainted
+		}
+	}
 	if pad := p.width - ansi.StringWidth(text); pad > 0 {
 		text += strings.Repeat(" ", pad)
 	}
@@ -619,29 +760,30 @@ func (p *PageView) cursorRow(link *render.Link, linkRow int, cs lipgloss.Style) 
 		}
 		return st.Render(s)
 	}
-	if link == nil || linkRow != p.row {
+	if link == nil {
 		return paint(text)
 	}
-	col := ansi.StringWidth(row[:link.Start-p.rowStart[p.row]])
-	end := col + ansi.StringWidth(link.Display)
 	return paint(ansi.Cut(text, 0, col)) + cs.Render(link.Display) + paint(ansi.Cut(text, end, ansi.StringWidth(text)))
 }
 
 func (p *PageView) load() {
 	p.loadResult()
 	p.indexRows()
+	p.applyFolds()
 }
 
 func (p *PageView) loadResult() {
 	p.err = nil
 	p.result = render.Result{}
 	p.body, p.rows, p.rowOwn, p.rowsDone = "", nil, nil, false
+	p.path, p.vis, p.visOf, p.marks = "", nil, nil, nil
 	theme, _ := render.CurrentTheme()
 	p.noColor = theme.Name == "notty"
 	meta, ok := p.idx.Resolve(p.page)
 	if !ok {
 		return
 	}
+	p.path = meta.Path
 	// The per-page cache holds only plain (un-emphasised) renders. When an
 	// emphasis term is set the render is transient — never read or write the
 	// cache, so a later plain navigation can't be served a highlighted version.
@@ -649,6 +791,7 @@ func (p *PageView) loadResult() {
 		if c, hit := p.cache[meta.Name]; hit && c.modTime.Equal(meta.ModTime) && c.width == p.width {
 			p.result = c.result
 			p.body = c.body
+			p.dropStaleFolds()
 			return
 		}
 	}
@@ -671,6 +814,7 @@ func (p *PageView) loadResult() {
 	}
 	p.result = res
 	p.body = body
+	p.dropStaleFolds()
 	if p.emphasis == "" && res.FallbackErr == nil {
 		p.cache[meta.Name] = cachedPage{result: res, body: body, modTime: meta.ModTime, width: p.width}
 	}
@@ -699,5 +843,5 @@ func (p *PageView) scrollToFirstFind() {
 	if off < 0 || off > len(p.result.Styled) {
 		return
 	}
-	p.centreOn(p.rowOf(off))
+	p.centreOnOffset(off)
 }

@@ -134,6 +134,10 @@ type App struct {
 	// exit that did not move restores it exactly (placeFromEditor).
 	readFrom *readSpot
 
+	// folds is the read view's folds and row maps, kept across the PageViews
+	// the app rebuilds. Nothing in it is written to disk.
+	folds foldStore
+
 	// Browser-style page history. hist[histIdx] is the entry currently on
 	// screen. histIdx == -1 before the first page is shown.
 	hist    []historyEntry
@@ -183,6 +187,7 @@ func New(graphPath, version string) *App {
 		version:      version,
 		nowFunc:      time.Now,
 		editorSource: editorStartsInSource,
+		folds:        foldStore{},
 	}
 	a.syncFunc = func(repoDir string) syncpkg.Result {
 		return syncpkg.Run(repoDir, a.nowFunc())
@@ -238,7 +243,7 @@ func (a *App) statusProbeCmd() tea.Cmd {
 func (a *App) tryInitPage() {
 	if a.page == nil && a.idx != nil && a.loadErr == nil && a.width > 0 {
 		name := a.todayJournalName()
-		a.page = NewPageView(a.idx, name, a.width, a.height)
+		a.page = newPageView(a.idx, name, a.width, a.height, a.folds)
 		a.hist = []historyEntry{{page: name, offset: 0, row: -1, cursor: -1, taskOrdinal: -1}}
 		a.histIdx = 0
 	}
@@ -363,7 +368,7 @@ func (a *App) reindex() error {
 		// Same-page rebuild: keep the reader's place, exactly like the
 		// async indexLoadedMsg path. Restore clamps if the page shrank.
 		off, row, cur := a.page.Offset(), a.page.CursorRow(), a.page.Cursor()
-		a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
+		a.page = newPageView(a.idx, a.page.Page(), a.width, a.height, a.folds)
 		a.page.Restore(off, row, cur)
 	}
 	if fresh := a.newIndexWarnings(idx.Warnings); fresh && len(idx.Warnings) > 0 {
@@ -628,7 +633,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// for the same page so it picks up new links/todos — but keep the
 			// user's place. Restore clamps if the page shrank.
 			off, row, cur := a.page.Offset(), a.page.CursorRow(), a.page.Cursor()
-			a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
+			a.page = newPageView(a.idx, a.page.Page(), a.width, a.height, a.folds)
 			a.page.Restore(off, row, cur)
 			a.applyPendingPlace()
 		} else {
@@ -769,7 +774,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.placeFromEditor(at)
 				default:
 					off, row, cur := a.page.Offset(), a.page.CursorRow(), a.page.Cursor()
-					a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
+					a.page = newPageView(a.idx, a.page.Page(), a.width, a.height, a.folds)
 					a.page.Restore(off, row, cur)
 					if place {
 						a.placeFromEditor(at)
@@ -940,6 +945,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.page.CycleLink(+1)
 		case "N":
 			a.page.CycleLink(-1)
+		case "tab":
+			if h := a.page.ToggleFold(); h != "" {
+				return a, a.setHint(h)
+			}
+		case "z":
+			return a, a.setHint(a.page.CycleFoldLevel())
 		case keyEnter:
 			if t := a.page.FollowCursor(); t != "" {
 				a.navigate(t)

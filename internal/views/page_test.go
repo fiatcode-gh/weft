@@ -657,8 +657,10 @@ func TestPageViewAnchorComputesMapOncePerLoadAndOnlyWhenNeeded(t *testing.T) {
 	if at, ok := p.ReadingAnchor(); !ok || at.Line == 0 {
 		t.Fatalf("ReadingAnchor after cache-hit reload = (%+v, %v)", at, ok)
 	}
-	if calls != 2 {
-		t.Fatalf("map computed %d times after reload, want 2", calls)
+	// The map is memoised per (page body, width) in the fold store, which
+	// outlives a load, so the cache-hit reload reuses it.
+	if calls != 1 {
+		t.Fatalf("map computed %d times after reload, want 1", calls)
 	}
 }
 
