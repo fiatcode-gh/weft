@@ -326,22 +326,6 @@ func (a *App) historyForward() {
 	a.page.Restore(target.offset, target.cursor)
 }
 
-// createJournalAndReindex creates the on-disk file for journal page `name`
-// via the internal/edit hook, rebuilds the index synchronously, and rebinds
-// the current PageView to it. Shared by the `.` and `e` handlers when they
-// land on a today's-journal page whose file doesn't exist yet. Returns an
-// error whose message is ready for setHint.
-func (a *App) createJournalAndReindex(name string) error {
-	journalPath := filepath.Join(a.graphPath, "journals", graph.FilenameFromPageName(name))
-	if _, err := edit.EnsureFile(journalPath); err != nil {
-		return fmt.Errorf("cannot create journal: %w", err)
-	}
-	if err := a.reindex(); err != nil {
-		return fmt.Errorf("reindex failed: %w", err)
-	}
-	return nil
-}
-
 // reindex rebuilds the in-memory index synchronously and rebinds the current
 // PageView so it reflects new links/todos. Shared by createJournalAndReindex
 // and the linkify path, both of which mutate the graph while a view is open and
@@ -369,9 +353,9 @@ func (a *App) reindex() error {
 }
 
 // editCurrent snapshots the current page's file mtime, ensures the
-// file exists (creating an empty one for today's journal if needed),
-// resolves the user's editor, and returns a tea.ExecProcess cmd that
-// hands the file off. The child editor's exit yields an
+// file exists (creating today's journal from the journal template, or empty
+// without one, if needed), resolves the user's editor, and returns a
+// tea.ExecProcess cmd that hands the file off. The child editor's exit yields an
 // editorExitedMsg, which the Update case below mtime-gates against a
 // reindex.
 func (a *App) editCurrent() tea.Cmd {
@@ -442,18 +426,25 @@ func (a *App) enterEditor() tea.Cmd {
 	var path string
 	if meta, ok := a.idx.Resolve(name); ok {
 		path = meta.Path
+	} else if graph.IsJournalPageName(name) {
+		path = a.journalPath(name)
 	} else {
-		sub := "pages"
-		if graph.IsJournalPageName(name) {
-			sub = "journals"
-		}
-		path = filepath.Join(a.graphPath, sub, graph.FilenameFromPageName(name))
+		path = filepath.Join(a.graphPath, "pages", graph.FilenameFromPageName(name))
 	}
 	snap, err := a.readSnapshot(path)
 	if err != nil {
 		return a.setHint("cannot read: " + err.Error())
 	}
 	content, isNew := snap.Content, !snap.Exists
+	if isNew && graph.IsJournalPageName(name) {
+		// A new journal opens on the journal template; nothing is written
+		// until save.
+		tmpl, err := a.journalTemplate()
+		if err != nil {
+			return a.setHint(err.Error())
+		}
+		content = tmpl
+	}
 	at, ok := a.page.ReadingAnchor()
 	if !ok {
 		at = Anchor{0, 0, 1}
@@ -823,7 +814,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if err := a.createJournalAndReindex(today); err != nil {
 					return a, a.setHint(err.Error())
 				}
-				// Creating the journal wrote a new file — refresh the indicator.
+				// Creating the journal wrote a new file (from the journal
+				// template, or empty without one) — refresh the indicator.
 				probe = a.statusProbeCmd()
 			}
 			if a.page.Page() != today {
