@@ -95,7 +95,7 @@ func runRowsPartition(t *testing.T) {
 	t.Helper()
 	fallbacks, chunks := 0, 0
 	for _, w := range previewWidths {
-		for _, doc := range []string{previewConstructPage, strings.ReplaceAll(previewConstructPage, "\n", "\r\n")} {
+		for _, doc := range lfAndCRLF(previewConstructPage, previewTaskDatesPage) {
 			fallbacks += checkRowsPartition(t, doc, w)
 		}
 	}

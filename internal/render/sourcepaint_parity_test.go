@@ -23,7 +23,9 @@ const parityDoc = "# Title\n" +
 	"- WAITING d\n" +
 	"- DONE e\n" +
 	"- CANCELED f\n" +
-	"- NOW g\n" +
+	"- NOW [#A] g\n" +
+	"  SCHEDULED: <2026-05-25 Mon>\n" +
+	"  DEADLINE: <2026-05-27 Wed>\n" +
 	"- see [[Target]] and [[Real|Alias]] here\n" +
 	"- tags #topic and #[[Two Words]] here\n" +
 	"  - child words\n" +
@@ -54,6 +56,7 @@ var paritySamples = []paritySample{
 	{"strike", "struck"}, {"code", "code"}, {"link", "label"},
 	{"TODO", "TODO"}, {"DOING", "DOING"}, {"LATER", "LATER"}, {"WAITING", "WAITING"},
 	{"DONE", "DONE"}, {"CANCELED", "CANCELED"}, {"NOW", "NOW"},
+	{"priority", "[#A]"}, {"scheduled", "SCHEDULED"}, {"deadline", "DEADLINE"},
 	{"wiki target", "Target"}, {"wiki alias", "Alias"},
 	{"tag", "#topic"}, {"bracket tag", "Two Words"},
 	{"child", "child words"}, {"quote", "quoted words"},

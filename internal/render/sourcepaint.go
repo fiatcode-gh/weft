@@ -236,6 +236,15 @@ func (p *Painter) Paint(src SourceLines, i int, info LineInfo, sc *Scanner) []Sp
 	default:
 		b.masked, links = maskLinks(line)
 		p.paintBlock(b, src, sc, i, info)
+		if st, ok := graph.ParseStampLine(line); ok {
+			ov := p.theme.Scheduled
+			if st.Kind == graph.StampDeadline {
+				ov = p.theme.Deadline
+			}
+			for k := st.Start; k < st.End; k++ {
+				b.st[k] = applyOverlay(b.st[k], ov)
+			}
+		}
 	}
 	for _, w := range links {
 		for k := w.start; k < w.textStart; k++ {
@@ -253,6 +262,11 @@ func (p *Painter) Paint(src SourceLines, i int, info LineInfo, sc *Scanner) []Sp
 			if ms, ok := p.theme.Markers[line[m[4]:m[5]]]; ok {
 				for k := m[4]; k < m[5]; k++ {
 					b.st[k] = applyOverlay(b.st[k], ms)
+				}
+			}
+			if pr, ok := styledPriority(line, m[4]); ok {
+				for k := pr.PriorityStart; k < pr.PriorityEnd; k++ {
+					b.st[k] = applyOverlay(b.st[k], p.theme.Priority[pr.Priority])
 				}
 			}
 		}

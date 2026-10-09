@@ -84,3 +84,22 @@ func TestRendererCacheFollowsStyle(t *testing.T) {
 		t.Fatalf("coloured render still has the ASCII heading prefix (stale cached renderer?): %q", coloured.Styled)
 	}
 }
+
+func TestThemeTaskStyles(t *testing.T) {
+	for _, noColor := range []string{"", "1"} {
+		t.Setenv("NO_COLOR", noColor)
+		th, _ := CurrentTheme()
+		if th.Scheduled.GetItalic() == false || th.Deadline.GetItalic() == false {
+			t.Errorf("NO_COLOR=%q: stamps lose italic", noColor)
+		}
+		for _, p := range []string{"A", "B", "C"} {
+			st, ok := th.Priority[p]
+			if !ok || !st.GetBold() {
+				t.Errorf("NO_COLOR=%q: Priority[%s] missing or not bold", noColor, p)
+			}
+		}
+		if th.Scheduled.GetForeground() == nil || th.Deadline.GetForeground() == nil {
+			t.Errorf("NO_COLOR=%q: stamp colours unset", noColor)
+		}
+	}
+}

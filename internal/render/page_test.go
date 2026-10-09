@@ -1056,3 +1056,64 @@ func TestRenderOverWideSentinelLeavesNoPadRunes(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderStylesPriority(t *testing.T) {
+	theme := mustTheme(t)
+	out := mustRender(t, "- LATER [#A] prio\n", 80)
+	if want := theme.Priority["A"].Render("[#A]"); !strings.Contains(out.Styled, want) {
+		t.Errorf("priority not styled: want %q in %q", want, out.Styled)
+	}
+	if len(out.Tasks) != 1 {
+		t.Errorf("Tasks = %d, want 1", len(out.Tasks))
+	}
+
+	// the text is unchanged: a priority-less twin with the same words strips equal
+	if got := strings.TrimSpace(plainText(out)); got != "• LATER [#A] prio" {
+		t.Errorf("stripped text = %q", got)
+	}
+
+	tab := mustRender(t, "- LATER\t[#A] x\n", 80)
+	if strings.Contains(tab.Styled, theme.Priority["A"].Render("[#A]")) {
+		t.Errorf("tab-separated priority must stay unstyled: %q", tab.Styled)
+	}
+}
+
+func TestRenderStylesStampLines(t *testing.T) {
+	theme := mustTheme(t)
+	const sched = "SCHEDULED: <2026-05-25 Mon 09:30 .+1w>"
+	const dead = "DEADLINE: <2026-05-27 Wed>"
+	body := "- TODO x\n  " + sched + "\n  " + dead + "\n"
+	out := mustRender(t, body, 80)
+	for _, want := range []string{theme.Scheduled.Render(sched), theme.Deadline.Render(dead)} {
+		if !strings.Contains(out.Styled, want) {
+			t.Errorf("stamp not styled: want %q in %q", want, out.Styled)
+		}
+	}
+	if !strings.Contains(plainText(out), sched) || !strings.Contains(plainText(out), dead) {
+		t.Errorf("stamp text changed: %q", plainText(out))
+	}
+	if len(out.Tasks) != 1 {
+		t.Errorf("Tasks = %d, want 1", len(out.Tasks))
+	}
+
+	crlf := mustRender(t, strings.ReplaceAll(body, "\n", "\r\n"), 80)
+	if !strings.Contains(crlf.Styled, theme.Scheduled.Render(sched)) {
+		t.Errorf("CRLF stamp not styled: %q", crlf.Styled)
+	}
+
+	for name, doc := range map[string]string{
+		"malformed": "- TODO x\n  SCHEDULED: <2026-02-30>\n",
+		"fence":     "```\nSCHEDULED: <2026-05-25 Mon>\n```\n",
+	} {
+		got := mustRender(t, doc, 80)
+		if strings.Contains(got.Styled, theme.Scheduled.Render("SCHEDULED: <2026-05-25 Mon>")) ||
+			strings.Contains(got.Styled, theme.Scheduled.Render("SCHEDULED: <2026-02-30>")) {
+			t.Errorf("%s: stamp styled: %q", name, got.Styled)
+		}
+	}
+
+	log := mustRender(t, "- TODO x\n  :LOGBOOK:\n  SCHEDULED: <2026-05-25 Mon>\n  :END:\n", 80)
+	if strings.Contains(plainText(log), "SCHEDULED") {
+		t.Errorf("logbook stamp leaked: %q", plainText(log))
+	}
+}

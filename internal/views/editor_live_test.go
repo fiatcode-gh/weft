@@ -136,9 +136,21 @@ func checkLiveMatchesRead(t *testing.T, page string, width int) {
 	}
 }
 
+// liveTaskDatesPage has priorities and stamp lines in the shapes the render
+// package's previewTaskDatesPage covers.
+const liveTaskDatesPage = "- TODO [#A] open with priority\n  SCHEDULED: <2026-05-25 Mon 09:30 .+1w>\n  DEADLINE: <2026-05-27 Wed>\n" +
+	"- DONE [#B] closed\n  DEADLINE: <2026-05-27 Wed>\n" +
+	"- NOW [#C] running with [[link]]\n  - TODO child\n    SCHEDULED: <2026-06-01 Mon>\n" +
+	"- LATER [#A] a very long task text that has to wrap because it is much longer than the narrow widths used by the test, wrap wrap wrap\n  SCHEDULED: <2026-05-25 Mon>\n\n" +
+	"```\nSCHEDULED: <2026-05-25 Mon>\n```\n\n" +
+	"- TODO logged\n  :LOGBOOK:\n  SCHEDULED: <2026-05-25 Mon>\n  :END:\n" +
+	"- TODO malformed\n  SCHEDULED: <2026-02-30>\n\n" +
+	"SCHEDULED: <2026-05-25 Mon>\n\nplain tail\n"
+
 func runLiveMatchesRead(t *testing.T) {
 	for _, w := range []int{100, 40} {
 		checkLiveMatchesRead(t, liveConstructPage, w)
+		checkLiveMatchesRead(t, liveTaskDatesPage, w)
 	}
 }
 
