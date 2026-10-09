@@ -82,7 +82,7 @@ func (c *chunkState) step(line string) (start bool, bullet byte, subst bool) {
 		bullet = bulletMarker(line)
 	} else if c.quiescent() && !c.sawCR && !blankLine(line) && startsAtColumn0(line) &&
 		line[0] != ':' && line[0] != '<' && !c.lastHTML && !c.lastStyled &&
-		!graph.LogbookStartRe.MatchString(line) && !queryOrEmbedRe.MatchString(line) &&
+		!graph.LogbookStartRe.MatchString(line) && !graph.QueryOrEmbedRe.MatchString(line) &&
 		!linkRefDefRe.MatchString(line) && !(c.lastDef && paraLike(line)) &&
 		!setextRe.MatchString(line) {
 		switch m := bulletMarker(line); {
@@ -120,8 +120,8 @@ func (c *chunkState) step(line string) (start bool, bullet byte, subst bool) {
 			}
 		case c.qFence.Step(line):
 			kept2 = true
-		case queryOrEmbedRe.MatchString(line):
-			loc := queryOrEmbedRe.FindStringIndex(line)
+		case graph.QueryOrEmbedRe.MatchString(line):
+			loc := graph.QueryOrEmbedRe.FindStringIndex(line)
 			if !strings.Contains(line[loc[1]:], "}}") {
 				c.inQ = true
 			}

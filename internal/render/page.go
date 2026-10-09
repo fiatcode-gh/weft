@@ -49,9 +49,8 @@ type Result struct {
 }
 
 var (
-	wikiLinkRe     = regexp.MustCompile(`\[\[([^\]\|]+)(?:\|([^\]]*))?\]\]`)
-	taskMarkerRe   = regexp.MustCompile(`^(\s*-\s+)(TODO|DOING|LATER|WAITING|DONE|CANCELED|CANCELLED|NOW)\b`)
-	queryOrEmbedRe = regexp.MustCompile(`(?i)^\s*\{\{(query|embed)\b`)
+	wikiLinkRe   = regexp.MustCompile(`\[\[([^\]\|]+)(?:\|([^\]]*))?\]\]`)
+	taskMarkerRe = regexp.MustCompile(`^(\s*-\s+)(TODO|DOING|LATER|WAITING|DONE|CANCELED|CANCELLED|NOW)\b`)
 )
 
 // emphasisStyle highlights a searched/arrived-at term on the page. Reverse
@@ -262,7 +261,7 @@ func stripQueryAndEmbedBlocks(body string) (string, []int) {
 		case fence.Step(line):
 			out.WriteString(line)
 			kept = append(kept, i)
-		case queryOrEmbedRe.MatchString(line):
+		case graph.QueryOrEmbedRe.MatchString(line):
 			// A same-line `}}` closes the block immediately — `{{embed [[X]]}}`
 			// is single-line in practice. The closer is looked for anywhere
 			// after the opener match (not just as the line's trailing
@@ -272,7 +271,7 @@ func stripQueryAndEmbedBlocks(body string) (string, []int) {
 			// line that never comes. Such lines are metadata either way, so
 			// the whole line is still dropped rather than keeping the
 			// trailing prose.
-			loc := queryOrEmbedRe.FindStringIndex(line)
+			loc := graph.QueryOrEmbedRe.FindStringIndex(line)
 			if !strings.Contains(line[loc[1]:], "}}") {
 				inBlock = true
 			}
