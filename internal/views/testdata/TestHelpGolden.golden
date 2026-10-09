@@ -1,57 +1,60 @@
-╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│  Keys                                                                                                              │
-│                                                                                                                    │
-│  Browse                                                             Find                                           │
-│    j / k           scroll one line                                    ctrl-f          open find                    │
-│    ctrl-d          half page down                                     enter / ↓       next match                   │
-│    ctrl-u          half page up                                       ↑               previous match               │
-│    g / G           top / bottom                                       tab             switch find ↔ replace        │
-│                                                                       enter           replace (replace field)      │
-│  Links                                                                ctrl-a          replace all (replace field)  │
-│    n / N           next / previous link or tag                        esc             close find                   │
-│    enter           follow link under cursor                                                                        │
-│                                                                     Maintain                                       │
-│  History                                                              R               rebuild index                │
-│    [               back                                                                                            │
-│    ]               forward                                          Help / quit                                    │
-│                                                                       ?               toggle this help             │
-│  Open                                                                 esc             close overlay                │
-│    .               today's journal                                    q               quit                         │
-│    <               previous journal                                                                                │
-│    >               next journal                                                                                    │
-│    ctrl-p          picker — find any page                                                                          │
-│    /               search the graph (ripgrep)                                                                      │
-│    b               backlinks + unlinked refs for the current page                                                  │
-│    T               todos dashboard (x: done / undo)                                                                │
-│    A               agenda: overdue, today, next 7 days                                                             │
-│                                                                                                                    │
-│  Sync                                                                                                              │
-│    S               commit, pull & push the graph (git)                                                             │
-│                                                                                                                    │
-│  Edit                                                                                                              │
-│    e               edit current page in-app                                                                        │
-│    E               edit current page in $EDITOR                                                                    │
-│                                                                                                                    │
-│  Editor                                                                                                            │
-│    ctrl-s          save; merges outside edits, asks on a clash                                                     │
-│    esc             leave editor (prompts if unsaved)                                                               │
-│    ctrl-z / ctrl-y undo / redo                                                                                     │
-│    shift-arrows    select (also home/end, pgup/pgdn, words)                                                        │
-│    ctrl-a          select all                                                                                      │
-│    ctrl-c / ctrl-x copy / cut (line if nothing selected)                                                           │
-│    ctrl-v          paste the last copy made here                                                                   │
-│    alt-← / alt-→   word left / right                                                                               │
-│    home / end      line start / end                                                                                │
-│    pgup / pgdn     page up / down                                                                                  │
-│    enter           continue bullet (empty bullet ends it)                                                          │
-│    tab / shift-tab indent / de-indent with children                                                                │
-│    alt-↑ / alt-↓   move bullet with children                                                                       │
-│    ctrl-t          cycle marker: open → DONE → plain → TODO                                                        │
-│    alt-s / alt-e   set scheduled / deadline date                                                                   │
-│    alt-p           cycle priority A → B → C → none                                                                 │
-│    ctrl-r          live preview ↔ source                                                                           │
-│    [[              link completion (↑/↓, enter/tab, esc)                                                           │
-│    #               tag completion after # + letter                                                                 │
-│                                                                                                                    │
-│  ? or esc to close                                                                                    weft v1.0.0  │
-╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  Keys                                                                                                               │
+│                                                                                                                     │
+│  Browse                                                              Find                                           │
+│    j / k           scroll one line                                     ctrl-f          open find                    │
+│    ctrl-d          half page down                                      enter / ↓       next match                   │
+│    ctrl-u          half page up                                        ↑               previous match               │
+│    g / G           top / bottom                                        tab             switch find ↔ replace        │
+│                                                                        enter           replace (replace field)      │
+│  Links                                                                 ctrl-a          replace all (replace field)  │
+│    n / N           next / previous link or tag                         esc             close find                   │
+│    enter           follow link under cursor                                                                         │
+│                                                                      Maintain                                       │
+│  History                                                               R               rebuild index                │
+│    [               back                                                                                             │
+│    ]               forward                                           Help / quit                                    │
+│                                                                        ?               toggle this help             │
+│  Open                                                                  esc             close overlay                │
+│    .               today's journal (new: from Journal Template)        q               quit                         │
+│    <               previous journal                                                                                 │
+│    >               next journal                                                                                     │
+│    C               calendar — move between journals                                                                 │
+│    O               on this day: week, month, years ago                                                              │
+│    ctrl-p          picker — find any page                                                                           │
+│    /               search the graph (ripgrep)                                                                       │
+│    b               backlinks + unlinked refs for the current page                                                   │
+│    T               todos dashboard (x: done / undo)                                                                 │
+│    A               agenda: overdue, today, next 7 days                                                              │
+│                                                                                                                     │
+│  Sync                                                                                                               │
+│    S               commit, pull & push the graph (git)                                                              │
+│                                                                                                                     │
+│  Edit                                                                                                               │
+│    c               capture a line into today's journal (tab: TODO)                                                  │
+│    e               edit current page in-app                                                                         │
+│    E               edit current page in $EDITOR                                                                     │
+│                                                                                                                     │
+│  Editor                                                                                                             │
+│    ctrl-s          save; merges outside edits, asks on a clash                                                      │
+│    esc             leave editor (prompts if unsaved)                                                                │
+│    ctrl-z / ctrl-y undo / redo                                                                                      │
+│    shift-arrows    select (also home/end, pgup/pgdn, words)                                                         │
+│    ctrl-a          select all                                                                                       │
+│    ctrl-c / ctrl-x copy / cut (line if nothing selected)                                                            │
+│    ctrl-v          paste the last copy made here                                                                    │
+│    alt-← / alt-→   word left / right                                                                                │
+│    home / end      line start / end                                                                                 │
+│    pgup / pgdn     page up / down                                                                                   │
+│    enter           continue bullet (empty bullet ends it)                                                           │
+│    tab / shift-tab indent / de-indent with children                                                                 │
+│    alt-↑ / alt-↓   move bullet with children                                                                        │
+│    ctrl-t          cycle marker: open → DONE → plain → TODO                                                         │
+│    alt-s / alt-e   set scheduled / deadline date                                                                    │
+│    alt-p           cycle priority A → B → C → none                                                                  │
+│    ctrl-r          live preview ↔ source                                                                            │
+│    [[              link completion (↑/↓, enter/tab, esc)                                                            │
+│    #               tag completion after # + letter                                                                  │
+│                                                                                                                     │
+│  ? or esc to close                                                                                     weft v1.0.0  │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

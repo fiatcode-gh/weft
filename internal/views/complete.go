@@ -204,6 +204,25 @@ func (c *linkCompleter) selected() (linkCandidate, bool) {
 	return c.cands[c.sel], true
 }
 
+// completion is how accepting the selected candidate edits the text before
+// the cursor: drop its last del bytes, then insert ins. Tag: del is the
+// partial plus '#', ins is tagText(name). Create row: del 0, ins "]]".
+// Page: del is the partial, ins is name+"]]". ok is false with nothing selected.
+func (c *linkCompleter) completion() (del int, ins string, ok bool) {
+	cand, ok := c.selected()
+	if !ok {
+		return 0, "", false
+	}
+	switch {
+	case c.tag:
+		return len(c.partial) + 1, tagText(cand.name), true
+	case cand.create:
+		return 0, "]]", true
+	default:
+		return len(c.partial), cand.name + "]]", true
+	}
+}
+
 func (c *linkCompleter) moveUp() {
 	if c.sel > 0 {
 		c.sel--

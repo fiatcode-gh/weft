@@ -120,6 +120,8 @@ func (t *Todos) Update(key string) OverlayResult {
 	switch key {
 	case keyEsc, keyQ:
 		return overlayCancel()
+	case "c":
+		return overlayCapture()
 	case "t":
 		t.cycleFilter()
 	case keyUp, keyK:

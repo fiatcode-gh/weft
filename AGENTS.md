@@ -11,7 +11,7 @@ or last saved, by content; it three-way-merges non-overlapping changes using the
 pure `internal/merge`, otherwise shows an overwrite/reload/keep-editing prompt;
 linkify refuses to write a file that changed under it) and creates a page's file lazily on first save; `E` hands the
 file to `$EDITOR`. File creation for a new page is deferred until save, so
-opening then discarding never touches disk. The editor edits an `internal/buffer/` `Buffer` (lines plus their own `\n`/`\r\n` terminators, so any file round-trips byte-for-byte; no size or content refusal) with undo/redo, selection, find/replace and the markdown structure ops. It is painted from source by `internal/render`'s source-row files in the colours of `render.Theme`, the one style definition the read view shares (so `WEFT_STYLE` and `NO_COLOR` apply to both), and shows the real terminal cursor. While editing, typing `[[` opens a
+opening then discarding never touches disk; a new journal's editor buffer starts from the `Journal Template` page. The editor edits an `internal/buffer/` `Buffer` (lines plus their own `\n`/`\r\n` terminators, so any file round-trips byte-for-byte; no size or content refusal) with undo/redo, selection, find/replace and the markdown structure ops. It is painted from source by `internal/render`'s source-row files in the colours of `render.Theme`, the one style definition the read view shares (so `WEFT_STYLE` and `NO_COLOR` apply to both), and shows the real terminal cursor. While editing, typing `[[` opens a
 live fuzzy completion list of page names (`↑`/`↓` to choose, `Enter`/`Tab` to
 insert `[[Page Name]]`, `Esc` to dismiss); an unmatched name offers a create row
 that inserts a link to the not-yet-created page without writing to disk.
@@ -74,7 +74,7 @@ an intentional UI change, run with `-update` and visually diff the golden before
   `$VISUAL` / `$EDITOR` / `vi`, snapshots file mtime, and exposes
   `Resolve` / `EnsureFile` / `ReadSnapshot` / `WriteFileIfUnchanged` / `SnapshotMtime`.
   Every replacing write is content-guarded: `writeFile` is unexported. Invoked by the in-app editor (`e`,
-  saves on `Ctrl+S`), by task done/undo in the todos and agenda overlays, by linkify in the backlinks panel, and by `App.editCurrent` for `$EDITOR` handoff (`E`).
+  saves on `Ctrl+S`), by task done/undo in the todos and agenda overlays, by linkify in the backlinks panel, by capture (`c`, one guarded append to today's journal), by template journal creation (`.`, `E`, capture), and by `App.editCurrent` for `$EDITOR` handoff (`E`).
 - `internal/merge/` — pure git-style three-way line merge (adjacent changes
   conflict; both sides inserting at the same spot keeps mine then theirs) used by
   the editor save. No disk access.
@@ -86,7 +86,7 @@ an intentional UI change, run with `-update` and visually diff the golden before
   is dirty or ahead of upstream, driving the status-bar `●` indicator. Never
   edits a conflicted tree — conflicts bail to the shell.
 - `internal/views/` — Bubble Tea models: `app` (root), `page`, `picker`, `search`,
-  `backlinks`, `todos`, `agenda`, `help`, `editor` (in-app markdown editor). The backlinks
+  `backlinks`, `todos`, `agenda`, `calendar`, `onthisday`, `capture`, `help`, `editor` (in-app markdown editor). The backlinks
   view (`b`) shows two sections: linked references (`[[…]]` links and tags) then unlinked
   references (bare-text mentions not yet wiki-linked); read-only, `enter` jumps to the
   mention's page and lands on the reference: linked backlinks focus the back-reference

@@ -87,6 +87,10 @@ type App struct {
 	// focus. Set when an open-overlay key is pressed; cleared by terminal outcomes.
 	active Overlay
 
+	// capture is the capture prompt drawn over the screen. While non-nil it
+	// owns every key.
+	capture *CapturePrompt
+
 	width  int
 	height int
 
@@ -326,22 +330,6 @@ func (a *App) historyForward() {
 	a.page.Restore(target.offset, target.cursor)
 }
 
-// createJournalAndReindex creates the on-disk file for journal page `name`
-// via the internal/edit hook, rebuilds the index synchronously, and rebinds
-// the current PageView to it. Shared by the `.` and `e` handlers when they
-// land on a today's-journal page whose file doesn't exist yet. Returns an
-// error whose message is ready for setHint.
-func (a *App) createJournalAndReindex(name string) error {
-	journalPath := filepath.Join(a.graphPath, "journals", graph.FilenameFromPageName(name))
-	if _, err := edit.EnsureFile(journalPath); err != nil {
-		return fmt.Errorf("cannot create journal: %w", err)
-	}
-	if err := a.reindex(); err != nil {
-		return fmt.Errorf("reindex failed: %w", err)
-	}
-	return nil
-}
-
 // reindex rebuilds the in-memory index synchronously and rebinds the current
 // PageView so it reflects new links/todos. Shared by createJournalAndReindex
 // and the linkify path, both of which mutate the graph while a view is open and
@@ -369,9 +357,9 @@ func (a *App) reindex() error {
 }
 
 // editCurrent snapshots the current page's file mtime, ensures the
-// file exists (creating an empty one for today's journal if needed),
-// resolves the user's editor, and returns a tea.ExecProcess cmd that
-// hands the file off. The child editor's exit yields an
+// file exists (creating today's journal from the journal template, or empty
+// without one, if needed), resolves the user's editor, and returns a
+// tea.ExecProcess cmd that hands the file off. The child editor's exit yields an
 // editorExitedMsg, which the Update case below mtime-gates against a
 // reindex.
 func (a *App) editCurrent() tea.Cmd {
@@ -442,18 +430,25 @@ func (a *App) enterEditor() tea.Cmd {
 	var path string
 	if meta, ok := a.idx.Resolve(name); ok {
 		path = meta.Path
+	} else if graph.IsJournalPageName(name) {
+		path = a.journalPath(name)
 	} else {
-		sub := "pages"
-		if graph.IsJournalPageName(name) {
-			sub = "journals"
-		}
-		path = filepath.Join(a.graphPath, sub, graph.FilenameFromPageName(name))
+		path = filepath.Join(a.graphPath, "pages", graph.FilenameFromPageName(name))
 	}
 	snap, err := a.readSnapshot(path)
 	if err != nil {
 		return a.setHint("cannot read: " + err.Error())
 	}
 	content, isNew := snap.Content, !snap.Exists
+	if isNew && graph.IsJournalPageName(name) {
+		// A new journal opens on the journal template; nothing is written
+		// until save.
+		tmpl, err := a.journalTemplate()
+		if err != nil {
+			return a.setHint(err.Error())
+		}
+		content = tmpl
+	}
 	at, ok := a.page.ReadingAnchor()
 	if !ok {
 		at = Anchor{0, 0, 1}
@@ -675,6 +670,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if a.editor != nil {
 			a.editor.SetSize(m.Width, m.Height)
 		}
+		if a.capture != nil {
+			a.capture.SetSize(m.Width, m.Height)
+		}
 		return a, nil
 	case tea.PasteMsg:
 		// Bubble Tea v1 delivered a bracketed paste as one key whose String()
@@ -746,6 +744,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return a, tea.Batch(cmds...)
 		}
+		if a.capture != nil {
+			if key == "ctrl+c" {
+				return a, tea.Quit
+			}
+			switch a.capture.Update(m) {
+			case captureCancel:
+				a.capture = nil
+			case captureSubmit:
+				return a, a.submitCapture()
+			}
+			return a, nil
+		}
 		// An open overlay swallows all keys until it accepts or cancels —
 		// except ctrl+c, which must always quit (Bubble Tea convention; it
 		// works in every other mode).
@@ -790,6 +800,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case overlayResultHighlight:
 				a.navigateHighlighting(res.page, res.target)
 				a.active = nil
+			case overlayResultCapture:
+				a.openCapture()
 			}
 			return a, nil
 		}
@@ -807,12 +819,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.active = NewTodos(a.idx, a.width, a.height)
 		case "A":
 			a.active = NewAgenda(a.idx, a.nowFunc(), a.width, a.height)
+		case "C":
+			a.active = NewCalendar(a.idx.Journals(), a.page.Page(), a.nowFunc(), a.width, a.height)
+		case "O":
+			a.active = NewOnThisDay(a.idx, a.nowFunc(), a.readSnapshot, a.width, a.height)
 		case "?":
 			a.active = NewHelp(a.version, a.width, a.height)
 		case "[":
 			a.historyBack()
 		case "]":
 			a.historyForward()
+		case "c":
+			a.openCapture()
 		case ".":
 			if cmd, blocked := a.blockIfSyncing(); blocked {
 				return a, cmd
@@ -823,7 +841,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if err := a.createJournalAndReindex(today); err != nil {
 					return a, a.setHint(err.Error())
 				}
-				// Creating the journal wrote a new file — refresh the indicator.
+				// Creating the journal wrote a new file (from the journal
+				// template, or empty without one) — refresh the indicator.
 				probe = a.statusProbeCmd()
 			}
 			if a.page.Page() != today {
@@ -904,6 +923,17 @@ func (a *App) View() tea.View {
 	v.AltScreen = true
 	if a.editor != nil {
 		v.Cursor = a.editor.Cursor()
+	} else if a.capture != nil {
+		block, x, y := a.capture.View()
+		rows := strings.Count(block, "\n") + 1
+		y += max(0, a.height-rows)
+		if a.height > 0 {
+			y = clampInt(y, 0, a.height-1)
+		}
+		if a.width > 0 {
+			x = clampInt(x, 0, a.width-1)
+		}
+		v.Cursor = tea.NewCursor(x, y)
 	}
 	return v
 }
@@ -924,10 +954,17 @@ func (a *App) frame() string {
 	if a.editor != nil {
 		return a.editor.View()
 	}
+	var base string
 	if a.active != nil {
-		return a.centerOverlay(a.active.View())
+		base = a.centerOverlay(a.active.View())
+	} else {
+		base = a.page.View() + "\n" + a.statusBar()
 	}
-	return a.page.View() + "\n" + a.statusBar()
+	if a.capture != nil {
+		block, _, _ := a.capture.View()
+		return spliceBottom(base, block, a.height)
+	}
+	return base
 }
 
 // centerOverlay places content in the middle of the terminal. Falls back to
@@ -1000,19 +1037,18 @@ func (a *App) blockIfSyncing() (cmd tea.Cmd, blocked bool) {
 	if !a.syncing {
 		return nil, false
 	}
-	const msg = "sync in progress — retry when it finishes"
 	switch o := a.active.(type) {
 	case *Backlinks:
-		o.SetError(msg)
+		o.SetError(syncBusyMsg)
 		return nil, true
 	case *Picker:
-		o.SetError(msg)
+		o.SetError(syncBusyMsg)
 		return nil, true
 	case taskPanel:
-		o.SetError(msg)
+		o.SetError(syncBusyMsg)
 		return nil, true
 	default:
-		return a.setHint("⟳ " + msg), true
+		return a.setHint("⟳ " + syncBusyMsg), true
 	}
 }
 

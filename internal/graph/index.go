@@ -150,6 +150,9 @@ func (idx *Index) BacklinksTo(name string) []Ref {
 	return slices.Clone(idx.backlinks[strings.ToLower(name)])
 }
 
+// Journals returns the indexed journal page names, sorted ascending (a copy).
+func (idx *Index) Journals() []string { return slices.Clone(idx.journals) }
+
 // JournalNeighbor returns the nearest indexed journal in dir (-1 or +1).
 // Phantom journal-shaped dates use their insertion point in the sorted index.
 func (idx *Index) JournalNeighbor(current string, dir int) (string, bool) {

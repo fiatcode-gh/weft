@@ -19,6 +19,7 @@ const (
 	overlayResultHighlight
 	overlayResultLinkify
 	overlayResultMarkTask
+	overlayResultCapture
 )
 
 // OverlayResult is the tagged outcome that an overlay's Update reports to the
@@ -34,6 +35,9 @@ type OverlayResult struct {
 }
 
 func overlayCancel() OverlayResult { return OverlayResult{kind: overlayResultCancel} }
+
+// overlayCapture asks the App to open the capture prompt over the overlay.
+func overlayCapture() OverlayResult { return OverlayResult{kind: overlayResultCapture} }
 
 func overlayCommand(cmd tea.Cmd) OverlayResult {
 	return OverlayResult{kind: overlayResultCommand, cmd: cmd}

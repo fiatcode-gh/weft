@@ -80,8 +80,11 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | `n` / `N`  | cycle the link cursor (wiki-links and tags) |
 | `Enter`    | follow link / open selection        |
 | `[` / `]`  | back / forward in page history      |
-| `.`        | jump to today's journal (creates it if missing) |
+| `.`        | jump to today's journal (creates it from the `Journal Template` page if missing) |
 | `<` / `>`  | previous / next journal (on a journal page) |
+| `C`        | calendar of journals (arrows day/week, `PgUp`/`PgDn` month, `t` today, `Enter` open) |
+| `O`        | on this day: a week, a month and years ago |
+| `c`        | capture a line into today's journal (`Tab` toggles `TODO`, `[[`/`#` complete, `Esc` cancels) |
 | `j` / `k`  | scroll one line                     |
 | `Ctrl-d/u` | half-page scroll                    |
 | `g` / `G`  | jump to top / bottom of page        |
@@ -126,6 +129,13 @@ A task is a bullet that starts with a marker (`TODO`, `LATER`, `DOING`, `WAITING
 - The agenda (`A`) lists open tasks with a date in three sections: Overdue (before today), Today, and Upcoming (the next 7 days, inclusive). A task with both dates uses the earlier. Rows are ordered by date, timed before untimed, then priority. Undated tasks and tasks beyond the window are left out.
 - `x` in the dashboard or the agenda writes only the marker: open → `DONE`, and `x` again restores the earlier marker. It is refused while a sync runs, or when the line changed on disk.
 
+### Journals
+
+- **Template.** If a page named `Journal Template` exists (`pages/Journal Template.md`), its file is copied as-is into every journal weft creates: with `.`, `E`, capture (`c`), or the first save in the in-app editor. A journal that already exists is never changed. The page is read each time it is used, so edits apply to the next new journal. A template created outside weft needs `R` before weft finds it. Without the page, a new journal starts empty.
+- **Capture.** `c` opens a one-line prompt over the current screen (also over the dashboard, agenda, backlinks, calendar and on-this-day overlays). `Enter` appends `- <text>` as the last line of today's journal, creating the file from the template when missing. `Tab` writes `- TODO <text>` instead; `[[` and `#` complete page names; `Esc` cancels. The write is append-only and guarded: if the file changes between read and write, weft re-reads and tries once more, then writes nothing and keeps your text in the prompt. It is refused while a sync runs. The day is fixed when the prompt opens.
+- **Calendar.** `C` shows a month grid, Monday first, a `•` after each day that has a journal, `[ ]` around the cursor day. `←`/`→` move a day, `↑`/`↓` a week, `PgUp`/`PgDn` a month (the day clamps to the month's end), `t` goes to today, `Enter` opens that day's journal; a day without one opens as an empty page and nothing is written until you save.
+- **On this day.** `O` lists the journals from one week ago, one month ago (the day clamps to the month's end) and the same month and day in earlier years, newest year first, each with its first lines. Dates without a journal are left out; a February 29 has no entry in years without one.
+
 ## What gets rendered
 
 - `[[wiki-links]]` are styled inline, navigable with `n`/`N`, and follow with `Enter`. Aliased links (`[[Target|alias]]`) show the alias.
@@ -146,7 +156,7 @@ A task is a bullet that starts with a marker (`TODO`, `LATER`, `DOING`, `WAITING
 
 ## Scope
 
-Writes graph files only via the in-app editor (`e`, saves on `Ctrl+S`) and the `$EDITOR` handoff (`E`); the `.` key creates today's journal if it doesn't exist, and the picker can create a new page by name. Linkifying a mention in the backlinks panel also writes the mentioning file. The editor and linkify never overwrite outside changes unseen. Press `S` to sync the whole graph with git (commit → `pull --rebase` → push); it runs against the graph directory and degrades to a status-bar hint if that directory isn't a git repository. No fold/unfold, no filesystem-watch live reload (use `R`).
+Writes graph files only via the in-app editor (`e`, saves on `Ctrl+S`) and the `$EDITOR` handoff (`E`); the `.` key creates today's journal (from the `Journal Template` page) if it doesn't exist, `c` appends one line to today's journal (creating it the same way when missing), and the picker can create a new page by name. Linkifying a mention in the backlinks panel also writes the mentioning file. The editor and linkify never overwrite outside changes unseen. Press `S` to sync the whole graph with git (commit → `pull --rebase` → push); it runs against the graph directory and degrades to a status-bar hint if that directory isn't a git repository. No fold/unfold, no filesystem-watch live reload (use `R`).
 
 ### What is not supported
 

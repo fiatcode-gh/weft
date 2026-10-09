@@ -87,8 +87,9 @@ type EditorResult struct {
 }
 
 // NewEditorView builds an editor for page `name` targeting `path`, primed
-// with `content` (empty for a not-yet-created page), exactly as it is on
-// disk. isNew seeds disk.Exists: whether the file existed at open time. idx is
+// with `content`: the file as it is on disk, or for a new page (isNew) the
+// text to start from, such as the journal template. isNew decides what disk
+// holds: the zero Snapshot (no file) for a new page, else content. idx is
 // the graph index used for link completion; pass nil to disable completion
 // (e.g. in tests that don't exercise it). at says where the cursor opens: the
 // row RowInLine of line at.Line (clamped into the buffer) is placed on screen
@@ -99,6 +100,10 @@ func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, wid
 	if reg == nil {
 		reg = &register{}
 	}
+	disk := edit.Snapshot{}
+	if !isNew {
+		disk = edit.Snapshot{Content: content, Exists: true}
+	}
 	theme, _ := render.CurrentTheme() // on error: the notty theme it returned
 	e := &EditorView{
 		buf:       buffer.New(content),
@@ -106,7 +111,7 @@ func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, wid
 		path:      path,
 		pageName:  name,
 		baseline:  content,
-		disk:      edit.Snapshot{Content: content, Exists: !isNew},
+		disk:      disk,
 		completer: newLinkCompleter(idx),
 		theme:     theme,
 		scanner:   render.NewScanner(),
@@ -217,24 +222,17 @@ func (e *EditorView) refreshCompleter(allowOpen bool) {
 // A tag completion replaces "#partial" with tagText(name), writing nothing
 // when the text already matches.
 func (e *EditorView) acceptCompletion() {
-	cand, ok := e.completer.selected()
+	del, ins, ok := e.completer.completion()
 	if !ok {
 		return
 	}
 	cur := e.buf.Cursor()
-	switch {
-	case e.completer.tag:
-		start := buffer.Pos{Line: cur.Line, Col: cur.Col - len(e.completer.partial) - 1}
-		text := tagText(cand.name)
-		if e.buf.Line(cur.Line)[start.Col:cur.Col] != text {
-			e.buf.ReplaceRange(buffer.Range{Start: start, End: cur}, text)
-		}
+	start := buffer.Pos{Line: cur.Line, Col: cur.Col - del}
+	if e.buf.Line(cur.Line)[start.Col:cur.Col] != ins {
+		e.buf.ReplaceRange(buffer.Range{Start: start, End: cur}, ins)
+	}
+	if e.completer.tag {
 		e.completer.dismiss()
-	case cand.create:
-		e.buf.ReplaceRange(buffer.Range{Start: cur, End: cur}, "]]")
-	default:
-		start := buffer.Pos{Line: cur.Line, Col: cur.Col - len(e.completer.partial)}
-		e.buf.ReplaceRange(buffer.Range{Start: start, End: cur}, cand.name+"]]")
 	}
 	e.goalOK = false
 	e.afterKey(false)
