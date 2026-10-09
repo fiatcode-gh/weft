@@ -130,6 +130,10 @@ type App struct {
 	// was on, set on a saved exit and consumed by the reindex that follows.
 	pendingPlace *Anchor
 
+	// readFrom is where the read view stood when e opened the editor, so an
+	// exit that did not move restores it exactly (placeFromEditor).
+	readFrom *readSpot
+
 	// Browser-style page history. hist[histIdx] is the entry currently on
 	// screen. histIdx == -1 before the first page is shown.
 	hist    []historyEntry
@@ -147,9 +151,20 @@ type App struct {
 	indexGen int
 }
 
+// readSpot is the read view at the moment e opened the editor: the anchor e
+// computed (before the shift past trimmed leading blank lines), the view's
+// top and cursor row, and the body they apply to.
+type readSpot struct {
+	at       Anchor
+	top, row int
+	body     string
+}
+
 type historyEntry struct {
 	page   string
 	offset int
+	// row is the cursor row; -1 means the first non-blank row.
+	row    int
 	cursor int
 	// taskOrdinal is the 0-based open-todo deep-link target recorded when the
 	// entry was created via navigateToTask (e.g. picking a TODO from the
@@ -224,7 +239,7 @@ func (a *App) tryInitPage() {
 	if a.page == nil && a.idx != nil && a.loadErr == nil && a.width > 0 {
 		name := a.todayJournalName()
 		a.page = NewPageView(a.idx, name, a.width, a.height)
-		a.hist = []historyEntry{{page: name, offset: 0, cursor: -1, taskOrdinal: -1}}
+		a.hist = []historyEntry{{page: name, offset: 0, row: -1, cursor: -1, taskOrdinal: -1}}
 		a.histIdx = 0
 	}
 }
@@ -255,11 +270,13 @@ func (a *App) canonicalName(name string) string {
 func (a *App) pushHistory(name string, taskOrdinal int) {
 	if a.histIdx >= 0 && a.histIdx < len(a.hist) {
 		a.hist[a.histIdx].offset = a.page.Offset()
+		a.hist[a.histIdx].row = a.page.CursorRow()
 		a.hist[a.histIdx].cursor = a.page.Cursor()
 	}
 	a.hist = append(a.hist[:a.histIdx+1], historyEntry{
 		page:        name,
 		offset:      0,
+		row:         -1,
 		cursor:      -1,
 		taskOrdinal: taskOrdinal,
 	})
@@ -309,11 +326,12 @@ func (a *App) historyBack() {
 		return
 	}
 	a.hist[a.histIdx].offset = a.page.Offset()
+	a.hist[a.histIdx].row = a.page.CursorRow()
 	a.hist[a.histIdx].cursor = a.page.Cursor()
 	a.histIdx--
 	target := a.hist[a.histIdx]
 	a.page.SetPage(target.page)
-	a.page.Restore(target.offset, target.cursor)
+	a.page.Restore(target.offset, target.row, target.cursor)
 }
 
 // historyForward walks one step forward in the history stack. Mirrors
@@ -323,11 +341,12 @@ func (a *App) historyForward() {
 		return
 	}
 	a.hist[a.histIdx].offset = a.page.Offset()
+	a.hist[a.histIdx].row = a.page.CursorRow()
 	a.hist[a.histIdx].cursor = a.page.Cursor()
 	a.histIdx++
 	target := a.hist[a.histIdx]
 	a.page.SetPage(target.page)
-	a.page.Restore(target.offset, target.cursor)
+	a.page.Restore(target.offset, target.row, target.cursor)
 }
 
 // reindex rebuilds the in-memory index synchronously and rebinds the current
@@ -343,9 +362,9 @@ func (a *App) reindex() error {
 	if a.page != nil {
 		// Same-page rebuild: keep the reader's place, exactly like the
 		// async indexLoadedMsg path. Restore clamps if the page shrank.
-		off, cur := a.page.Offset(), a.page.Cursor()
+		off, row, cur := a.page.Offset(), a.page.CursorRow(), a.page.Cursor()
 		a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
-		a.page.Restore(off, cur)
+		a.page.Restore(off, row, cur)
 	}
 	if fresh := a.newIndexWarnings(idx.Warnings); fresh && len(idx.Warnings) > 0 {
 		// Best-effort: nothing to degrade to here — an overlay usually
@@ -453,6 +472,11 @@ func (a *App) enterEditor() tea.Cmd {
 	if !ok {
 		at = Anchor{0, 0, 1}
 	}
+	// A borrowed cursor row anchors on the own row below it, which can lie past
+	// the window; the editor clamps that screen row, so compare on the clamp.
+	opened := at
+	opened.ScreenRow = min(opened.ScreenRow, a.page.vp.Height()-1)
+	a.readFrom = &readSpot{at: opened, top: a.page.Offset(), row: a.page.CursorRow(), body: a.page.body}
 	at.Line += leadingTrimmedLines(content)
 	a.editor = NewEditorView(a.idx, name, path, content, isNew, a.width, a.height, at, &a.clip, a.editorSource)
 	a.editor.now = a.nowFunc
@@ -495,9 +519,23 @@ func (a *App) exitPlacement(saved bool) (at Anchor, place, keep bool) {
 // behind, once the page has been rebuilt.
 func (a *App) applyPendingPlace() {
 	if a.pendingPlace != nil && a.page != nil {
-		a.page.PlaceAnchor(*a.pendingPlace)
+		a.placeFromEditor(*a.pendingPlace)
 	}
 	a.pendingPlace = nil
+	a.readFrom = nil
+}
+
+// placeFromEditor puts the editor's line back on its screen row; an exit
+// that did not move from where e opened, on unchanged text, restores the
+// read view exactly as it was.
+func (a *App) placeFromEditor(at Anchor) {
+	f := a.readFrom
+	a.readFrom = nil
+	if f != nil && at == f.at && a.page.body == f.body {
+		a.page.Reposition(f.top, f.row)
+		return
+	}
+	a.page.PlaceAnchor(at)
 }
 
 // unlinkedRefs finds bare-text mentions of `name` elsewhere in the graph that
@@ -589,9 +627,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Refresh path (R, sync-pull, editor save-exit): rebuild PageView
 			// for the same page so it picks up new links/todos — but keep the
 			// user's place. Restore clamps if the page shrank.
-			off, cur := a.page.Offset(), a.page.Cursor()
+			off, row, cur := a.page.Offset(), a.page.CursorRow(), a.page.Cursor()
 			a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
-			a.page.Restore(off, cur)
+			a.page.Restore(off, row, cur)
 			a.applyPendingPlace()
 		} else {
 			a.tryInitPage()
@@ -721,19 +759,22 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// then places the anchor and refreshes the indicator.
 					if place {
 						a.pendingPlace = &at
+					} else {
+						a.readFrom = nil
 					}
 					cmds = append(cmds, a.buildIndexCmd())
 				case keep:
 					// The page on screen already shows this content: keep it
 					// and its row map and just move it.
-					a.page.PlaceAnchor(at)
+					a.placeFromEditor(at)
 				default:
-					off, cur := a.page.Offset(), a.page.Cursor()
+					off, row, cur := a.page.Offset(), a.page.CursorRow(), a.page.Cursor()
 					a.page = NewPageView(a.idx, a.page.Page(), a.width, a.height)
-					a.page.Restore(off, cur)
+					a.page.Restore(off, row, cur)
 					if place {
-						a.page.PlaceAnchor(at)
+						a.placeFromEditor(at)
 					}
+					a.readFrom = nil
 				}
 				if res.Save && outcome == saveMerged {
 					cmds = append(cmds, a.setHint(mergedNotice))

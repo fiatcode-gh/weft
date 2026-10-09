@@ -132,7 +132,7 @@ func TestPageViewRestoreRoundtrip(t *testing.T) {
 	idx := loadFixture(t)
 	pv := NewPageView(idx, "Alpha", 80, 5)
 
-	pv.Restore(2, 1)
+	pv.Restore(2, 2, 1)
 	if got := pv.Offset(); got != 2 {
 		t.Errorf("Restore offset: want 2, got %d", got)
 	}
@@ -147,13 +147,13 @@ func TestPageViewRestoreClampsCursor(t *testing.T) {
 	pv := NewPageView(idx, "Alpha", 80, 24)
 
 	// Cursor past the link count falls back to -1.
-	pv.Restore(0, 9999)
+	pv.Restore(0, 0, 9999)
 	if got := pv.Cursor(); got != -1 {
 		t.Errorf("over-range cursor: want -1, got %d", got)
 	}
 
 	// Negative cursor below -1 falls back to -1.
-	pv.Restore(0, -5)
+	pv.Restore(0, 0, -5)
 	if got := pv.Cursor(); got != -1 {
 		t.Errorf("under-range cursor: want -1, got %d", got)
 	}
@@ -282,22 +282,28 @@ func TestPageLineUpDownAndHalfPageUp(t *testing.T) {
 	quietTerm(t)
 	pv := NewPageView(loadFixture(t), "Alpha", 80, 5)
 
+	start := pv.CursorRow()
 	pv.LineDown()
-	afterDown := pv.Offset()
-	if afterDown == 0 {
-		t.Errorf("after LineDown: expected non-zero offset, got 0")
+	afterDown := pv.CursorRow()
+	if afterDown <= start {
+		t.Errorf("after LineDown: cursor should advance from %d, got %d", start, afterDown)
+	}
+	if r := pv.CursorRow() - pv.Offset(); r < 0 || r >= pv.vp.Height() {
+		t.Errorf("after LineDown the cursor is off screen: screen row %d of %d", r, pv.vp.Height())
 	}
 	pv.LineUp()
-	if got := pv.Offset(); got >= afterDown {
-		t.Errorf("after LineUp: offset should retreat from %d, got %d", afterDown, got)
+	if got := pv.CursorRow(); got >= afterDown {
+		t.Errorf("after LineUp: cursor should retreat from %d, got %d", afterDown, got)
 	}
 
 	pv.GotoBottom()
-	bottom := pv.Offset()
+	bottom, bottomOff := pv.CursorRow(), pv.Offset()
 	pv.HalfPageUp()
-	if got := pv.Offset(); got >= bottom {
-		t.Errorf("after HalfPageUp from bottom: offset should retreat from %d, got %d",
-			bottom, got)
+	if got := pv.CursorRow(); got >= bottom {
+		t.Errorf("after HalfPageUp from bottom: cursor should retreat from %d, got %d", bottom, got)
+	}
+	if got := pv.Offset(); got >= bottomOff {
+		t.Errorf("after HalfPageUp from bottom: offset should retreat from %d, got %d", bottomOff, got)
 	}
 }
 
@@ -323,6 +329,9 @@ func TestScrollToTaskCentresOnTodo(t *testing.T) {
 	row := strings.Count(pv.result.Styled[:pv.result.Tasks[0]], "\n")
 	if row < off || row >= off+pv.vp.Height() {
 		t.Errorf("target row %d outside viewport [%d,%d)", row, off, off+pv.vp.Height())
+	}
+	if got := pv.CursorRow(); got != row {
+		t.Errorf("cursor row = %d, want the todo's row %d", got, row)
 	}
 }
 
@@ -478,13 +487,13 @@ func anchorLongPage(prefix string) string {
 
 var anchorLineRe = regexp.MustCompile(`line (\d+)`)
 
-// topRowLine parses N from the "line N" bullet on the page's top visible row.
+// topRowLine parses N from the "line N" bullet on the page's cursor row.
 func topRowLine(t *testing.T, p *PageView) int {
 	t.Helper()
-	row := strings.Split(p.result.Styled, "\n")[p.Offset()]
+	row := p.rowText(p.CursorRow())
 	m := anchorLineRe.FindStringSubmatch(row)
 	if m == nil {
-		t.Fatalf("top row %d is not a line bullet: %q", p.Offset(), row)
+		t.Fatalf("cursor row %d is not a line bullet: %q", p.CursorRow(), row)
 	}
 	var k int
 	fmt.Sscanf(m[1], "%d", &k)
@@ -511,8 +520,8 @@ func TestPageViewAnchorFollowsScroll(t *testing.T) {
 
 	at, ok := p.ReadingAnchor()
 
-	if !ok || at.Line != k+4 || at.RowInLine != 0 || at.ScreenRow != 0 {
-		t.Fatalf("ReadingAnchor = (%+v, %v), want line %d on screen row 0", at, ok, k+4)
+	if !ok || at.Line != k+4 || at.RowInLine != 0 || at.ScreenRow != p.CursorRow()-p.Offset() {
+		t.Fatalf("ReadingAnchor = (%+v, %v), want line %d on the cursor's screen row %d", at, ok, k+4, p.CursorRow()-p.Offset())
 	}
 	if at.Line == p.Offset() {
 		t.Fatalf("row and line must diverge; both %d", at.Line)
@@ -599,12 +608,11 @@ func TestPageViewAnchorPrefersVisibleLinkCursorWhenScrolled(t *testing.T) {
 	if !found || p.Offset() <= 0 || row <= p.Offset() || row > p.Offset()+p.vp.Height()-1 {
 		t.Fatalf("setup: link row %d must be visible below top %d", row, p.Offset())
 	}
-	top := topRowLine(t, p)
 
 	at, ok := p.ReadingAnchor()
 
 	if !ok || at.Line != 30 || at.ScreenRow != row-p.Offset() {
-		t.Fatalf("ReadingAnchor = (%+v, %v), want line 30 on screen row %d; top row's line is %d", at, ok, row-p.Offset(), top)
+		t.Fatalf("ReadingAnchor = (%+v, %v), want line 30 on screen row %d", at, ok, row-p.Offset())
 	}
 }
 
@@ -675,10 +683,10 @@ func placePage() string {
 func TestPlaceAnchor(t *testing.T) {
 	quietTerm(t)
 	_, idx := writeGraph(t, map[string]string{"pages/A.md": placePage()})
-	view := func(p *PageView) []string { return strings.Split(plain(p.vp.View()), "\n") }
+	view := func(p *PageView) []string { return strings.Split(plain(p.View()), "\n") }
 	rowIndex := func(p *PageView, sub string) int {
-		for i, r := range p.styledRows(0, p.vp.TotalLineCount()) {
-			if strings.Contains(plain(r), sub) {
+		for i := range p.rowCount() {
+			if strings.Contains(plain(p.rowText(i)), sub) {
 				return i
 			}
 		}
@@ -692,9 +700,12 @@ func TestPlaceAnchor(t *testing.T) {
 		check func(t *testing.T, p *PageView)
 	}{
 		{"wrapped continuation row on screen row 5", Anchor{Line: 20, RowInLine: 1, ScreenRow: 5}, func(t *testing.T, p *PageView) {
-			want := plain(p.styledRows(rowIndex(p, "L20")+1, rowIndex(p, "L20")+2)[0])
+			want := plain(p.rowText(rowIndex(p, "L20") + 1))
 			if got := view(p)[5]; got != want {
 				t.Errorf("screen row 5 = %q, want the second row of the wrapped bullet %q", got, want)
+			}
+			if got := p.CursorRow(); got != rowIndex(p, "L20")+1 {
+				t.Errorf("cursor row = %d, want the continuation row %d", got, rowIndex(p, "L20")+1)
 			}
 		}},
 		{"hidden line falls to the next visible line", Anchor{Line: 32, ScreenRow: 3}, func(t *testing.T, p *PageView) {
@@ -704,7 +715,7 @@ func TestPlaceAnchor(t *testing.T) {
 		}},
 		{"past the end lands on the last line", Anchor{Line: 9999, ScreenRow: 3}, func(t *testing.T, p *PageView) {
 			rows := view(p)
-			if !p.vp.AtBottom() || !strings.Contains(strings.Join(rows, "\n"), "L59") {
+			if p.Offset() != p.maxTop() || !strings.Contains(strings.Join(rows, "\n"), "L59") {
 				t.Errorf("want the last line L59 at the bottom, offset %d, view:\n%s", p.Offset(), strings.Join(rows, "\n"))
 			}
 		}},
@@ -714,7 +725,7 @@ func TestPlaceAnchor(t *testing.T) {
 			}
 		}},
 		{"near the bottom clamps to the max offset", Anchor{Line: 58, ScreenRow: 0}, func(t *testing.T, p *PageView) {
-			if !p.vp.AtBottom() {
+			if p.Offset() != p.maxTop() {
 				t.Errorf("offset = %d, want the max offset", p.Offset())
 			}
 		}},

@@ -158,25 +158,34 @@ func TestAppPageKeyDispatch(t *testing.T) {
 	}
 
 	a.Update(key("N"))
+	a.page.GotoTop()
+	start := a.page.CursorRow()
 	a.Update(key("j"))
-	afterJ := a.page.Offset()
-	if afterJ == 0 {
-		t.Fatalf("setup: j should advance offset, got 0")
+	afterJ := a.page.CursorRow()
+	if afterJ <= start {
+		t.Fatalf("setup: j should advance the cursor from %d, got %d", start, afterJ)
+	}
+	// The window is three rows: the cursor reached its bottom edge, so a second j
+	// scrolls.
+	a.Update(key("j"))
+	if a.page.Offset() == 0 {
+		t.Errorf("j past the window edge should scroll, offset 0 (cursor row %d)", a.page.CursorRow())
 	}
 
 	a.Update(key("k"))
-	if a.page.Offset() >= afterJ {
-		t.Errorf("k should retreat from %d, got %d", afterJ, a.page.Offset())
+	if a.page.CursorRow() != afterJ {
+		t.Errorf("k should return the cursor to row %d, got %d", afterJ, a.page.CursorRow())
 	}
 
+	a.page.GotoTop()
 	a.Update(tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
-	afterCtrlD := a.page.Offset()
-	if afterCtrlD == 0 {
-		t.Fatalf("setup: ctrl+d should advance offset, got 0")
+	afterCtrlD := a.page.CursorRow()
+	if afterCtrlD <= start || a.page.Offset() == 0 {
+		t.Fatalf("setup: ctrl+d should move cursor (%d, from %d) and top (%d)", afterCtrlD, start, a.page.Offset())
 	}
 	a.Update(tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl})
-	if a.page.Offset() >= afterCtrlD {
-		t.Errorf("ctrl+u should retreat from %d, got %d", afterCtrlD, a.page.Offset())
+	if a.page.CursorRow() >= afterCtrlD || a.page.Offset() != 0 {
+		t.Errorf("ctrl+u should retreat from row %d, got row %d offset %d", afterCtrlD, a.page.CursorRow(), a.page.Offset())
 	}
 }
 

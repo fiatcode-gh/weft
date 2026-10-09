@@ -194,7 +194,7 @@ func TestEditorRoundTripIsStable(t *testing.T) {
 	a := newApp(t, map[string]string{"pages/Long.md": roundTripPage()}, 80, 30)
 	a.navigate("Long")
 	for _, off := range []int{0, 1, 17, 38, 61} {
-		a.page.Restore(off, -1)
+		a.page.Restore(off, off, -1)
 		if a.page.Offset() != off {
 			t.Fatalf("setup: offset %d not reachable, got %d", off, a.page.Offset())
 		}
@@ -488,7 +488,12 @@ func parityScreens(t *testing.T, p colorprofile.Profile) (read, edit [][]uv.Cell
 	t.Helper()
 	a := newApp(t, map[string]string{"pages/Doc.md": parityDoc}, 100, 60)
 	a.navigate("Doc")
+	// The cursor row is read-view chrome the editor has no counterpart for:
+	// compare the page itself, drawn without it.
+	cursor := a.page.row
+	a.page.row = -1
 	read = frameCells(a.View().Content, 100, p)
+	a.page.row = cursor
 	a.Update(key("e"))
 	if a.editor == nil {
 		t.Fatal("editor did not open")

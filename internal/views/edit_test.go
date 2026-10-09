@@ -282,13 +282,13 @@ func TestShiftE_EnsureFileStillUsed(t *testing.T) {
 
 var readLineRe = regexp.MustCompile(`line \d+`)
 
-// topReadLine returns the "line N" text on the read view's top row.
-func topReadLine(t *testing.T, a *App) string {
+// cursorReadLine returns the "line N" text on the read view's cursor row.
+func cursorReadLine(t *testing.T, a *App) string {
 	t.Helper()
-	rows := strings.Split(a.page.result.Styled, "\n")
-	m := readLineRe.FindString(rows[a.page.Offset()])
+	row := a.page.rowText(a.page.CursorRow())
+	m := readLineRe.FindString(row)
 	if m == "" {
-		t.Fatalf("no 'line N' on read top row %d: %q", a.page.Offset(), rows[a.page.Offset()])
+		t.Fatalf("no 'line N' on read cursor row %d: %q", a.page.CursorRow(), row)
 	}
 	return m
 }
@@ -312,7 +312,8 @@ func assertEditorOnReadTop(t *testing.T, raw string) {
 	for range 30 {
 		a.page.LineDown()
 	}
-	want := "- " + topReadLine(t, a)
+	want := "- " + cursorReadLine(t, a)
+	wantY := screenRow(a.page)
 	pressE(t, a)
 	if a.editor == nil {
 		t.Fatal("editor did not open")
@@ -321,18 +322,18 @@ func assertEditorOnReadTop(t *testing.T, raw string) {
 	if line == 0 {
 		t.Fatal("editor opened at line 0, want the reading position")
 	}
-	if cur := a.View().Cursor; cur == nil || cur.Y != 0 {
-		t.Fatalf("cursor %+v, want it on the top screen row", cur)
+	if cur := a.View().Cursor; cur == nil || cur.Y != wantY {
+		t.Fatalf("cursor %+v, want it on the read cursor's screen row %d", cur, wantY)
 	}
 	if got := strings.Split(text(a.editor), "\n")[line]; got != want {
 		t.Fatalf("editor cursor line = %q, want %q", got, want)
 	}
 	// The window must show the reading position, not just hold the cursor:
-	// a line from the middle of the read window has to be on screen too.
+	// a line from above the cursor has to be on screen too.
 	var n int
 	fmt.Sscanf(want, "- line %d", &n)
-	if mid := fmt.Sprintf("line %d", n+5); !strings.Contains(appText(a), mid) {
-		t.Fatalf("editor view does not show %q below the reading position:\n%s", mid, appText(a))
+	if above := fmt.Sprintf("line %d", n-5); wantY >= 5 && !strings.Contains(appText(a), above) {
+		t.Fatalf("editor view does not show %q above the reading position:\n%s", above, appText(a))
 	}
 }
 
@@ -413,11 +414,11 @@ func TestE_ScrolledIntoWrappedBulletKeepsScreenRow(t *testing.T) {
 		fmt.Fprintf(&b, "- %d %s\n", i, strings.Repeat("word ", 18))
 	}
 	a := bootPage(t, map[string]string{"pages/Long.md": b.String()}, "Long", 40, 12)
-	// Scroll until the top row is a continuation row of a wrapped bullet.
+	// Move the cursor onto a continuation row of a wrapped bullet.
 	for range 25 {
 		a.page.LineDown()
 	}
-	if strings.HasPrefix(rowText(strings.Split(appText(a), "\n")[0]), "- ") {
+	if strings.HasPrefix(rowText(plain(a.page.rowText(a.page.CursorRow()))), "- ") {
 		a.page.LineDown()
 	}
 	at := assertEditorKeepsScreenRow(t, a)
@@ -454,8 +455,100 @@ func TestE_LogbookAboveTopRowKeepsScreenRow(t *testing.T) {
 		"pages/A.md": anchorLongPage("- head\n  :LOGBOOK:\n  CLOCK: x\n  :END:\n"),
 	}, "A", 80, 10)
 	scrollDown(a.page, 20)
+	want := screenRow(a.page)
 	at := assertEditorKeepsScreenRow(t, a)
-	if at.ScreenRow != 0 {
-		t.Errorf("anchor %+v, want the top row", at)
+	if at.ScreenRow != want {
+		t.Errorf("anchor %+v, want the cursor's screen row %d", at, want)
+	}
+}
+
+// pressDown moves the editor cursor one line down.
+func pressDown(a *App) { a.Update(tea.KeyPressMsg{Code: tea.KeyDown}) }
+
+func TestEOpensOnCursorRowLine(t *testing.T) {
+	a := bootPage(t, map[string]string{"pages/Long.md": bullets(40)}, "Long", 80, 12)
+	for range 4 {
+		a.Update(key("j"))
+	}
+	want := screenRow(a.page)
+	pressE(t, a)
+	if a.editor == nil {
+		t.Fatal("editor did not open")
+	}
+	if got := strings.Split(text(a.editor), "\n")[cursorPos(a.editor).Line]; got != "- line 4" {
+		t.Fatalf("editor cursor line = %q, want %q", got, "- line 4")
+	}
+	if cur := a.View().Cursor; cur == nil || cur.Y != want {
+		t.Fatalf("cursor %+v, want it on the read cursor's screen row %d", cur, want)
+	}
+}
+
+func TestEscPutsCursorOnEditorLine(t *testing.T) {
+	a := bootPage(t, map[string]string{"pages/Long.md": bullets(40)}, "Long", 80, 12)
+	for range 4 {
+		a.Update(key("j"))
+	}
+	pressE(t, a)
+	for range 3 {
+		pressDown(a)
+	}
+	y := a.View().Cursor.Y
+	a.Update(esc)
+	if a.editor != nil {
+		t.Fatal("Esc did not close the editor")
+	}
+	if got := rowText(strings.Split(appText(a), "\n")[y]); got != "- line 7" {
+		t.Fatalf("screen row %d shows %q, want the editor's line %q", y, got, "- line 7")
+	}
+	if got := screenRow(a.page); got != y {
+		t.Fatalf("read cursor on screen row %d, want the editor's row %d", got, y)
+	}
+	if got := rowText(plain(a.page.rowText(a.page.CursorRow()))); got != "- line 7" {
+		t.Fatalf("read cursor row shows %q, want %q", got, "- line 7")
+	}
+}
+
+// A cursor on a row no source line spells (a table's top border, borrowed
+// from the header below it) comes back exactly there after e, Esc: placing the
+// anchor would move it onto the header row.
+func TestEscUnmovedRestoresExactFrame(t *testing.T) {
+	orig := sourceRowsFor
+	t.Cleanup(func() { sourceRowsFor = orig })
+	var a *App
+	var rule int
+	sourceRowsFor = func(body string, width int, emphasis string) ([]int, []bool) {
+		lines, own := orig(body, width, emphasis)
+		rows := a.page.full[:len(lines)]
+		for rule = range rows { // a rule below the fold, treated as a border above the next line
+			if strings.TrimSpace(plain(rows[rule])) == "--------" && rule > 20 {
+				break
+			}
+		}
+		header := rule + 1
+		for !nonBlank(rows[header]) {
+			header++
+		}
+		lines[rule], own[rule] = lines[header], false
+		return lines, own
+	}
+	a = bootPage(t, map[string]string{"pages/Doc.md": rowlessPage()}, "Doc", 80, 20)
+	a.page.sourceRows()
+	for i := 0; a.page.CursorRow() != rule; i++ {
+		if i > 300 {
+			t.Fatalf("j never reached the borrowed row %d", rule)
+		}
+		a.Update(key("j"))
+	}
+	before := a.View().Content
+	pressE(t, a)
+	if a.editor == nil {
+		t.Fatal("editor did not open")
+	}
+	a.Update(esc)
+	if a.editor != nil {
+		t.Fatal("Esc did not close the editor")
+	}
+	if got := a.View().Content; got != before {
+		t.Fatalf("frame after e, Esc differs from before:\n%s\nwant:\n%s", plain(got), plain(before))
 	}
 }
