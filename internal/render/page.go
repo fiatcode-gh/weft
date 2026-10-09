@@ -51,8 +51,6 @@ type Result struct {
 var (
 	wikiLinkRe     = regexp.MustCompile(`\[\[([^\]\|]+)(?:\|([^\]]*))?\]\]`)
 	taskMarkerRe   = regexp.MustCompile(`^(\s*-\s+)(TODO|DOING|LATER|WAITING|DONE|CANCELED|CANCELLED|NOW)\b`)
-	logbookStartRe = regexp.MustCompile(`(?i)^\s*:LOGBOOK:\s*$`)
-	logbookEndRe   = regexp.MustCompile(`(?i)^\s*:END:\s*$`)
 	queryOrEmbedRe = regexp.MustCompile(`(?i)^\s*\{\{(query|embed)\b`)
 )
 
@@ -214,7 +212,7 @@ func stripLogbookBlocks(body string) (string, []int) {
 		if inLogbook {
 			// Everything inside the block is dropped without touching
 			// fence state — a ``` line here is metadata garbage.
-			if logbookEndRe.MatchString(line) {
+			if graph.LogbookEndRe.MatchString(line) {
 				inLogbook = false
 			}
 			continue
@@ -223,7 +221,7 @@ func stripLogbookBlocks(body string) (string, []int) {
 		case fence.Step(line):
 			out.WriteString(line)
 			kept = append(kept, i)
-		case logbookStartRe.MatchString(line):
+		case graph.LogbookStartRe.MatchString(line):
 			inLogbook = true
 			continue // drop the :LOGBOOK: line; no newline either
 		default:

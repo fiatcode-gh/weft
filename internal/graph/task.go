@@ -163,3 +163,93 @@ func MarkTask(body string, hint int, from, to, tail string) (out string, line in
 	lines[best] = newLine
 	return strings.Join(lines, "\n"), best + 1, nil
 }
+
+// isBullet reports whether line starts (after spaces and tabs) with a -, * or +
+// list marker followed by whitespace or the line end.
+func isBullet(line string) bool {
+	i := 0
+	for i < len(line) && (line[i] == ' ' || line[i] == '\t') {
+		i++
+	}
+	if i == len(line) || (line[i] != '-' && line[i] != '*' && line[i] != '+') {
+		return false
+	}
+	i++
+	return i == len(line) || line[i] == ' ' || line[i] == '\t' || line[i] == '\r'
+}
+
+// lineWalker classifies a body's lines in order: fenced, bullet (which starts a
+// new owner of the lines after it), or a stamp line of the current owner. It
+// is the one ownership rule shared by the index and TaskBlockAt.
+type lineWalker struct {
+	fence FenceState
+	inLog bool
+}
+
+// step advances the walker over line. Fence state follows FenceState.Step
+// exactly, and LOGBOOK lines are never bullets or stamps.
+func (w *lineWalker) step(line string) (fenced, bullet bool, stamp StampLine, isStamp bool) {
+	wasOpen := w.fence.Open()
+	if w.fence.Step(line) {
+		return true, !wasOpen && !w.inLog && isBullet(line), StampLine{}, false
+	}
+	if w.inLog {
+		if LogbookEndRe.MatchString(line) {
+			w.inLog = false
+		}
+		return false, false, StampLine{}, false
+	}
+	if LogbookStartRe.MatchString(line) {
+		w.inLog = true
+		return false, false, StampLine{}, false
+	}
+	if isBullet(line) {
+		return false, true, StampLine{}, false
+	}
+	stamp, isStamp = ParseStampLine(line)
+	return false, false, stamp, isStamp
+}
+
+// TaskBlock is the line range owned by one task bullet: First is the bullet,
+// End the line after its last owned line, and Scheduled/Deadline the index of
+// its first SCHEDULED/DEADLINE stamp line (-1 when absent).
+type TaskBlock struct{ First, End, Scheduled, Deadline int }
+
+// TaskBlockAt returns the block of the task whose owned lines include line at
+// (0-based) among n lines. ok is false when at is outside any task: before the
+// first bullet, or owned by a bullet without a workflow marker (including
+// child bullets). Cost is O(n).
+func TaskBlockAt(n int, line func(int) string, at int) (TaskBlock, bool) {
+	if at < 0 || at >= n {
+		return TaskBlock{}, false
+	}
+	var w lineWalker
+	own, sched, dead, end := -1, -1, -1, n
+	for i := 0; i < n; i++ {
+		_, bullet, stamp, isStamp := w.step(line(i))
+		switch {
+		case bullet:
+			if i > at {
+				end = i
+			} else {
+				own, sched, dead = i, -1, -1
+			}
+		case isStamp:
+			if stamp.Kind == StampScheduled && sched < 0 {
+				sched = i
+			} else if stamp.Kind == StampDeadline && dead < 0 {
+				dead = i
+			}
+		}
+		if end != n {
+			break
+		}
+	}
+	if own < 0 || at < own {
+		return TaskBlock{}, false
+	}
+	if _, ok := ParseTaskPrefix(line(own)); !ok {
+		return TaskBlock{}, false
+	}
+	return TaskBlock{First: own, End: end, Scheduled: sched, Deadline: dead}, true
+}

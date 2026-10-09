@@ -82,7 +82,7 @@ func (c *chunkState) step(line string) (start bool, bullet byte, subst bool) {
 		bullet = bulletMarker(line)
 	} else if c.quiescent() && !c.sawCR && !blankLine(line) && startsAtColumn0(line) &&
 		line[0] != ':' && line[0] != '<' && !c.lastHTML && !c.lastStyled &&
-		!logbookStartRe.MatchString(line) && !queryOrEmbedRe.MatchString(line) &&
+		!graph.LogbookStartRe.MatchString(line) && !queryOrEmbedRe.MatchString(line) &&
 		!linkRefDefRe.MatchString(line) && !(c.lastDef && paraLike(line)) &&
 		!setextRe.MatchString(line) {
 		switch m := bulletMarker(line); {
@@ -101,12 +101,12 @@ func (c *chunkState) step(line string) (start bool, bullet byte, subst bool) {
 	kept := false
 	switch {
 	case c.inLog:
-		if logbookEndRe.MatchString(line) {
+		if graph.LogbookEndRe.MatchString(line) {
 			c.inLog = false
 		}
 	case c.logFence.Step(line):
 		kept = true
-	case logbookStartRe.MatchString(line):
+	case graph.LogbookStartRe.MatchString(line):
 		c.inLog = true
 	default:
 		kept = true
