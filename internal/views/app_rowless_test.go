@@ -38,13 +38,13 @@ func roundTripSweep(t *testing.T) {
 		t.Run(fmt.Sprintf("width %d", width), func(t *testing.T) {
 			a := newApp(t, map[string]string{"pages/Doc.md": rowlessPage()}, width, 20)
 			a.navigate("Doc")
-			a.page.Restore(offsets-1, -1)
+			a.page.Restore(offsets-1, offsets-1, -1)
 			if a.page.Offset() != offsets-1 {
 				t.Fatalf("setup: offset %d not reachable, got %d", offsets-1, a.page.Offset())
 			}
 			checked := 0
 			for _, off := range sweepOffsets(offsets-1, uint64(width)) {
-				a.page.Restore(off, -1)
+				a.page.Restore(off, off, -1)
 				if a.page.Offset() != off {
 					t.Fatalf("setup: offset %d not reachable, got %d", off, a.page.Offset())
 				}
@@ -116,7 +116,7 @@ func TestEditorOpensOnRowlessRows(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			off := -1
 			for o := range 120 {
-				a.page.Restore(o, -1)
+				a.page.Restore(o, o, -1)
 				if strings.Contains(strings.TrimSpace(frameLines(a)[0]), tt.topRow) {
 					off = o
 					break
@@ -150,7 +150,7 @@ func TestReadingAnchorSkipsBorrowedRows(t *testing.T) {
 	var rule, header int // the first rule, treated as a border above the header
 	sourceRowsFor = func(body string, width int, emphasis string) ([]int, []bool) {
 		lines, own := orig(body, width, emphasis)
-		rows := p.styledRows(0, len(lines))
+		rows := p.full[:min(len(lines), p.rowCount())]
 		for rule = range rows {
 			if strings.TrimSpace(plain(rows[rule])) == "--------" {
 				break
@@ -164,7 +164,7 @@ func TestReadingAnchorSkipsBorrowedRows(t *testing.T) {
 		return lines, own
 	}
 	p.sourceRows()
-	p.Restore(rule, -1)
+	p.Restore(rule, rule, -1)
 	if p.Offset() != rule {
 		t.Fatalf("setup: offset %d not reachable, got %d", rule, p.Offset())
 	}
@@ -173,7 +173,7 @@ func TestReadingAnchorSkipsBorrowedRows(t *testing.T) {
 	if !ok || at != want {
 		t.Fatalf("ReadingAnchor = (%+v, %v), want (%+v, true)", at, ok, want)
 	}
-	p.Restore(rule+5, -1)
+	p.Restore(rule+5, rule+5, -1)
 	p.PlaceAnchor(at)
 	if got := p.Offset(); got != rule {
 		t.Errorf("PlaceAnchor(%+v) left offset %d, want %d", at, got, rule)

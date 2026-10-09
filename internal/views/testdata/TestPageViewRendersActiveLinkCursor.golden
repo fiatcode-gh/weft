@@ -1,7 +1,7 @@
                                                                              
   title:: Alpha tags:: fixture                                               
                                                                              
-  • This page links to [1;4;30;103;4mB[m[1;4;30;103;4me[m[1;4;30;103;4mt[m[1;4;30;103;4ma[m and the namespaced [4;94;4mp[m[4;94;4mr[m[4;94;4mo[m[4;94;4mj[m[4;94;4m/[m[4;94;4mn[m[4;94;4me[m[4;94;4ms[m[4;94;4mt[m[4;94;4me[m[4;94;4md[m.                  
+[1;30;104m  • This page links to [m[1;4;30;103;4mB[m[1;4;30;103;4me[m[1;4;30;103;4mt[m[1;4;30;103;4ma[m[1;30;104m and the namespaced proj/nested.                  [m
   • [1;91mTODO[m Buy milk                                                            
   • [1;94mLATER[m [1;91m[#A][m Review the design doc                                         
   • A link inside a fence should NOT be extracted:                           

@@ -61,14 +61,16 @@ type helpGroup struct {
 
 var helpGroups = []helpGroup{
 	{"Browse", []helpRow{
-		{"j / k", "scroll one line"},
+		{"j / k", "cursor down / up a row"},
 		{"ctrl-d", "half page down"},
 		{"ctrl-u", "half page up"},
 		{"g / G", "top / bottom"},
+		{"tab", "fold / unfold heading or bullet"},
+		{"z", "fold page: bullets → headings → all"},
 	}},
 	{"Links", []helpRow{
 		{"n / N", "next / previous link or tag"},
-		{"enter", "follow link under cursor"},
+		{"enter", "follow link ([[Page#Heading]] opens at the heading)"},
 	}},
 	{"History", []helpRow{
 		{"[", "back"},
@@ -91,7 +93,7 @@ var helpGroups = []helpGroup{
 	}},
 	{"Edit", []helpRow{
 		{"c", "capture a line into today's journal (tab: TODO)"},
-		{"e", "edit current page in-app"},
+		{"e", "edit in-app at the cursor row"},
 		{"E", "edit current page in $EDITOR"},
 	}},
 	{"Editor", []helpRow{

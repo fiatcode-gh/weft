@@ -287,3 +287,25 @@ func unresolvedTargets(rep *Report) []string {
 	}
 	return out
 }
+
+func TestDoctorCountsHeadingLinks(t *testing.T) {
+	dir := tempGraph(t, map[string]string{
+		"pages/Alpha.md": "## Summary\ntext\n",
+		"pages/Note.md":  "- [[Alpha#Summary]]\n- [[Alpha#Nope]]\n- [[Note#Self]]\n",
+	})
+	scanner := func(_, _ string) ([]graph.UnlinkedRef, error) { return nil, nil }
+
+	rep, err := RunWith(dir, scanner)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(unresolvedTargets(rep), []string{"Alpha#Nope", "Note#Self"}) {
+		t.Errorf("unresolved = %v, want [Alpha#Nope Note#Self]", unresolvedTargets(rep))
+	}
+	for _, o := range rep.Orphans {
+		if o == "Alpha" {
+			t.Errorf("Alpha is linked by a heading link, orphans = %v", rep.Orphans)
+		}
+	}
+}

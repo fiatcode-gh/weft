@@ -2,9 +2,9 @@
 
 Journals are the warp — the continuous daily timeline you lay down. `[[wiki-links]]` are the weft — the cross-threads you weave across into pages. The fabric is your knowledge base, and weft is the terminal tool for keeping it: a recency-sorted page picker (with page-creation), ripgrep-backed full-text search, backlinks (linked and unlinked), and a cross-graph dashboard of your open tasks (`TODO/DOING/LATER/WAITING`) — because a journal tool that can't surface your open loops is incomplete.
 
-Two kinds of link, both pointing at a page — `[[wiki-links]]` and `#tag` / `#[[Multi Word]]`. Pages are flat markdown under `pages/` and `journals/`, with `___` for namespaces and no nested directories to manage. weft is a navigator, not an outliner: it renders your bullets, workflow markers, and links, but it never makes you tend the tree — no fold/unfold, no block refs, no zoom.
+Two kinds of link, both pointing at a page — `[[wiki-links]]` and `#tag` / `#[[Multi Word]]`. Pages are flat markdown under `pages/` and `journals/`, with `___` for namespaces and no nested directories to manage. weft is a navigator, not an outliner: it renders your bullets, workflow markers, and links, but it never makes you tend the tree — no saved folds, no block refs, no zoom. Folding a heading or bullet is a view-only convenience, and `[[Page#Heading]]` links open a page at a heading.
 
-Press `e` to edit the current page in a full-screen in-app editor (`Ctrl+S` saves, `Esc` exits with an unsaved-changes prompt). It opens on the line you were reading, at the same screen row, and `Esc` brings you back the same way. The editor is a live preview: the page is drawn exactly as the read view draws it, and only the line or block under the cursor (a table, a fence, a quote, a joined paragraph, a `:LOGBOOK:` block) turns back into source while you edit it, then renders again when you move away. `Ctrl+R` switches to the plain source look and back; the choice lasts until weft quits and is never saved. The editor is coloured like the read view (same styles, `WEFT_STYLE` and `NO_COLOR` apply) and shows your terminal's own cursor. Any markdown file opens — CRLF, tabs, any length — and saves byte-for-byte, with the file's own line endings and final-newline state kept. If the file changed on disk since you opened or last saved it, a save merges changes on separate lines (lines both sides added at the same spot are all kept, yours first), and otherwise asks whether to overwrite, reload or keep editing; `E` hands the file to your `$EDITOR`. The editor has undo/redo, selection, copy/cut/paste (copies also go to the system clipboard through OSC 52), find and replace, and bullet-aware editing: `Enter` continues a bullet, `Tab`/`Shift+Tab` indent a bullet with its children, `Alt+↑/↓` move it, `Ctrl+T` cycles its workflow marker. Typing `[[` opens a live, fuzzy-filtered page-name completion list — `↑`/`↓` to choose, `Enter` or `Tab` to insert `[[Page Name]]`, `Esc` to dismiss; an unmatched name shows a `＋ Create` row to insert a link to the not-yet-created page in one keystroke. Press `.` to jump to today's journal.
+Press `e` to edit the current page in a full-screen in-app editor (`Ctrl+S` saves, `Esc` exits with an unsaved-changes prompt). It opens on the cursor row's line, at the same screen row, and `Esc` brings you back the same way. The editor is a live preview: the page is drawn exactly as the read view draws it, and only the line or block under the cursor (a table, a fence, a quote, a joined paragraph, a `:LOGBOOK:` block) turns back into source while you edit it, then renders again when you move away. `Ctrl+R` switches to the plain source look and back; the choice lasts until weft quits and is never saved. The editor is coloured like the read view (same styles, `WEFT_STYLE` and `NO_COLOR` apply) and shows your terminal's own cursor. Any markdown file opens — CRLF, tabs, any length — and saves byte-for-byte, with the file's own line endings and final-newline state kept. If the file changed on disk since you opened or last saved it, a save merges changes on separate lines (lines both sides added at the same spot are all kept, yours first), and otherwise asks whether to overwrite, reload or keep editing; `E` hands the file to your `$EDITOR`. The editor has undo/redo, selection, copy/cut/paste (copies also go to the system clipboard through OSC 52), find and replace, and bullet-aware editing: `Enter` continues a bullet, `Tab`/`Shift+Tab` indent a bullet with its children, `Alt+↑/↓` move it, `Ctrl+T` cycles its workflow marker. Typing `[[` opens a live, fuzzy-filtered page-name completion list — `↑`/`↓` to choose, `Enter` or `Tab` to insert `[[Page Name]]`, `Esc` to dismiss; an unmatched name shows a `＋ Create` row to insert a link to the not-yet-created page in one keystroke. Press `.` to jump to today's journal.
 
 Press `S` to sync the graph with git without leaving weft — it commits any changes, `pull --rebase`s, then pushes, reporting progress in the status bar (`⟳ syncing…` → `✓ synced`). A `●` shows in the status bar whenever the graph has local changes that aren't committed or pushed yet, so you always know when a sync is due. Conflicts are left for you to resolve in a shell — weft never touches a conflicted tree.
 
@@ -58,7 +58,7 @@ weft doctor --graph PATH     # explicit path
 
 `weft doctor` walks the graph once and prints a health report. It is read-only and never writes to the graph.
 
-- **unresolved links** — `[[wiki-links]]` and tags whose target page does not exist
+- **unresolved links** — `[[wiki-links]]` and tags whose target page does not exist (a `[[Page#Heading]]` link to a page and heading that exist is not unresolved)
 - **orphan pages** — pages no other page links to (journals excluded)
 - **unlinked mentions** — bare-text mentions that could become links
 - **index warnings** — problems the index walk noticed (unreadable files, name collisions, subdirectories)
@@ -78,19 +78,21 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | `b`        | open backlinks for the current page (linked + unlinked refs) |
 | `?`        | toggle the help overlay             |
 | `n` / `N`  | cycle the link cursor (wiki-links and tags) |
-| `Enter`    | follow link / open selection        |
+| `Enter`    | follow link (`[[Page#Heading]]` opens at the heading) / open selection |
 | `[` / `]`  | back / forward in page history      |
 | `.`        | jump to today's journal (creates it from the `Journal Template` page if missing) |
 | `<` / `>`  | previous / next journal (on a journal page) |
 | `C`        | calendar of journals (arrows day/week, `PgUp`/`PgDn` month, `t` today, `Enter` open) |
 | `O`        | on this day: a week, a month and years ago |
 | `c`        | capture a line into today's journal (`Tab` toggles `TODO`, `[[`/`#` complete, `Esc` cancels) |
-| `j` / `k`  | scroll one line                     |
-| `Ctrl-d/u` | half-page scroll                    |
-| `g` / `G`  | jump to top / bottom of page        |
+| `j` / `k`  | move the row cursor down / up (the page scrolls at the window edge) |
+| `Ctrl-d/u` | half-screen cursor move             |
+| `g` / `G`  | cursor to top / bottom of page      |
+| `Tab`      | fold / unfold the heading or bullet under the cursor |
+| `z`        | fold the page: top-level bullets → outline of headings → all shown |
 | `R`        | rebuild the index                   |
 | `S`        | sync the graph with git (commit → pull → push) |
-| `e`        | edit current page in-app            |
+| `e`        | edit current page in-app at the cursor row |
 | `E`        | edit current page in `$EDITOR`      |
 | `Esc`      | close an overlay / leave editor     |
 | `q`        | quit (from page view)               |
@@ -139,6 +141,8 @@ A task is a bullet that starts with a marker (`TODO`, `LATER`, `DOING`, `WAITING
 ## What gets rendered
 
 - `[[wiki-links]]` are styled inline, navigable with `n`/`N`, and follow with `Enter`. Aliased links (`[[Target|alias]]`) show the alias.
+- `[[Page#Heading]]` (and `#[[Page#Heading]]`) opens the page with that heading near the top (one row below it). The heading is matched by its text, ignoring case and emphasis marks; the first match wins, and a missing heading leaves you at the top with a hint. The link counts as a backlink of the page. A page literally named `Page#Heading` still wins over the heading reading.
+- Folding: `Tab` on a heading hides its section, on a bullet or numbered item hides its children; a folded row ends with `▸ N lines`. `z` cycles the whole page through top-level bullets folded, an outline (every heading stays visible with its text folded, and `Tab` on a heading then folds or unfolds just its text), and everything shown; on a page with nothing foldable it says so. Folds are view-only, last for the session and are dropped when the page's text changes; nothing is saved to the file. Following a link, backlink or task to a hidden line unfolds it, and `n`/`N` skip hidden links.
 - A tag is a link to the page of that name: `#kitchen` or `#[[Book Club]]`. It starts at the line start or after whitespace or `(`, the name begins with a letter and continues with letters, digits, combining marks (so `#café` and `#हिन्दी` stay whole), `-`, `_` and `/`; any other name needs the bracket form. The `#` stays visible, and tags are navigable with `n`/`N` and `Enter` like wiki-links. Never a tag: issue numbers (`#18`, `PR #5`), hex colours (`#FAF3E7`), headings, `#+…` and `#!` lines, text inside `[[…]]`, URL fragments, code spans and fences.
 - Workflow markers at the start of a bullet are colour-coded (`TODO` red, `DOING` yellow, `LATER` blue, `WAITING` dim, `DONE` green, `CANCELED`/`CANCELLED` strikethrough, `NOW` magenta).
 - `:LOGBOOK: ... :END:` blocks are hidden — they're metadata, not content.
@@ -156,7 +160,7 @@ A task is a bullet that starts with a marker (`TODO`, `LATER`, `DOING`, `WAITING
 
 ## Scope
 
-Writes graph files only via the in-app editor (`e`, saves on `Ctrl+S`) and the `$EDITOR` handoff (`E`); the `.` key creates today's journal (from the `Journal Template` page) if it doesn't exist, `c` appends one line to today's journal (creating it the same way when missing), and the picker can create a new page by name. Linkifying a mention in the backlinks panel also writes the mentioning file. The editor and linkify never overwrite outside changes unseen. Press `S` to sync the whole graph with git (commit → `pull --rebase` → push); it runs against the graph directory and degrades to a status-bar hint if that directory isn't a git repository. No fold/unfold, no filesystem-watch live reload (use `R`).
+Writes graph files only via the in-app editor (`e`, saves on `Ctrl+S`) and the `$EDITOR` handoff (`E`); the `.` key creates today's journal (from the `Journal Template` page) if it doesn't exist, `c` appends one line to today's journal (creating it the same way when missing), and the picker can create a new page by name. Linkifying a mention in the backlinks panel also writes the mentioning file. The editor and linkify never overwrite outside changes unseen. Press `S` to sync the whole graph with git (commit → `pull --rebase` → push); it runs against the graph directory and degrades to a status-bar hint if that directory isn't a git repository. Folding is view-only and lasts for the session; nothing is saved. No filesystem-watch live reload (use `R`).
 
 ### What is not supported
 
@@ -165,9 +169,10 @@ crash weft — they degrade to plain text or a silent no-op.
 
 - **`{{query …}}` and `{{embed …}}` blocks** are stripped from the rendered
   page (Glamour can't render them usefully).
-- **Block references** don't exist — `#` inside `[[…]]` is an ordinary
-  character in the page name, so `[[page#block]]` links to a page literally
-  named `page#block`.
+- **Block references** don't exist — `#` inside `[[…]]` is part of the page
+  name, so `[[page#block]]` links to a page literally named `page#block`. If
+  no such page exists and the text before the last `#` names a page with that
+  heading, it is a heading link instead (see above).
 - **`alias::` / `title::` / `tags::` properties** are not extracted — they
   appear as plain text in the page body; `tags::` is not a tag.
 - **Case-insensitive page-name uniqueness** is not enforced — `Alpha.md` and

@@ -247,3 +247,35 @@ func TestAppTodosDeepLinkScrollsToBullet(t *testing.T) {
 		t.Errorf("expected 'Ship the TUI MVP' on screen, got:\n%s", view)
 	}
 }
+
+func TestHistoryRestoresCursorRow(t *testing.T) {
+	quietTerm(t)
+	a := newApp(t, map[string]string{
+		"pages/A.md": bulletsOf("a", 60),
+		"pages/B.md": bulletsOf("b", 60),
+	}, 80, 12)
+	a.navigate("A")
+	for range 15 {
+		a.Update(key("j"))
+	}
+	row, off := a.page.CursorRow(), a.page.Offset()
+	if off == 0 {
+		t.Fatalf("setup: the window must have scrolled, offset %d", off)
+	}
+	a.navigate("B")
+	if got := a.hist[a.histIdx-1].row; got != row {
+		t.Fatalf("departing entry stored row %d, want %d", got, row)
+	}
+	bRow, bOff := a.page.CursorRow(), a.page.Offset()
+
+	a.Update(key("["))
+	if a.page.Page() != "A" || a.page.CursorRow() != row || a.page.Offset() != off {
+		t.Fatalf("[ landed on %q row %d offset %d, want A row %d offset %d",
+			a.page.Page(), a.page.CursorRow(), a.page.Offset(), row, off)
+	}
+	a.Update(key("]"))
+	if a.page.Page() != "B" || a.page.CursorRow() != bRow || a.page.Offset() != bOff {
+		t.Fatalf("] landed on %q row %d offset %d, want B row %d offset %d",
+			a.page.Page(), a.page.CursorRow(), a.page.Offset(), bRow, bOff)
+	}
+}

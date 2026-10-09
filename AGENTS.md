@@ -20,7 +20,7 @@ Enter continues a `- ` bullet at the same indent (empty bullet ends the list);
 `Ctrl+T` cycles the current bullet's marker (any open marker → DONE → plain → TODO, keeping `[#A]`);
 `Alt+S` / `Alt+E` set the scheduled / deadline date and `Alt+P` cycles the priority;
 `Tab` / `Shift+Tab` indent / de-indent a bullet with its children; `Alt+↑/↓` move it.
-The editor has two looks: live preview (default; `internal/views/editor_live.go`) and source, switched with `Ctrl+R`. The App owns the choice per run (`editorSource`). The editor opens with the cursor on the source line behind the read view's top visible line (or the visible link cursor) on the same screen row; `Esc` returns the same way.
+The editor has two looks: live preview (default; `internal/views/editor_live.go`) and source, switched with `Ctrl+R`. The App owns the choice per run (`editorSource`). The editor opens with the cursor on the source line behind the read view's cursor row on the same screen row; `Esc` returns the same way.
 
 Press `S` to sync the graph to git — commit local changes, `pull --rebase`,
 then push — run asynchronously off the UI thread with the outcome in the status
@@ -55,12 +55,13 @@ an intentional UI change, run with `-update` and visually diff the golden before
   `quietStdout`, which drops the terminal probes and keyboard-protocol switches Bubble
   Tea v2 sends on its own, so weft sends no queries and keeps the terminal's normal key
   encoding.
-- `internal/graph/` — filesystem walk, page parsing (wiki links and tags; `tag.go` is the one tag definition every consumer uses), name resolution, index. `task.go`/`taskdate.go`/`agenda.go` are the one task grammar (markers, priorities, stamps, ownership, agenda) every consumer calls; `logbook.go` holds the LOGBOOK regexes.
+- `internal/graph/` — filesystem walk, page parsing (wiki links and tags; `tag.go` is the one tag definition every consumer uses), name resolution, index. `task.go`/`taskdate.go`/`agenda.go` are the one task grammar (markers, priorities, stamps, ownership, agenda) every consumer calls; `logbook.go` holds the LOGBOOK regexes and `QueryOrEmbedRe`; `heading.go` is the one heading definition (`Headings`, `HeadingKey`) and `ResolveLink` in `resolve.go` the one heading-link rule.
 - `internal/render/` — Glamour-based page rendering (wiki-link styling, hanging-indent,
   workflow-marker colouring, `:LOGBOOK:` stripping). Has a `Warmup()` paid before the
   TUI takes the screen to avoid chroma init flicker. `theme.go` is the shared
   `Theme`; `source*.go` scan, wrap and paint raw source lines for the editor
-  (`SourceLines`, `Scanner`, `Geometry`, `Painter`, `DrawRow`); `preview.go`,
+  (`SourceLines`, `Scanner`, `Geometry`, `Painter`, `DrawRow`); `outline.go`
+  (`Outline`) lists the foldable headings and list items; `preview.go`,
   `preview_chunk.go`, `preview_rows.go` render a page in chunks through the read
   view's pipeline (byte-identical to the full render) and attribute rows to source
   lines and reveal units (`Preview`); `rowstyle.go` highlights find matches on rendered
@@ -91,6 +92,7 @@ an intentional UI change, run with `-update` and visually diff the golden before
   references (bare-text mentions not yet wiki-linked); read-only, `enter` jumps to the
   mention's page and lands on the reference: linked backlinks focus the back-reference
   link (cursor + scroll), unlinked references highlight the mention and scroll it into view.
+  `page.go` owns the row cursor and draws only the window rows; `fold.go` holds the session fold store (`foldStore` on `App`, keyed by page path, never written to disk) and the `Tab`/`z` handlers.
 
 ## External deps
 

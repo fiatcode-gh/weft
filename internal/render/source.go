@@ -227,7 +227,7 @@ func classify(st *scanState, idx int, line, next string, hasNext bool) LineInfo 
 		info.Kind = KindHidden
 		return info
 	}
-	if loc := queryOrEmbedRe.FindStringIndex(line); loc != nil {
+	if loc := graph.QueryOrEmbedRe.FindStringIndex(line); loc != nil {
 		if !strings.Contains(line[loc[1]:], "}}") {
 			st.hidden = hiddenQuery
 		}

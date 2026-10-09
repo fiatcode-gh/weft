@@ -8,6 +8,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Breaking
 
+- `j`/`k`, the arrow keys, `Ctrl+D`/`Ctrl+U` and `g`/`G` move a row cursor in the read view; the page scrolls when the cursor reaches the window edge. Migration: none to read a page; the cursor row is what `e` and `Tab` act on.
+- `e` opens the editor on the cursor row's line, at the same screen row, instead of the top visible line or the selected link. Migration: move the cursor (`j`/`k`, or `n` onto a link) to the line first.
 - `Ctrl+C` now copies in the in-app editor and never quits or leaves it. Migration: leave with `Esc`.
 - `Tab` / `Shift+Tab` on a bullet indent / de-indent it together with its children. Migration: select the lines first to indent only them.
 - `Ctrl+A` selects all in the editor. Migration: use `Home` for the line start.
@@ -21,6 +23,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A row cursor in the read view, drawn as a highlighted row.
+- Folding: `Tab` folds a heading's section or a bullet's children, `z` cycles top-level bullets → an outline of headings (each heading stays visible, its text folded) → all. Folds last for the session, are dropped when the page's text changes, and are never saved.
+- `[[Page#Heading]]` (and `#[[Page#Heading]]`) opens the page at that heading, counts as a backlink of the page and is not unresolved in `weft doctor`. A page literally named `Page#Heading` still wins.
 - A journal template: a `Journal Template` page's content starts every new journal created with `E`, capture or the first save in the in-app editor, as well as `.`.
 - Quick capture (`c`) from the read view and the dashboard, agenda, backlinks, calendar and on-this-day overlays: one line appended to today's journal, `Tab` for `TODO`.
 - A calendar of journals (`C`): a month grid with a mark on days that have a journal.
@@ -44,6 +49,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Scrolling a long page draws only the visible rows (faster on very long pages).
 - `.` on a day without a journal now writes the `Journal Template` page's content into the new file; without that page it still creates an empty file.
 - weft now runs on the current Charm libraries (Bubble Tea v2, Lip Gloss v2, Bubbles v2, Glamour v2). Keys, views, colours and the terminal traffic are unchanged apart from the items below.
 - A word or URL wider than the page column now wraps onto the next row instead of running past the right margin. A `[[link]]` wider than the column stays on one row, cut at the screen edge, with blank space below where its wrap would have gone. Markdown tables lay out slightly differently (column widths and the header rule).

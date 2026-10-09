@@ -21,6 +21,9 @@ type Index struct {
 	targetSpell map[string]string // folded target → first-seen original spelling (walk order)
 	journals    []string          // journal page names, sorted ascending
 
+	// headingKeys holds each page's HeadingKey set, keyed by PageMeta.Path.
+	headingKeys map[string]map[string]struct{}
+
 	// Warnings collects non-fatal problems found during the walk (skipped
 	// subdirectories, case-fold collisions, unreadable pages, stat
 	// failures). The TUI logs and hints them; BuildIndex never writes to
@@ -44,6 +47,7 @@ func BuildIndex(graphPath string) (*Index, error) {
 		ByNameFold:  make(map[string]*PageMeta),
 		backlinks:   make(map[string][]Ref),
 		targetSpell: make(map[string]string),
+		headingKeys: make(map[string]map[string]struct{}),
 	}
 
 	for _, sub := range []string{"pages", "journals"} {
@@ -110,7 +114,15 @@ func BuildIndex(graphPath string) (*Index, error) {
 	}
 	sort.Strings(idx.journals)
 
-	// Second pass: parse bodies for links + todos.
+	// Second pass, phase A: parse every body for headings, links and todos.
+	// Links stay pending until every page's headings are known.
+	type pendingLink struct {
+		page    string
+		target  string
+		line    int
+		context string
+	}
+	var pending []pendingLink
 	for _, p := range idx.Pages {
 		body, err := os.ReadFile(p.Path)
 		if err != nil {
@@ -118,16 +130,15 @@ func BuildIndex(graphPath string) (*Index, error) {
 			continue
 		}
 		lines, links, todos := parseBody(string(body))
-		for _, lh := range links {
-			key := strings.ToLower(lh.Target)
-			if _, seen := idx.targetSpell[key]; !seen {
-				idx.targetSpell[key] = lh.Target
+		if hs := Headings(string(body)); len(hs) > 0 {
+			keys := make(map[string]struct{}, len(hs))
+			for _, h := range hs {
+				keys[HeadingKey(h.Text)] = struct{}{}
 			}
-			idx.backlinks[key] = append(idx.backlinks[key], Ref{
-				FromPage:   p.Name,
-				LineNumber: lh.Line,
-				Context:    lineContext(lines, lh.Line),
-			})
+			idx.headingKeys[p.Path] = keys
+		}
+		for _, lh := range links {
+			pending = append(pending, pendingLink{p.Name, lh.Target, lh.Line, lineContext(lines, lh.Line)})
 		}
 		for k, th := range todos {
 			idx.Todos = append(idx.Todos, TodoBullet{
@@ -141,6 +152,26 @@ func BuildIndex(graphPath string) (*Index, error) {
 				Deadline:   th.Deadline,
 			})
 		}
+	}
+
+	// Phase B, in walk order: key each link. A link that resolves only as a
+	// heading link is keyed under its page.
+	for _, pl := range pending {
+		spelling := pl.target
+		if _, ok := idx.Resolve(pl.target); !ok {
+			if dest, ok := idx.ResolveLink(pl.target); ok {
+				spelling = dest.Page.Name
+			}
+		}
+		key := strings.ToLower(spelling)
+		if _, seen := idx.targetSpell[key]; !seen {
+			idx.targetSpell[key] = spelling
+		}
+		idx.backlinks[key] = append(idx.backlinks[key], Ref{
+			FromPage:   pl.page,
+			LineNumber: pl.line,
+			Context:    pl.context,
+		})
 	}
 	return idx, nil
 }

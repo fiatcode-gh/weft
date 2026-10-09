@@ -50,7 +50,7 @@ func liveReadSweep(t *testing.T) {
 				tally := tallyRows(page.text, width)
 				last := -1
 				for off := range 400 {
-					a.page.Restore(off, -1)
+					a.page.Restore(off, off, -1)
 					if a.page.Offset() != off {
 						if off == 0 {
 							t.Fatal("setup: offset 0 not reachable")
@@ -60,15 +60,16 @@ func liveReadSweep(t *testing.T) {
 					last = off
 				}
 				for _, off := range sweepOffsets(last, uint64(p*100+width)) {
-					a.page.Restore(off, -1)
+					a.page.Restore(off, off, -1)
 					read := frameCells(a.View().Content, width, colorprofile.TrueColor)
+					cursorY := a.page.CursorRow() - a.page.Offset()
 					a.Update(key("e"))
 					e := a.editor
 					if e == nil || e.source {
 						t.Fatalf("offset %d: no live editor", off)
 					}
 					edit := frameCells(a.View().Content, width, colorprofile.TrueColor)
-					compared += compareLiveToRead(t, e, tally, off, read, edit)
+					compared += compareLiveToRead(t, e, tally, off, cursorY, read, edit)
 					a.Update(esc)
 					if a.editor != nil {
 						t.Fatalf("offset %d: editor did not close", off)
@@ -101,8 +102,9 @@ func tallyRows(page string, width int) rowTally {
 }
 
 // compareLiveToRead checks the editor frame against the read frame whose
-// scroll offset was off, and returns how many rows it compared.
-func compareLiveToRead(t *testing.T, e *EditorView, tally rowTally, off int, read, edit [][]uv.Cell) int {
+// scroll offset was off, and returns how many rows it compared. The read row
+// cursorY holds the page cursor's highlight, read-view chrome, and is skipped.
+func compareLiveToRead(t *testing.T, e *EditorView, tally rowTally, off, cursorY int, read, edit [][]uv.Cell) int {
 	t.Helper()
 	if len(e.shown) != 1 {
 		t.Fatalf("offset %d: reveal set %v, want the cursor's unit only", off, e.shown)
@@ -142,7 +144,7 @@ func compareLiveToRead(t *testing.T, e *EditorView, tally rowTally, off int, rea
 			continue
 		}
 		ry := ar - off
-		if ry < 0 || ry >= e.textHeight() {
+		if ry < 0 || ry >= e.textHeight() || ry == cursorY {
 			continue
 		}
 		if !sameCells(edit[y], read[ry]) {

@@ -550,3 +550,37 @@ func stringAliases(parent, sub string) bool {
 	s := uintptr(unsafe.Pointer(unsafe.StringData(sub)))
 	return s >= p && s < p+uintptr(len(parent))
 }
+
+const headingLinkGraphNote = "- see [[Alpha#Summary]]\n- and #[[alpha#summary]]\n- [[Alpha#Missing]]\n"
+
+func TestBacklinksIncludeHeadingLinks(t *testing.T) {
+	idx := buildTempIndex(t, map[string]string{
+		"Alpha.md": "## Summary\ntext\n",
+		"Note.md":  headingLinkGraphNote,
+	})
+
+	got := idx.BacklinksTo("Alpha")
+
+	if len(got) != 2 || got[0].FromPage != "Note" || got[0].LineNumber != 1 ||
+		got[1].FromPage != "Note" || got[1].LineNumber != 2 {
+		t.Fatalf("BacklinksTo(Alpha) = %+v, want Note lines 1 and 2", got)
+	}
+}
+
+func TestBacklinksHeadingLinksKeepWalkOrder(t *testing.T) {
+	idx := buildTempIndex(t, map[string]string{
+		"A.md": "- [[X]]\n",
+		"B.md": "- [[X#H]]\n",
+		"C.md": "- [[X]]\n",
+		"X.md": "# H\n",
+	})
+
+	var from []string
+	for _, r := range idx.BacklinksTo("X") {
+		from = append(from, r.FromPage)
+	}
+
+	if !reflect.DeepEqual(from, []string{"A", "B", "C"}) {
+		t.Fatalf("FromPage order = %v, want [A B C]", from)
+	}
+}

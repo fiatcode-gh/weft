@@ -94,3 +94,19 @@ func TestUnresolvedLinksKeepsFirstSeenSpelling(t *testing.T) {
 		t.Errorf("refs = %+v, want Note then Other", got[0].Refs)
 	}
 }
+
+func TestUnresolvedLinksSkipsHeadingLinks(t *testing.T) {
+	idx := buildTempIndex(t, map[string]string{
+		"Alpha.md": "## Summary\ntext\n",
+		"Note.md":  headingLinkGraphNote,
+	})
+
+	var targets []string
+	for _, u := range idx.UnresolvedLinks() {
+		targets = append(targets, u.Target)
+	}
+
+	if !reflect.DeepEqual(targets, []string{"Alpha#Missing"}) {
+		t.Fatalf("unresolved targets = %v, want [Alpha#Missing]", targets)
+	}
+}
