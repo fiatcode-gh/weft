@@ -73,6 +73,21 @@ func TestHelpGolden(t *testing.T) {
 	teatest.RequireEqualOutput(t, []byte(plain(h.View())))
 }
 
+func TestHelpListsJournalKeys(t *testing.T) {
+	quietTerm(t)
+	out := plain(NewHelp("v", 130, 0).View())
+	for _, want := range []string{
+		"calendar — move between journals",
+		"on this day",
+		"capture a line into today's journal",
+		"Journal Template",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("help lacks %q", want)
+		}
+	}
+}
+
 func TestHelpSetSizeUpdatesWidth(t *testing.T) {
 	quietTerm(t)
 	h := NewHelp("v1.0.0", 80, 0)

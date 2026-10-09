@@ -75,9 +75,11 @@ var helpGroups = []helpGroup{
 		{"]", "forward"},
 	}},
 	{"Open", []helpRow{
-		{".", "today's journal"},
+		{".", "today's journal (new: from Journal Template)"},
 		{"<", "previous journal"},
 		{">", "next journal"},
+		{"C", "calendar — move between journals"},
+		{"O", "on this day: week, month, years ago"},
 		{"ctrl-p", "picker — find any page"},
 		{"/", "search the graph (ripgrep)"},
 		{"b", "backlinks + unlinked refs for the current page"},
@@ -88,6 +90,7 @@ var helpGroups = []helpGroup{
 		{"S", "commit, pull & push the graph (git)"},
 	}},
 	{"Edit", []helpRow{
+		{"c", "capture a line into today's journal (tab: TODO)"},
 		{"e", "edit current page in-app"},
 		{"E", "edit current page in $EDITOR"},
 	}},

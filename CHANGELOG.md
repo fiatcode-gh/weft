@@ -21,6 +21,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A journal template: a `Journal Template` page's content starts every new journal created with `E`, capture or the first save in the in-app editor, as well as `.`.
+- Quick capture (`c`) from the read view and the dashboard, agenda, backlinks, calendar and on-this-day overlays: one line appended to today's journal, `Tab` for `TODO`.
+- A calendar of journals (`C`): a month grid with a mark on days that have a journal.
+- On this day (`O`): the journals from a week, a month and years ago, with previews.
 - Live preview in the in-app editor: the page is drawn as the read view draws it, with the line or block under the cursor shown as source. `Ctrl+R` switches to the source look and back; the status line shows `[edit · preview]` or `[edit · source]`. Find highlights matches on the rendered rows. Movement is by source line, and `PgDn` at the end of the buffer lands on the last line that has a display row.
 - Undo and redo in the in-app editor (`Ctrl+Z`, `Ctrl+Y`).
 - Selection with `Shift` plus the arrow, `Home`/`End`, `PgUp`/`PgDn` and word-move keys, and `Ctrl+A` for select all.
@@ -40,6 +44,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `.` on a day without a journal now writes the `Journal Template` page's content into the new file; without that page it still creates an empty file.
 - weft now runs on the current Charm libraries (Bubble Tea v2, Lip Gloss v2, Bubbles v2, Glamour v2). Keys, views, colours and the terminal traffic are unchanged apart from the items below.
 - A word or URL wider than the page column now wraps onto the next row instead of running past the right margin. A `[[link]]` wider than the column stays on one row, cut at the screen edge, with blank space below where its wrap would have gone. Markdown tables lay out slightly differently (column widths and the header rule).
 - With `TERM=dumb` or no `TERM`, the page body is now drawn without colour, like the rest of the screen.
