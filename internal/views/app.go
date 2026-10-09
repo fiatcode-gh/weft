@@ -819,6 +819,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.active = NewTodos(a.idx, a.width, a.height)
 		case "A":
 			a.active = NewAgenda(a.idx, a.nowFunc(), a.width, a.height)
+		case "C":
+			a.active = NewCalendar(a.idx.Journals(), a.page.Page(), a.nowFunc(), a.width, a.height)
+		case "O":
+			a.active = NewOnThisDay(a.idx, a.nowFunc(), a.readSnapshot, a.width, a.height)
 		case "?":
 			a.active = NewHelp(a.version, a.width, a.height)
 		case "[":
