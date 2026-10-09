@@ -159,3 +159,72 @@ func TestAppTodosXBlockedWhileSyncing(t *testing.T) {
 		t.Errorf("errMsg = %q, want sync in progress", td.errMsg)
 	}
 }
+
+func openAgenda(t *testing.T, a *App) *Agenda {
+	t.Helper()
+	a.Update(key("A"))
+	ag, ok := a.active.(*Agenda)
+	if !ok {
+		t.Fatalf("A should open the agenda; got %T", a.active)
+	}
+	return ag
+}
+
+func TestAppAKeyOpensAgenda(t *testing.T) {
+	a := bootApp(t, bootConfig{now: agendaNow})
+	ag := openAgenda(t, a)
+	if !ag.today.Equal(agendaNow) {
+		t.Errorf("today = %v, want injected clock %v", ag.today, agendaNow)
+	}
+}
+
+func TestAppAgendaXMarksDoneAndUndo(t *testing.T) {
+	a := bootApp(t, bootConfig{now: agendaNow})
+	path := workbenchPath(a)
+	orig, _ := os.ReadFile(path)
+	ag := openAgenda(t, a)
+	if got := ag.items[0].Todo.Text; got != "Replace the dust collector filter" {
+		t.Fatalf("setup: first row = %q", got)
+	}
+
+	a.Update(key("x"))
+
+	got, _ := os.ReadFile(path)
+	want := strings.Replace(string(orig),
+		"- TODO [#B] Replace the dust collector filter",
+		"- DONE [#B] Replace the dust collector filter", 1)
+	if string(got) != want {
+		t.Fatalf("after x:\n%q\nwant\n%q", got, want)
+	}
+	if ag.items[0].Todo.Text != "Replace the dust collector filter" || ag.items[0].Section.String() != "Overdue" {
+		t.Errorf("done row should stay first in Overdue; got %+v", ag.items[0])
+	}
+	if v := plain(ag.View()); !strings.Contains(v, "DONE [#B] Replace the dust") {
+		t.Errorf("done row missing from view:\n%s", v)
+	}
+
+	a.Update(key("x"))
+
+	got, _ = os.ReadFile(path)
+	if string(got) != string(orig) {
+		t.Errorf("undo should restore the original bytes:\n%q\nwant\n%q", got, orig)
+	}
+}
+
+func TestAppAgendaXBlockedWhileSyncing(t *testing.T) {
+	a := bootApp(t, bootConfig{now: agendaNow})
+	path := workbenchPath(a)
+	orig, _ := os.ReadFile(path)
+	ag := openAgenda(t, a)
+	a.syncing = true
+
+	a.Update(key("x"))
+
+	got, _ := os.ReadFile(path)
+	if string(got) != string(orig) {
+		t.Error("file must be unchanged while syncing")
+	}
+	if !strings.Contains(ag.errMsg, "sync in progress") {
+		t.Errorf("errMsg = %q, want sync in progress", ag.errMsg)
+	}
+}
