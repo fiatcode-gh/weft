@@ -199,3 +199,13 @@ func TestEditorEnterBeyondDefaultMaxHeight(t *testing.T) {
 		t.Errorf("line count %d -> %d, want one more", before, got)
 	}
 }
+
+func TestEditorCtrlTCyclesLaterToDone(t *testing.T) {
+	quietTerm(t)
+	e := editorAt(loadFixture(t), "P", "/tmp/p.md", "- LATER x\n", false, 60, 12, 0)
+	setCursor(e, 0, 9)
+	press(e, ctrl('t'))
+	if got := text(e); got != "- DONE x\n" {
+		t.Fatalf("buffer %q, want %q", got, "- DONE x\n")
+	}
+}

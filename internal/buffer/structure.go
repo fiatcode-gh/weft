@@ -3,13 +3,15 @@ package buffer
 import (
 	"regexp"
 	"strings"
+
+	"github.com/fiatcode-gh/weft/v2/internal/graph"
 )
 
 var (
 	// Enter-continuation keeps the narrow "- " rule; the empty-bullet rule is as before.
 	editBulletRe    = regexp.MustCompile(`^(\s*)- `)
 	editEmptyBullet = regexp.MustCompile(`^\s*-\s*$`)
-	editBulletBody  = regexp.MustCompile(`^(\s*)- (.*)$`)
+
 	// bulletLineRe is what block moves and subtrees treat as a bullet.
 	bulletLineRe = regexp.MustCompile(`^(\s*)[-*+](\s|$)`)
 )
@@ -28,45 +30,6 @@ func bulletPrefix(line string) (string, bool) {
 // (just "-" / "- " at some indent), i.e. an Enter here should end the list.
 func isEmptyBullet(line string) bool {
 	return editEmptyBullet.MatchString(line)
-}
-
-// cycleMarkerLine advances a bullet's workflow marker one step in the cycle
-// plain -> TODO -> DONE -> plain, returning the rewritten line and the cursor
-// column (a byte offset) shifted by the marker-length change. ok is false when line
-// is not a "- " bullet. oldCol is the caller's current cursor column on the line.
-func cycleMarkerLine(line string, oldCol int) (string, int, bool) {
-	m := editBulletBody.FindStringSubmatch(line)
-	if m == nil {
-		return "", 0, false
-	}
-	indent, content := m[1], m[2]
-	markerCol := len(indent) + 2 // column just after "- "
-
-	var newContent string
-	var delta int
-	switch {
-	case content == "TODO" || strings.HasPrefix(content, "TODO "):
-		newContent = "DONE" + content[len("TODO"):]
-		delta = 0
-	case content == "DONE" || strings.HasPrefix(content, "DONE "):
-		if strings.HasPrefix(content, "DONE ") {
-			newContent = content[len("DONE "):]
-			delta = -len("DONE ")
-		} else {
-			newContent = ""
-			delta = -len("DONE")
-		}
-	default:
-		newContent = "TODO " + content
-		delta = len("TODO ")
-	}
-
-	newLine := indent + "- " + newContent
-	newCol := oldCol
-	if oldCol >= markerCol {
-		newCol = max(oldCol+delta, markerCol)
-	}
-	return newLine, min(newCol, len(newLine)), true
 }
 
 func isBlank(line string) bool { return strings.TrimSpace(line) == "" }
@@ -168,17 +131,27 @@ func (b *Buffer) Newline() {
 }
 
 // CycleMarker advances the workflow marker of a "- " bullet under the cursor
-// (plain → TODO → DONE → plain). It reports false, opening no group, otherwise.
+// (graph.NextMarker: open → DONE → plain → TODO). It reports false, opening no
+// group, on a non-bullet.
 func (b *Buffer) CycleMarker() bool {
 	l := b.cursor.Line
 	line := b.lines[l]
-	newLine, newCol, ok := cycleMarkerLine(line, b.cursor.Col)
+	current := ""
+	if p, ok := graph.ParseTaskPrefix(line); ok {
+		current = p.Marker
+	}
+	newLine, at, delta, ok := graph.SetTaskMarker(line, graph.NextMarker(current))
 	if !ok {
 		return false
 	}
+	col := b.cursor.Col
+	if col >= at {
+		col = max(col+delta, at)
+	}
+	col = min(col, len(newLine))
 	b.edit(func() {
 		b.replace(Range{Pos{l, 0}, Pos{l, len(line)}}, newLine)
-		b.cursor, b.hasAnchor = Pos{l, newCol}, false
+		b.cursor, b.hasAnchor = Pos{l, col}, false
 	})
 	return true
 }

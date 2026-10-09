@@ -43,28 +43,51 @@ func TestIsEmptyBullet(t *testing.T) {
 	}
 }
 
-func TestCycleMarkerLine(t *testing.T) {
-	// oldCol is the cursor column; pick one past the marker so deltas apply.
+func TestCycleMarkerEveryMarker(t *testing.T) {
+	// col is one past the line end so deltas apply; before-marker col stays put.
 	cases := []struct {
-		name        string
-		line        string
-		oldCol      int
-		wantNewLine string
-		wantNewCol  int
-		wantOK      bool
+		name, line string
+		col        int
+		want       string
+		wantCol    int
 	}{
-		{"plain to TODO", "- foo", 5, "- TODO foo", 10, true},
-		{"TODO to DONE", "- TODO foo", 10, "- DONE foo", 10, true},
-		{"DONE to plain", "- DONE foo", 10, "- foo", 5, true},
-		{"nested plain to TODO preserves indent", "  - bar", 7, "  - TODO bar", 12, true},
-		{"non-bullet no-op", "# heading", 3, "", 0, false},
-		{"cursor before marker unaffected on insert", "- foo", 1, "- TODO foo", 1, true},
+		{"plain to TODO", "- foo", 5, "- TODO foo", 10},
+		{"TODO to DONE", "- TODO foo", 10, "- DONE foo", 10},
+		{"LATER to DONE", "- LATER x", 9, "- DONE x", 8},
+		{"DOING to DONE", "- DOING x", 9, "- DONE x", 8},
+		{"WAITING to DONE", "- WAITING x", 11, "- DONE x", 8},
+		{"NOW to DONE", "- NOW x", 7, "- DONE x", 8},
+		{"DONE to plain", "- DONE foo", 10, "- foo", 5},
+		{"CANCELED to plain", "- CANCELED x", 12, "- x", 3},
+		{"CANCELLED to plain", "- CANCELLED x", 13, "- x", 3},
+		{"priority kept on done", "- LATER [#A] x", 14, "- DONE [#A] x", 13},
+		{"priority kept on plain", "- DONE [#A] x", 13, "- [#A] x", 8},
+		{"priority kept on todo", "- [#A] x", 8, "- TODO [#A] x", 13},
+		{"nested plain to TODO", "  - bar", 7, "  - TODO bar", 12},
+		{"cursor before marker unaffected", "- foo", 1, "- TODO foo", 1},
+		{"cursor inside marker clamps to marker column", "- DONE foo", 4, "- foo", 2},
 	}
 	for _, c := range cases {
-		gotLine, gotCol, gotOK := cycleMarkerLine(c.line, c.oldCol)
-		if gotOK != c.wantOK || (c.wantOK && (gotLine != c.wantNewLine || gotCol != c.wantNewCol)) {
-			t.Errorf("%s: cycleMarkerLine(%q,%d) = (%q,%d,%v), want (%q,%d,%v)",
-				c.name, c.line, c.oldCol, gotLine, gotCol, gotOK, c.wantNewLine, c.wantNewCol, c.wantOK)
+		t.Run(c.name, func(t *testing.T) {
+			b := New(c.line)
+			at(b, 0, c.col)
+			if !b.CycleMarker() {
+				t.Fatal("CycleMarker returned false")
+			}
+			if b.String() != c.want || b.Cursor() != (Pos{0, c.wantCol}) {
+				t.Fatalf("got %q cur %v, want %q col %d", b.String(), b.Cursor(), c.want, c.wantCol)
+			}
+			oneUndo(t, b, c.line)
+		})
+	}
+}
+
+func TestCycleMarkerKeepsPriorityThroughTheCycle(t *testing.T) {
+	b := New("- LATER [#A] x")
+	at(b, 0, 14)
+	for _, want := range []string{"- DONE [#A] x", "- [#A] x", "- TODO [#A] x"} {
+		if !b.CycleMarker() || b.String() != want {
+			t.Fatalf("got %q, want %q", b.String(), want)
 		}
 	}
 }
