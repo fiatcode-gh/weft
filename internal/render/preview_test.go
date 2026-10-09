@@ -167,6 +167,26 @@ const previewConstructPage = "\n\n  # Heading with [[Link]] and [[pi]]\n\n" +
 	"After html.\n\ntext with trailing two  \nhard break\n\n![img](x.png) <http://auto.link> https://bare.link/x `[[code]]` span\n\n" +
 	"Last paragraph with [[Wrap Edge]] and [[pi]] and some filler words to cross the wrap edge   \n\n\n"
 
+// previewTaskDatesPage is previewConstructPage's counterpart for priorities
+// and stamp lines.
+const previewTaskDatesPage = "- TODO [#A] open with priority\n  SCHEDULED: <2026-05-25 Mon 09:30 .+1w>\n  DEADLINE: <2026-05-27 Wed>\n" +
+	"- DONE [#B] closed\n  DEADLINE: <2026-05-27 Wed>\n" +
+	"- NOW [#C] running with [[link]]\n  - TODO child\n    SCHEDULED: <2026-06-01 Mon>\n" +
+	"- LATER [#A] a very long task text that has to wrap because it is much longer than the narrow widths used by the differential test, wrap wrap wrap\n  SCHEDULED: <2026-05-25 Mon>\n\n" +
+	"```\nSCHEDULED: <2026-05-25 Mon>\n```\n\n" +
+	"- TODO logged\n  :LOGBOOK:\n  SCHEDULED: <2026-05-25 Mon>\n  :END:\n" +
+	"- TODO malformed\n  SCHEDULED: <2026-02-30>\n\n" +
+	"SCHEDULED: <2026-05-25 Mon>\n\nplain tail\n"
+
+// lfAndCRLF returns each doc with LF endings and then with CRLF endings.
+func lfAndCRLF(docs ...string) []string {
+	var out []string
+	for _, d := range docs {
+		out = append(out, d, strings.ReplaceAll(d, "\n", "\r\n"))
+	}
+	return out
+}
+
 func fixtureDocs(t *testing.T) map[string]string {
 	t.Helper()
 	paths, err := filepath.Glob("../../testdata/fixture-graph/*/*.md")
@@ -245,7 +265,7 @@ func runPreviewDifferential(t *testing.T) {
 	t.Helper()
 	compared := 0
 	for _, w := range previewWidths {
-		for _, doc := range []string{previewConstructPage, strings.ReplaceAll(previewConstructPage, "\n", "\r\n")} {
+		for _, doc := range lfAndCRLF(previewConstructPage, previewTaskDatesPage) {
 			if checkPreviewMatchesRender(t, doc, w) {
 				compared++
 			}
@@ -386,7 +406,7 @@ func TestChunkStartRules(t *testing.T) {
 }
 
 func TestPreviewSubstMatchesPreprocess(t *testing.T) {
-	for n, raw := range generatedDocs(300) {
+	for n, raw := range append(generatedDocs(300), lfAndCRLF(previewTaskDatesPage)...) {
 		d := newPreviewDoc(raw)
 		sc := NewScanner()
 		p := NewPreview(mustTheme(t), 80)
@@ -428,6 +448,10 @@ func TestLineSentinelsCountsTags(t *testing.T) {
 	}{
 		{"#a and #b [[c]] `#d`", 3, 0},
 		{"[x](#frag) #[[Y]]", 1, 0},
+		{"  SCHEDULED: <2026-05-25 Mon>", 0, 1},
+		{"  DEADLINE: <2026-05-27 Wed 09:30 +1w>", 0, 1},
+		{"  SCHEDULED: <2026-02-30>", 0, 0},
+		{"- TODO [#A] x", 0, 1},
 	} {
 		if wiki, task := lineSentinels(tc.line); wiki != tc.wiki || task != tc.task {
 			t.Errorf("lineSentinels(%q) = (%d, %d), want (%d, %d)", tc.line, wiki, task, tc.wiki, tc.task)

@@ -137,6 +137,8 @@ func BuildIndex(graphPath string) (*Index, error) {
 				Priority:   th.Priority,
 				Text:       th.Text,
 				Ordinal:    k,
+				Scheduled:  th.Scheduled,
+				Deadline:   th.Deadline,
 			})
 		}
 	}

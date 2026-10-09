@@ -17,7 +17,8 @@ insert `[[Page Name]]`, `Esc` to dismiss); an unmatched name offers a create row
 that inserts a link to the not-yet-created page without writing to disk.
 Typing `#` plus a letter at a tag start opens the same completion list, inserting `#name` (or `#[[Name]]`).
 Enter continues a `- ` bullet at the same indent (empty bullet ends the list);
-`Ctrl+T` cycles the current bullet's workflow marker (plain → TODO → DONE);
+`Ctrl+T` cycles the current bullet's marker (any open marker → DONE → plain → TODO, keeping `[#A]`);
+`Alt+S` / `Alt+E` set the scheduled / deadline date and `Alt+P` cycles the priority;
 `Tab` / `Shift+Tab` indent / de-indent a bullet with its children; `Alt+↑/↓` move it.
 The editor has two looks: live preview (default; `internal/views/editor_live.go`) and source, switched with `Ctrl+R`. The App owns the choice per run (`editorSource`). The editor opens with the cursor on the source line behind the read view's top visible line (or the visible link cursor) on the same screen row; `Esc` returns the same way.
 
@@ -54,7 +55,7 @@ an intentional UI change, run with `-update` and visually diff the golden before
   `quietStdout`, which drops the terminal probes and keyboard-protocol switches Bubble
   Tea v2 sends on its own, so weft sends no queries and keeps the terminal's normal key
   encoding.
-- `internal/graph/` — filesystem walk, page parsing (wiki links and tags; `tag.go` is the one tag definition every consumer uses), name resolution, index.
+- `internal/graph/` — filesystem walk, page parsing (wiki links and tags; `tag.go` is the one tag definition every consumer uses), name resolution, index. `task.go`/`taskdate.go`/`agenda.go` are the one task grammar (markers, priorities, stamps, ownership, agenda) every consumer calls; `logbook.go` holds the LOGBOOK regexes.
 - `internal/render/` — Glamour-based page rendering (wiki-link styling, hanging-indent,
   workflow-marker colouring, `:LOGBOOK:` stripping). Has a `Warmup()` paid before the
   TUI takes the screen to avoid chroma init flicker. `theme.go` is the shared
@@ -73,7 +74,7 @@ an intentional UI change, run with `-update` and visually diff the golden before
   `$VISUAL` / `$EDITOR` / `vi`, snapshots file mtime, and exposes
   `Resolve` / `EnsureFile` / `ReadSnapshot` / `WriteFileIfUnchanged` / `SnapshotMtime`.
   Every replacing write is content-guarded: `writeFile` is unexported. Invoked by the in-app editor (`e`,
-  saves on `Ctrl+S`), by linkify in the backlinks panel, and by `App.editCurrent` for `$EDITOR` handoff (`E`).
+  saves on `Ctrl+S`), by task done/undo in the todos and agenda overlays, by linkify in the backlinks panel, and by `App.editCurrent` for `$EDITOR` handoff (`E`).
 - `internal/merge/` — pure git-style three-way line merge (adjacent changes
   conflict; both sides inserting at the same spot keeps mine then theirs) used by
   the editor save. No disk access.
@@ -85,7 +86,7 @@ an intentional UI change, run with `-update` and visually diff the golden before
   is dirty or ahead of upstream, driving the status-bar `●` indicator. Never
   edits a conflicted tree — conflicts bail to the shell.
 - `internal/views/` — Bubble Tea models: `app` (root), `page`, `picker`, `search`,
-  `backlinks`, `todos`, `help`, `editor` (in-app markdown editor). The backlinks
+  `backlinks`, `todos`, `agenda`, `help`, `editor` (in-app markdown editor). The backlinks
   view (`b`) shows two sections: linked references (`[[…]]` links and tags) then unlinked
   references (bare-text mentions not yet wiki-linked); read-only, `enter` jumps to the
   mention's page and lands on the reference: linked backlinks focus the back-reference

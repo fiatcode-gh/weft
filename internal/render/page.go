@@ -51,8 +51,6 @@ type Result struct {
 var (
 	wikiLinkRe     = regexp.MustCompile(`\[\[([^\]\|]+)(?:\|([^\]]*))?\]\]`)
 	taskMarkerRe   = regexp.MustCompile(`^(\s*-\s+)(TODO|DOING|LATER|WAITING|DONE|CANCELED|CANCELLED|NOW)\b`)
-	logbookStartRe = regexp.MustCompile(`(?i)^\s*:LOGBOOK:\s*$`)
-	logbookEndRe   = regexp.MustCompile(`(?i)^\s*:END:\s*$`)
 	queryOrEmbedRe = regexp.MustCompile(`(?i)^\s*\{\{(query|embed)\b`)
 )
 
@@ -61,8 +59,10 @@ var (
 var emphasisStyle = lipgloss.NewStyle().Reverse(true)
 
 type taskInfo struct {
-	marker string
-	open   bool
+	marker, priority, gap string
+	stamp                 string
+	stampKind             graph.StampKind
+	open                  bool
 }
 
 // Private-use Unicode codepoints bracket each sentinel. They survive Glamour's
@@ -214,7 +214,7 @@ func stripLogbookBlocks(body string) (string, []int) {
 		if inLogbook {
 			// Everything inside the block is dropped without touching
 			// fence state — a ``` line here is metadata garbage.
-			if logbookEndRe.MatchString(line) {
+			if graph.LogbookEndRe.MatchString(line) {
 				inLogbook = false
 			}
 			continue
@@ -223,7 +223,7 @@ func stripLogbookBlocks(body string) (string, []int) {
 		case fence.Step(line):
 			out.WriteString(line)
 			kept = append(kept, i)
-		case logbookStartRe.MatchString(line):
+		case graph.LogbookStartRe.MatchString(line):
 			inLogbook = true
 			continue // drop the :LOGBOOK: line; no newline either
 		default:
@@ -482,33 +482,57 @@ func hideMarkdownLinkURLsOutsideInlineCode(line string) string {
 	return b.String()
 }
 
-// preprocessTaskMarkers replaces leading TODO/DOING/etc. markers on non-fenced
-// bullet lines with sentinels, returning the rewritten body and the captured
-// marker text indexed by sentinel id.
+// styledPriority reports whether a task bullet line, whose marker starts at
+// markerStart, carries a "[#A]" cookie that gets its own style: the cookie
+// must follow the marker after spaces only.
+func styledPriority(line string, markerStart int) (graph.TaskPrefix, bool) {
+	p, ok := graph.ParseTaskPrefix(line)
+	if !ok || p.Priority == "" || p.MarkerStart != markerStart ||
+		strings.Trim(line[p.MarkerEnd:p.PriorityStart], " ") != "" {
+		return graph.TaskPrefix{}, false
+	}
+	return p, true
+}
+
+// preprocessTaskMarkers replaces leading TODO/DOING/etc. markers (with an
+// adjacent "[#A]" priority) and whole SCHEDULED:/DEADLINE: stamp lines on
+// non-fenced lines with sentinels, returning the rewritten body and what each
+// sentinel stands for, indexed by sentinel id.
 // base is the id of the first marker, as in preprocessLinks.
 func preprocessTaskMarkers(body string, base int) (string, []taskInfo) {
 	var markers []taskInfo
 	body = mapLinesOutsideFences(body, func(line string) string {
-		m := taskMarkerRe.FindStringSubmatch(line)
-		if m == nil {
+		var info taskInfo
+		var covered string // the text the sentinel stands for
+		var head, rest string
+		if m := taskMarkerRe.FindStringSubmatch(line); m != nil {
+			prefix := m[1]
+			info = taskInfo{marker: m[2], open: graph.IsOpenTask(line)}
+			covered = info.marker
+			head, rest = prefix, line[len(prefix)+len(info.marker):]
+			if p, ok := styledPriority(line, len(prefix)); ok {
+				info.priority = p.Priority
+				info.gap = line[p.MarkerEnd:p.PriorityStart]
+				covered = line[p.MarkerStart:p.PriorityEnd]
+				rest = line[p.PriorityEnd:]
+			}
+		} else if st, ok := graph.ParseStampLine(line); ok {
+			info = taskInfo{stamp: line[st.Start:st.End], stampKind: st.Kind}
+			covered = info.stamp
+			head, rest = line[:st.Start], line[st.End:]
+		} else {
 			return line
 		}
-		prefix := m[1]
-		marker := m[2]
 		id := base + len(markers)
-		rest := line[len(prefix)+len(marker):]
-		// Graph owns open-task classification so dashboard ordinals and
-		// rendered task offsets stay aligned.
-		open := graph.IsOpenTask(line)
-		markers = append(markers, taskInfo{marker: marker, open: open})
+		markers = append(markers, info)
 		sentinel := taskSentinelStart + encodeSentinelID(id) + taskSentinelEnd
-		// Pad to the marker's display width so Glamour's word-wrap reserves
-		// the columns the restored marker text will occupy (same trick as
+		// Pad to the covered text's display width so Glamour's word-wrap
+		// reserves the columns the restored text will occupy (same trick as
 		// the wiki-link and emphasis sentinels, see preprocessLinks).
-		if pad := lipgloss.Width(marker) - lipgloss.Width(sentinel); pad > 0 {
+		if pad := lipgloss.Width(covered) - lipgloss.Width(sentinel); pad > 0 {
 			sentinel += strings.Repeat(taskSentinelPad, pad)
 		}
-		return prefix + sentinel + rest
+		return head + sentinel + rest
 	})
 	return body, markers
 }
@@ -716,11 +740,22 @@ func finish(styled string, f frontend, theme Theme, fallbackErr error) Result {
 			if taskMarkers[id].open {
 				tasks = append(tasks, out.Len())
 			}
-			marker := taskMarkers[id].marker
-			if st, ok := theme.Markers[marker]; ok {
-				out.WriteString(st.Render(marker))
-			} else {
-				out.WriteString(marker)
+			ti := taskMarkers[id]
+			switch {
+			case ti.stamp != "" && ti.stampKind == graph.StampDeadline:
+				out.WriteString(theme.Deadline.Render(ti.stamp))
+			case ti.stamp != "":
+				out.WriteString(theme.Scheduled.Render(ti.stamp))
+			default:
+				if st, ok := theme.Markers[ti.marker]; ok {
+					out.WriteString(st.Render(ti.marker))
+				} else {
+					out.WriteString(ti.marker)
+				}
+				if ti.priority != "" {
+					out.WriteString(ti.gap)
+					out.WriteString(theme.Priority[ti.priority].Render("[#" + ti.priority + "]"))
+				}
 			}
 		case m[6] >= 0: // emphasis sentinel
 			id, ok := decodeSentinelID(styled[m[6]:m[7]])

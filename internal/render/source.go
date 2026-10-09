@@ -184,7 +184,7 @@ func classify(st *scanState, idx int, line, next string, hasNext bool) LineInfo 
 
 	switch st.hidden {
 	case hiddenLogbook:
-		if logbookEndRe.MatchString(line) {
+		if graph.LogbookEndRe.MatchString(line) {
 			st.hidden = hiddenNone
 		}
 		info.Kind = KindHidden
@@ -222,7 +222,7 @@ func classify(st *scanState, idx int, line, next string, hasNext bool) LineInfo 
 		info.Fence, info.Lang, info.Strip = st.opener, st.lang, st.strip
 		return info
 	}
-	if logbookStartRe.MatchString(line) {
+	if graph.LogbookStartRe.MatchString(line) {
 		st.hidden = hiddenLogbook
 		info.Kind = KindHidden
 		return info

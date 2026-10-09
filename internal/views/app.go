@@ -460,6 +460,7 @@ func (a *App) enterEditor() tea.Cmd {
 	}
 	at.Line += leadingTrimmedLines(content)
 	a.editor = NewEditorView(a.idx, name, path, content, isNew, a.width, a.height, at, &a.clip, a.editorSource)
+	a.editor.now = a.nowFunc
 	return nil
 }
 
@@ -763,6 +764,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return a, cmd
 				}
 				return a, a.linkify(res.ref, res.target)
+			case overlayResultMarkTask:
+				if cmd, blocked := a.blockIfSyncing(); blocked {
+					return a, cmd
+				}
+				return a, a.markTask(res.mark)
 			case overlayResultCreate:
 				if cmd, blocked := a.blockIfSyncing(); blocked {
 					return a, cmd
@@ -799,6 +805,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.active = NewBacklinks(a.idx, name, a.unlinkedRefs(name), a.width, a.height)
 		case "T":
 			a.active = NewTodos(a.idx, a.width, a.height)
+		case "A":
+			a.active = NewAgenda(a.idx, a.nowFunc(), a.width, a.height)
 		case "?":
 			a.active = NewHelp(a.version, a.width, a.height)
 		case "[":
@@ -998,6 +1006,9 @@ func (a *App) blockIfSyncing() (cmd tea.Cmd, blocked bool) {
 		o.SetError(msg)
 		return nil, true
 	case *Picker:
+		o.SetError(msg)
+		return nil, true
+	case taskPanel:
 		o.SetError(msg)
 		return nil, true
 	default:

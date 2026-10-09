@@ -14,10 +14,11 @@ type LinkHit struct {
 
 // TodoHit is one open task bullet occurrence in a page body.
 type TodoHit struct {
-	Marker   string // TODO | LATER | DOING | WAITING
-	Priority string // "" | "A" | "B" | "C"
-	Text     string
-	Line     int // 1-based
+	Marker              string // TODO | LATER | DOING | WAITING
+	Priority            string // "" | "A" | "B" | "C"
+	Text                string
+	Line                int // 1-based
+	Scheduled, Deadline Stamp
 }
 
 var (
@@ -46,9 +47,14 @@ func IsOpenTask(line string) bool {
 // a markdown renderer would treat the rest of the page as code.
 func parseBody(body string) (lines []string, links []LinkHit, todos []TodoHit) {
 	lines = strings.Split(body, "\n")
-	var fence FenceState
+	var w lineWalker
+	cur := -1 // index in todos of the open task owning the current lines
 	for i, line := range lines {
-		if fence.Step(line) {
+		fenced, bullet, stamp, isStamp := w.step(line)
+		if bullet {
+			cur = -1
+		}
+		if fenced {
 			continue
 		}
 		links = appendLinks(links, line, i+1)
@@ -59,6 +65,20 @@ func parseBody(body string) (lines []string, links []LinkHit, todos []TodoHit) {
 				Text:     m[3],
 				Line:     i + 1,
 			})
+			// A todo inside a LOGBOOK drawer is indexed but is not a bullet,
+			// so it never owns the stamps after the drawer.
+			if bullet {
+				cur = len(todos) - 1
+			}
+		}
+		if isStamp && cur >= 0 {
+			slot := &todos[cur].Scheduled
+			if stamp.Kind == StampDeadline {
+				slot = &todos[cur].Deadline
+			}
+			if *slot == (Stamp{}) {
+				*slot = stamp.Stamp()
+			}
 		}
 	}
 	return lines, links, todos

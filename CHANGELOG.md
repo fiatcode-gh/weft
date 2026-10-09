@@ -17,6 +17,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The editor opens in live preview instead of showing raw source. Migration: press `Ctrl+R` for the source look; the choice lasts until weft quits.
 - Under `NO_COLOR` every screen now shows bold, italic, underline, strikethrough, faint and reverse video; only colour is dropped. Migration: use `TERM=dumb` for fully unstyled output.
 - `#word` outside code is now a tag: a link to the page `word` (also in backlinks and `weft doctor`). Migration: wrap literal `#word` text in backticks.
+- `Ctrl+T` in the editor cycles any open marker (`TODO`, `LATER`, `DOING`, `WAITING`, `NOW`) → `DONE` → plain → `TODO`, keeps the `[#A]` priority, and turns `CANCELED` into plain; it no longer makes `LATER x` into `TODO LATER x`. Migration: to turn a `LATER`/`DOING`/`WAITING` bullet into `TODO`, press `Ctrl+T` until it is plain, then once more.
 
 ### Added
 
@@ -28,6 +29,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Moving a bullet with its children with `Alt+↑` / `Alt+↓`, and `Ctrl+←` / `Ctrl+→` word moves.
 - The editor is coloured like the read view: same styles, and `WEFT_STYLE` and `NO_COLOR` apply to it too.
 - `e` and `Esc` keep the line you are on at the same screen row between the read view and the editor. The editor now shows the read view's faint rule row above its status line, so both windows are the same height.
+- Task dates and priorities: `SCHEDULED:` / `DEADLINE:` lines and `[#A]`–`[#C]` are read and styled in the read view, live preview and source look.
+- The agenda (`A`): open tasks that are overdue, due today or due in the next 7 days.
+- Dates and priorities on the todos dashboard rows.
+- `x` marks a task done or undoes it from the todos dashboard and the agenda.
+- A date prompt (`Alt+S` scheduled, `Alt+E` deadline) and a priority cycle (`Alt+P`) in the editor.
 - Any markdown file opens in the in-app editor (CRLF, tabs, more than 10000 lines) and saves byte-for-byte; the `E`/`$EDITOR` refusal hint is gone.
 - Under `NO_COLOR` the read view's selected link shows in reverse video.
 - Tags: `#tag` and `#[[Multi Word]]` link to a page like `[[Page]]` — rendered as links with `#` kept, followed with `n`/`N` and `Enter`, counted in backlinks and `weft doctor`, never reported as unlinked mentions. Typing `#` and a letter in the editor offers page completion. Issue numbers, hex colours, headings, `#+`/`#!` lines, URL fragments and code are never tags.

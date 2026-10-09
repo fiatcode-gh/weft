@@ -9,6 +9,7 @@ import (
 
 	"charm.land/glamour/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/fiatcode-gh/weft/v2/internal/graph"
 	"github.com/yuin/goldmark/ast"
 	gtext "github.com/yuin/goldmark/text"
 )
@@ -250,7 +251,8 @@ func (p *Preview) chunkText(src PreviewLines, c chunkSpan, first, last int) stri
 }
 
 // lineSentinels counts the sentinels the read view's substitution passes make
-// on one line: wiki links, tags and the task marker.
+// on one line: wiki links, tags, and the task marker (with its priority) or
+// stamp.
 func lineSentinels(line string) (wiki, task int) {
 	if strings.Contains(line, "[[") || strings.IndexByte(line, '#') >= 0 {
 		var subs []linkSubst
@@ -258,6 +260,8 @@ func lineSentinels(line string) (wiki, task int) {
 		wiki = len(subs)
 	}
 	if taskMarkerRe.MatchString(line) {
+		task = 1
+	} else if _, ok := graph.ParseStampLine(line); ok {
 		task = 1
 	}
 	return wiki, task

@@ -27,6 +27,11 @@ type Theme struct {
 	// Markers overlay workflow markers, keyed by marker text. Shared
 	// read-only; callers must not mutate it.
 	Markers map[string]lipgloss.Style
+	// Scheduled and Deadline overlay a whole SCHEDULED:/DEADLINE: stamp.
+	Scheduled, Deadline lipgloss.Style
+	// Priority overlays a "[#A]" cookie, keyed by its letter. Shared
+	// read-only.
+	Priority map[string]lipgloss.Style
 }
 
 var themeLink = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Underline(true)
@@ -45,6 +50,16 @@ var themeMarkers = map[string]lipgloss.Style{
 	"NOW":       lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Bold(true), // magenta
 }
 
+var (
+	themeScheduled = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Italic(true)
+	themeDeadline  = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Italic(true)
+	themePriority  = map[string]lipgloss.Style{
+		"A": lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true),
+		"B": lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Bold(true),
+		"C": lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Bold(true),
+	}
+)
+
 // CurrentTheme chooses the theme from env vars only — never querying the
 // terminal. This is deliberate: Glamour's WithAutoStyle issues OSC 11
 // background-colour queries over stdin, which can leave stray reply bytes in
@@ -56,7 +71,8 @@ var themeMarkers = map[string]lipgloss.Style{
 // NO_COLOR wins over WEFT_STYLE. An unknown WEFT_STYLE name yields the notty
 // theme together with Glamour's own "style not found" error.
 func CurrentTheme() (Theme, error) {
-	t := Theme{Formatter: "terminal256", Link: themeLink, Markers: themeMarkers}
+	t := Theme{Formatter: "terminal256", Link: themeLink, Markers: themeMarkers,
+		Scheduled: themeScheduled, Deadline: themeDeadline, Priority: themePriority}
 	name := ""
 	if noColor() {
 		name = "notty"

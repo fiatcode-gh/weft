@@ -18,6 +18,7 @@ const (
 	overlayResultFocusLink
 	overlayResultHighlight
 	overlayResultLinkify
+	overlayResultMarkTask
 )
 
 // OverlayResult is the tagged outcome that an overlay's Update reports to the
@@ -29,6 +30,7 @@ type OverlayResult struct {
 	target      string
 	ref         *graph.UnlinkedRef
 	cmd         tea.Cmd
+	mark        taskMark
 }
 
 func overlayCancel() OverlayResult { return OverlayResult{kind: overlayResultCancel} }
@@ -59,6 +61,10 @@ func overlayHighlight(name, text string) OverlayResult {
 
 func overlayLinkify(ref *graph.UnlinkedRef, target string) OverlayResult {
 	return OverlayResult{kind: overlayResultLinkify, ref: ref, target: target}
+}
+
+func overlayMarkTask(m taskMark) OverlayResult {
+	return OverlayResult{kind: overlayResultMarkTask, mark: m}
 }
 
 // Overlay is a modal view layered over the page. App routes keys to the active

@@ -25,4 +25,6 @@ type TodoBullet struct {
 	Priority   string // "" | "A" | "B" | "C"
 	Text       string // remainder after marker (and priority), trimmed
 	Ordinal    int    // 0-based index among open todos on the same page (document order)
+
+	Scheduled, Deadline Stamp // zero when the task has none
 }

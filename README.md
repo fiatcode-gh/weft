@@ -73,7 +73,8 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 |------------|-------------------------------------|
 | `Ctrl-P`   | open picker (recent + fuzzy)        |
 | `/`        | open full-text search (ripgrep)     |
-| `T`        | open TODO dashboard                 |
+| `T`        | open TODO dashboard (`x` marks done / undoes) |
+| `A`        | open the agenda (overdue, today, next 7 days) |
 | `b`        | open backlinks for the current page (linked + unlinked refs) |
 | `?`        | toggle the help overlay             |
 | `n` / `N`  | cycle the link cursor (wiki-links and tags) |
@@ -108,11 +109,22 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | `Enter` | continue the bullet (an empty bullet ends it) |
 | `Tab` / `Shift-Tab` | indent / de-indent a bullet with its children (selected lines: only those) |
 | `Alt-↑` / `Alt-↓` | move the bullet with its children |
-| `Ctrl-T` | cycle TODO / DONE |
+| `Ctrl-T` | cycle the marker: open → `DONE` → plain → `TODO` (keeps `[#A]`) |
+| `Alt-S` / `Alt-E` | set the task's scheduled / deadline date (`YYYY-MM-DD`, `today`, `tomorrow`, `+Nd`, `+Nw`, a weekday; empty clears) |
+| `Alt-P` | cycle priority `[#A]` → `[#B]` → `[#C]` → none |
 | `[[` | page-name completion (`↑`/`↓`, `Enter`/`Tab`, `Esc`) |
 | `#` + letter | page-name completion inserting `#name`, or `#[[Name]]` when the name has spaces or other characters a tag cannot hold |
 | `Ctrl-R` | switch between live preview and source look |
 | `Ctrl-F` | find; `Enter`/`↓` next, `↑` previous, `Tab` find ↔ replace, `Enter` replace, `Ctrl-A` replace all (replace field), `Esc` close |
+
+### Tasks
+
+A task is a bullet that starts with a marker (`TODO`, `LATER`, `DOING`, `WAITING`, `NOW`, `DONE`, `CANCELED`). An optional priority `[#A]`–`[#C]` follows the marker. `SCHEDULED: <2026-10-12 Mon>` and `DEADLINE: <…>` lines go under the task and are styled in all three looks.
+
+- A time (`<2026-10-12 Mon 09:30>`) and a repeater (`.+1w`, `++1d`, `+1m`) are read and kept, but a repeater has no effect: weft never advances dates.
+- Dates belong to the task they sit under, not to its children, and a child's date never counts for its parent. Dates inside code fences and `:LOGBOOK:` blocks are ignored.
+- The agenda (`A`) lists open tasks with a date in three sections: Overdue (before today), Today, and Upcoming (the next 7 days, inclusive). A task with both dates uses the earlier. Rows are ordered by date, timed before untimed, then priority. Undated tasks and tasks beyond the window are left out.
+- `x` in the dashboard or the agenda writes only the marker: open → `DONE`, and `x` again restores the earlier marker. It is refused while a sync runs, or when the line changed on disk.
 
 ## What gets rendered
 
@@ -156,4 +168,5 @@ crash weft — they degrade to plain text or a silent no-op.
   surfaced in-app. Namespace pages must use the `___` filename convention.
 - **The TODO dashboard shows only open markers** (`TODO` / `LATER` /
   `DOING` / `WAITING`). `DONE` / `CANCELED` / `NOW` bullets are styled on
-  the page but never appear in the dashboard.
+  the page but never appear in the dashboard. Rows marked done with `x` in
+  the open panel stay struck through until it closes.

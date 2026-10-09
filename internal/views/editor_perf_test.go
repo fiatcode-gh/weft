@@ -37,6 +37,23 @@ func perfContent(n int) string {
 	return b.String()
 }
 
+// perfTaskContent is n lines cycling a prioritised task with a link and its
+// two stamp lines.
+func perfTaskContent(n int) string {
+	var b strings.Builder
+	for i := range n {
+		switch i % 3 {
+		case 0:
+			fmt.Fprintf(&b, "- TODO [#A] task %d with [[Link %d]]\n", i, i)
+		case 1:
+			b.WriteString("  SCHEDULED: <2026-05-25 Mon 09:30 .+1w>\n")
+		default:
+			b.WriteString("  DEADLINE: <2026-05-27 Wed>\n")
+		}
+	}
+	return b.String()
+}
+
 const (
 	perfW, perfH  = 100, 40
 	perfWindowH   = perfH - 2 // text rows: the rule row and the status line take two
@@ -73,9 +90,20 @@ func perfEditor(content string, anchor int, source bool) *EditorView {
 // is TestEditorWorkIsWindowBounded.
 func TestEditorSpeed10000(t *testing.T) {
 	quietTerm(t)
-	content := perfContent(10000)
 	bound := func(ms int) time.Duration { return time.Duration(ms*perfSlack*raceFactor) * time.Millisecond }
 
+	for _, corpus := range []struct {
+		name    string
+		content string
+	}{{"mixed", perfContent(10000)}, {"tasks", perfTaskContent(10000)}} {
+		content := corpus.content
+		t.Run(corpus.name, func(t *testing.T) {
+			testEditorSpeed(t, content, bound)
+		})
+	}
+}
+
+func testEditorSpeed(t *testing.T, content string, bound func(int) time.Duration) {
 	for _, mode := range perfModes {
 		t.Run(mode.name, func(t *testing.T) {
 			t.Run("open", func(t *testing.T) {

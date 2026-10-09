@@ -73,9 +73,9 @@ func TestBuildIndex(t *testing.T) {
 		}
 	}
 
-	// Todos: 13 open across the fixture
-	if len(idx.Todos) != 13 {
-		t.Errorf("todo count: want 13, got %d (%+v)", len(idx.Todos), idx.Todos)
+	// Todos: 22 open across the fixture
+	if len(idx.Todos) != 22 {
+		t.Errorf("todo count: want 22, got %d (%+v)", len(idx.Todos), idx.Todos)
 	}
 }
 
