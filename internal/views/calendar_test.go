@@ -166,11 +166,12 @@ func TestAppCalendarOpensJournal(t *testing.T) {
 func TestAppCalendarMissingDayOpensPhantom(t *testing.T) {
 	a := calBoot(t)
 	a.Update(key("C"))
+	a.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	a.Update(keyEnt)
-	if got := a.page.Page(); got != "2026-05-26" {
-		t.Fatalf("page = %q", got)
+	if got := a.page.Page(); got != "2026-05-19" || a.active != nil {
+		t.Fatalf("page %q active %v", got, a.active)
 	}
-	if _, err := os.Stat(filepath.Join(a.graphPath, "journals", "2026_05_26.md")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(a.graphPath, "journals", "2026_05_19.md")); !os.IsNotExist(err) {
 		t.Errorf("journal file must not be created: %v", err)
 	}
 	if !strings.Contains(appText(a), "(no entry yet for this page)") {

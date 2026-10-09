@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/edit"
@@ -56,6 +57,31 @@ func TestOnThisDayLists(t *testing.T) {
 	for _, bad := range []string{"third", "noise"} {
 		if strings.Contains(v, bad) {
 			t.Errorf("view must not contain %q:\n%s", bad, v)
+		}
+	}
+}
+
+func TestOnThisDayNestedPreviewKeepsPanelWidth(t *testing.T) {
+	quietTerm(t)
+	long := strings.Repeat("word ", 16)
+	nested := map[string]string{
+		"journals/2026_05_19.md": "- parent\n\t- " + long + "\n",
+		"pages/Anchor.md":        "- anchor\n",
+	}
+	flat := map[string]string{
+		"journals/2026_05_19.md": "- parent\n- " + long + "\n",
+		"pages/Anchor.md":        "- anchor\n",
+	}
+	rows := func(files map[string]string) []string {
+		return strings.Split(plain(otdOverlay(t, files, nil).View()), "\n")
+	}
+	got, want := rows(nested), rows(flat)
+	if len(got) != len(want) {
+		t.Fatalf("nested preview changed row count: %d, want %d", len(got), len(want))
+	}
+	for i, r := range got {
+		if w := lipgloss.Width(r); w != lipgloss.Width(got[0]) {
+			t.Errorf("row %d width %d, want %d: %q", i, w, lipgloss.Width(got[0]), r)
 		}
 	}
 }

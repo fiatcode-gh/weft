@@ -8,6 +8,7 @@ import (
 
 	"github.com/fiatcode-gh/weft/v2/internal/edit"
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/render"
 )
 
 const onThisDayPreviewLines = 2
@@ -44,15 +45,16 @@ func NewOnThisDay(idx *graph.Index, today time.Time, read func(string) (edit.Sna
 	return o
 }
 
-// previewLines returns up to n lines of content that are not blank, each with
-// trailing whitespace (and "\r") removed.
+// previewLines returns up to n lines of content that are not blank, each in its
+// displayed form (render.DisplayText) with surrounding whitespace removed, so
+// the width clamp measures what the terminal draws.
 func previewLines(content string, n int) []string {
 	var out []string
 	for line := range strings.SplitSeq(content, "\n") {
 		if len(out) == n {
 			break
 		}
-		if line = strings.TrimRight(line, " \t\r"); strings.TrimSpace(line) != "" {
+		if line = render.DisplayText(strings.TrimSpace(line)); line != "" {
 			out = append(out, line)
 		}
 	}

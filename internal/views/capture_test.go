@@ -72,6 +72,21 @@ func TestCaptureAppendsToExistingJournal(t *testing.T) {
 	}
 }
 
+func TestCaptureTargetFixedAtOpen(t *testing.T) {
+	late := time.Date(2026, 5, 25, 23, 59, 0, 0, time.UTC)
+	a := bootApp(t, bootConfig{now: late})
+	a.Update(key("c"))
+	typeText(a, "late thought")
+	a.nowFunc = func() time.Time { return late.Add(2 * time.Minute) }
+	a.Update(keyEnt)
+	if got := readCapJournal(t, a); !strings.HasSuffix(got, "- late thought\n") {
+		t.Errorf("line missing from the day the prompt opened on:\n%s", got)
+	}
+	if _, err := os.Stat(filepath.Join(a.graphPath, "journals", "2026_05_26.md")); !os.IsNotExist(err) {
+		t.Errorf("no file may be created for the next day: %v", err)
+	}
+}
+
 func TestCaptureAddsMissingFinalNewline(t *testing.T) {
 	a := bootCapture(t, map[string]string{capJournal: "a"})
 	a.Update(key("c"))

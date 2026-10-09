@@ -26,8 +26,10 @@ numbers, a configurable `O` offset list, and a template watcher.
   is used, so an edit applies to the next new journal without a reindex. No
   page, or a page whose file has vanished, gives an empty template; a read
   failure is an error and nothing is created.
-- **D2 One creation function.** `App.createJournal` is the only place that
-  makes a journal file. With a template it writes through
+- **D2 One creation function.** `App.createJournal` is the only function that
+  creates a journal file for `.` and `E`; capture and the editor's first save
+  create through their own guarded write (D3, D4). `createJournal`
+  writes with a template through
   `edit.WriteFileIfUnchanged` against an empty snapshot, so a file that appears
   meanwhile is left alone (`edit.ErrChanged` is swallowed, `created` false).
   With no template it still calls `edit.EnsureFile`, so the empty-file path is
@@ -59,7 +61,7 @@ numbers, a configurable `O` offset list, and a template watcher.
   implements `panelFeedback`, in addition to the hint. The message is cleared
   on the overlay's next key.
 - **D8 Calendar grid.** `monthGrid` lays weeks out Monday first. Each day is a
-  5-cell group: `[` `]` around the cursor day (reverse video), a `•` after days
+  5-cell group: `[` `]` around the cursor day (selection style), a `•` after days
   that exist in `idx.Journals()`, bold underline for today. `PgUp`/`PgDn` use
   `graph.AddMonthsClamped`. `Enter` opens `YYYY-MM-DD` and creates nothing; a
   day without a journal opens as the empty page.
