@@ -173,6 +173,21 @@ func TestSetTaskStampCRLF(t *testing.T) {
 	}
 }
 
+func TestSetTaskStampMixedEOLKeepsTaskLineTerminator(t *testing.T) {
+	for name, c := range map[string]struct{ in, want string }{
+		"lf task line":   {"- TODO x\n- b\r\n- c\r\n", "- TODO x\n  SCHEDULED: <2026-05-25 Mon>\n- b\r\n- c\r\n"},
+		"crlf task line": {"- TODO x\r\n- b\n- c\n", "- TODO x\r\n  SCHEDULED: <2026-05-25 Mon>\r\n- b\n- c\n"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			b := stampBuf(c.in, 0, 0)
+			b.SetTaskStamp(graph.StampScheduled, "2026-05-25")
+			if got := b.String(); got != c.want {
+				t.Errorf("got %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
 func TestCyclePriority(t *testing.T) {
 	for _, line := range []int{0, 1} {
 		b := stampBuf("- TODO x\n  more", line, 0)

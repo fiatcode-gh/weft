@@ -1067,7 +1067,7 @@ func TestRenderStylesPriority(t *testing.T) {
 		t.Errorf("Tasks = %d, want 1", len(out.Tasks))
 	}
 
-	// the text is unchanged: a priority-less twin with the same words strips equal
+	// the text is unchanged: the marker and priority stay in the stripped text
 	if got := strings.TrimSpace(plainText(out)); got != "• LATER [#A] prio" {
 		t.Errorf("stripped text = %q", got)
 	}

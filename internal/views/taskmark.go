@@ -40,6 +40,23 @@ type taskKey struct {
 // were (Marker is the earlier marker), so they stay listed and can be undone.
 type doneRows map[taskKey]graph.TodoBullet
 
+// shadows reports whether the done row at fresh's key stands for fresh itself
+// (same tail), so the fresh row is not listed twice. A done row whose key now
+// holds a different open task is stale after an outside line shift: it is
+// dropped and fresh stays visible.
+func (d doneRows) shadows(fresh graph.TodoBullet) bool {
+	k := taskKey{fresh.Page, fresh.LineNumber}
+	row, ok := d[k]
+	if !ok {
+		return false
+	}
+	if graph.TaskTail(row.Priority, row.Text) == graph.TaskTail(fresh.Priority, fresh.Text) {
+		return true
+	}
+	delete(d, k)
+	return false
+}
+
 var doneStyle = lipgloss.NewStyle().Strikethrough(true).Faint(true)
 
 // taskDates renders a task's stamps as "scheduled D[ T] · deadline D[ T]";

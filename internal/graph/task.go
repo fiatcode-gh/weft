@@ -199,7 +199,7 @@ func (w *lineWalker) step(line string) (fenced, bullet bool, stamp StampLine, is
 		}
 		return false, false, StampLine{}, false
 	}
-	if LogbookStartRe.MatchString(line) {
+	if i := firstNonBlank(line); i < len(line) && line[i] == ':' && LogbookStartRe.MatchString(line) {
 		w.inLog = true
 		return false, false, StampLine{}, false
 	}
@@ -208,6 +208,15 @@ func (w *lineWalker) step(line string) (fenced, bullet bool, stamp StampLine, is
 	}
 	stamp, isStamp = ParseStampLine(line)
 	return false, false, stamp, isStamp
+}
+
+// firstNonBlank is the index of line's first byte that is not a space or tab.
+func firstNonBlank(line string) int {
+	i := 0
+	for i < len(line) && (line[i] == ' ' || line[i] == '\t') {
+		i++
+	}
+	return i
 }
 
 // TaskBlock is the line range owned by one task bullet: First is the bullet,

@@ -85,9 +85,20 @@ func (b *Buffer) SetTaskStamp(kind graph.StampKind, date string) (changed, ok bo
 	p, _ := graph.ParseTaskPrefix(first)
 	lead := first[:len(first)-len(strings.TrimLeft(first, " \t"))]
 	indent := lead + strings.Repeat(" ", max(0, p.MarkerStart-len(lead)))
+	stamp := indent + graph.StampText(kind, date, "", "")
 	b.edit(func() {
-		end := len(b.lines[k-1])
-		b.replace(Range{Pos{k - 1, end}, Pos{k - 1, end}}, b.eol+indent+graph.StampText(kind, date, "", ""))
+		if k < len(b.lines) {
+			// Insert whole lines before line k so line k-1 keeps its own
+			// terminator in mixed-EOL files.
+			term := "\n"
+			if b.crlf[k-1] {
+				term = "\r\n"
+			}
+			b.replace(Range{Pos{k, 0}, Pos{k, 0}}, stamp+term)
+		} else {
+			end := len(b.lines[k-1])
+			b.replace(Range{Pos{k - 1, end}, Pos{k - 1, end}}, b.eol+stamp)
+		}
 		if cur.Line >= k {
 			cur.Line++
 		}

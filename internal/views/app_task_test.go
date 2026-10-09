@@ -112,6 +112,42 @@ func TestAppTodosXTaskGone(t *testing.T) {
 	}
 }
 
+func TestAppTodosXFollowsLineShift(t *testing.T) {
+	a := bootApp(t)
+	path := workbenchPath(a)
+	td := openTodosAt(t, a, "Replace the dust collector filter")
+	orig, _ := os.ReadFile(path)
+	shifted := "- added above\n" + string(orig)
+	if err := os.WriteFile(path, []byte(shifted), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	oldLine := td.visible[td.sel].LineNumber
+
+	a.Update(key("x"))
+
+	got, _ := os.ReadFile(path)
+	want := strings.Replace(shifted,
+		"- TODO [#B] Replace the dust collector filter",
+		"- DONE [#B] Replace the dust collector filter", 1)
+	if string(got) != want {
+		t.Fatalf("after x:\n%q\nwant\n%q", got, want)
+	}
+	sel := td.visible[td.sel]
+	if sel.Text != "Replace the dust collector filter" || sel.LineNumber != oldLine+1 {
+		t.Fatalf("selected row = %q at %d, want the done row at %d", sel.Text, sel.LineNumber, oldLine+1)
+	}
+	if _, ok := td.done[taskKey{"Workbench", oldLine + 1}]; !ok {
+		t.Errorf("done rows %v lack the shifted key", td.done)
+	}
+
+	a.Update(key("x"))
+
+	got, _ = os.ReadFile(path)
+	if string(got) != shifted {
+		t.Errorf("second x should restore the shifted file:\n%q\nwant\n%q", got, shifted)
+	}
+}
+
 func TestAppTodosXFileChangedBetweenReadAndWrite(t *testing.T) {
 	a := bootApp(t)
 	path := workbenchPath(a)
@@ -208,6 +244,42 @@ func TestAppAgendaXMarksDoneAndUndo(t *testing.T) {
 	got, _ = os.ReadFile(path)
 	if string(got) != string(orig) {
 		t.Errorf("undo should restore the original bytes:\n%q\nwant\n%q", got, orig)
+	}
+}
+
+func TestAppAgendaXFollowsLineShift(t *testing.T) {
+	a := bootApp(t, bootConfig{now: agendaNow})
+	path := workbenchPath(a)
+	orig, _ := os.ReadFile(path)
+	ag := openAgenda(t, a)
+	oldLine := ag.items[0].Todo.LineNumber
+	shifted := "- added above\n" + string(orig)
+	if err := os.WriteFile(path, []byte(shifted), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a.Update(key("x"))
+
+	got, _ := os.ReadFile(path)
+	want := strings.Replace(shifted,
+		"- TODO [#B] Replace the dust collector filter",
+		"- DONE [#B] Replace the dust collector filter", 1)
+	if string(got) != want {
+		t.Fatalf("after x:\n%q\nwant\n%q", got, want)
+	}
+	sel := ag.items[ag.sel].Todo
+	if sel.Text != "Replace the dust collector filter" || sel.LineNumber != oldLine+1 {
+		t.Fatalf("selected row = %q at %d, want the done row at %d", sel.Text, sel.LineNumber, oldLine+1)
+	}
+	if _, ok := ag.done[taskKey{"Workbench", oldLine + 1}]; !ok {
+		t.Errorf("done rows %v lack the shifted key", ag.done)
+	}
+
+	a.Update(key("x"))
+
+	got, _ = os.ReadFile(path)
+	if string(got) != shifted {
+		t.Errorf("second x should restore the shifted file:\n%q\nwant\n%q", got, shifted)
 	}
 }
 

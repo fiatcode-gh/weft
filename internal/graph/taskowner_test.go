@@ -84,6 +84,19 @@ func TestExtractTodosDatesSecondTask(t *testing.T) {
 	}
 }
 
+func TestExtractTodosLogbookTodoDoesNotOwnLaterStamp(t *testing.T) {
+	todos := ExtractTodos("- TODO a\n  :LOGBOOK:\n  - TODO inner\n  :END:\n  SCHEDULED: <2026-05-20 Wed>")
+	if len(todos) != 2 {
+		t.Fatalf("want a and inner indexed, got %+v", todos)
+	}
+	if todos[0].Text != "a" || todos[0].Scheduled.Date != "2026-05-20" {
+		t.Errorf("a should own the stamp: %+v", todos[0])
+	}
+	if todos[1].Scheduled.Date != "" {
+		t.Errorf("inner must not own the stamp: %+v", todos[1])
+	}
+}
+
 func TestTaskBlockAt(t *testing.T) {
 	src := []string{
 		"intro",                      // 0

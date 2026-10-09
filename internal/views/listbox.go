@@ -7,7 +7,7 @@ const (
 )
 
 // listBox holds the geometry and selection state shared by the scrollable list
-// overlays (picker, search, backlinks, todos). Concrete overlays embed it.
+// overlays (picker, search, backlinks, todos, agenda). Concrete overlays embed it.
 type listBox struct {
 	width, height int
 	sel           int

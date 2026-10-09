@@ -13,7 +13,7 @@ only a marker, a priority or a stamp line the user asked for, never metadata.
 Out of scope: recurring tasks (a repeater is kept and has no effect), LOGBOOK
 writes, rescheduling from the agenda, marker changes other than done/undo from
 `T`/`A`, tag grouping, a configurable window, a calendar, dates on non-task
-bullets, inline dates, and `SCHEDULED:` on a page's first line.
+bullets, inline dates, and `SCHEDULED:` on the task's first line.
 
 ## Decisions
 
@@ -80,5 +80,8 @@ bullets, inline dates, and `SCHEDULED:` on a page's first line.
   view styles them.
 - A fence inside a LOGBOOK block still toggles the index's fence state, as
   before.
-- A degenerate `- TODO [#A]` line: the index text `[#A]` and the transform's
-  priority A disagree, so relocation fails safe and nothing is written.
+- A degenerate `- TODO [#A]` line: the index reads `[#A]` as text and the
+  transform reads it as priority A, but relocation compares the whole
+  normalised tail after the marker, so the line is still marked correctly.
+- A todo inside a LOGBOOK drawer is indexed but never owns the stamp lines
+  after `:END:`; the enclosing task does.

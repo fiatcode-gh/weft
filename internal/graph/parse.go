@@ -65,7 +65,11 @@ func parseBody(body string) (lines []string, links []LinkHit, todos []TodoHit) {
 				Text:     m[3],
 				Line:     i + 1,
 			})
-			cur = len(todos) - 1
+			// A todo inside a LOGBOOK drawer is indexed but is not a bullet,
+			// so it never owns the stamps after the drawer.
+			if bullet {
+				cur = len(todos) - 1
+			}
 		}
 		if isStamp && cur >= 0 {
 			slot := &todos[cur].Scheduled

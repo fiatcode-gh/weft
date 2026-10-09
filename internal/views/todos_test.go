@@ -3,6 +3,7 @@ package views
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -243,8 +244,8 @@ func countTodoBlockLines(view, pageHeader string) int {
 	return n
 }
 
-// todosAt builds the dashboard over the fixture, filtered to LATER, with the
-// row for text selected.
+// todosAt builds the dashboard over the fixture, narrowed to filter ("" for
+// none), with the row for text selected.
 func todosAt(t *testing.T, filter, text string) (*Todos, *graph.Index) {
 	t.Helper()
 	quietTerm(t)
@@ -330,7 +331,7 @@ func TestTodosRebuildKeepsSelectionAndFilter(t *testing.T) {
 	b := td.visible[td.sel]
 	m := td.Update("x").mark
 
-	// A line shift in the rebuilt index must not lose the selection either.
+	// The rebuilt index no longer lists the task; selection stays on its done row.
 	td.marked(m, b.LineNumber, withoutTask(idx, b.Page, b.LineNumber))
 
 	if td.filter != "LATER" {
@@ -339,5 +340,53 @@ func TestTodosRebuildKeepsSelectionAndFilter(t *testing.T) {
 	got := td.visible[td.sel]
 	if got.Page != b.Page || got.LineNumber != b.LineNumber {
 		t.Errorf("selection = %s:%d, want %s:%d", got.Page, got.LineNumber, b.Page, b.LineNumber)
+	}
+}
+
+func TestTodosMarkedRelocatedFollowsNewLine(t *testing.T) {
+	td, idx := todosAt(t, "LATER", "Plane the walnut slab")
+	b := td.visible[td.sel]
+	m := td.Update("x").mark
+	shifted := withoutTask(idx, b.Page, b.LineNumber)
+	shifted.Todos = slices.Clone(shifted.Todos)
+	for i := range shifted.Todos {
+		if shifted.Todos[i].Page == b.Page {
+			shifted.Todos[i].LineNumber++
+		}
+	}
+
+	td.marked(m, b.LineNumber+1, shifted)
+
+	got := td.visible[td.sel]
+	if got.Page != b.Page || got.LineNumber != b.LineNumber+1 || got.Text != b.Text {
+		t.Fatalf("selection = %s:%d %q, want the done row at %s:%d", got.Page, got.LineNumber, got.Text, b.Page, b.LineNumber+1)
+	}
+	if _, ok := td.done[taskKey{b.Page, b.LineNumber + 1}]; !ok {
+		t.Errorf("done key did not follow the line: %v", td.done)
+	}
+	if back := td.Update("x").mark; back.line != b.LineNumber+1 || back.from != "DONE" {
+		t.Errorf("x on the done row = %+v, want DONE at line %d", back, b.LineNumber+1)
+	}
+}
+
+func TestTodosOpenTaskOnStaleDoneKeyStaysVisible(t *testing.T) {
+	td, idx := todosAt(t, "", "Plane the walnut slab")
+	b := td.visible[td.sel]
+	td.done[taskKey{b.Page, b.LineNumber}] = b
+	other := *idx
+	other.Todos = []graph.TodoBullet{{Page: b.Page, LineNumber: b.LineNumber, Marker: "TODO", Text: "a different task"}}
+	td.idx = &other
+
+	td.recompute()
+
+	var seen []string
+	for _, v := range td.visible {
+		seen = append(seen, v.Text)
+	}
+	if !slices.Contains(seen, "a different task") {
+		t.Errorf("open task hidden by a stale done row; visible = %v", seen)
+	}
+	if slices.Contains(seen, b.Text) {
+		t.Errorf("stale done row still listed; visible = %v", seen)
 	}
 }

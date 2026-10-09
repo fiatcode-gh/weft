@@ -40,7 +40,7 @@ func (t *Todos) cycleFilter() {
 func (t *Todos) recompute() {
 	t.visible = t.visible[:0]
 	for _, b := range t.idx.Todos {
-		if _, kept := t.done[taskKey{b.Page, b.LineNumber}]; kept {
+		if t.done.shadows(b) {
 			continue
 		}
 		t.visible = append(t.visible, b)

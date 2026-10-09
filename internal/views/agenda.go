@@ -31,7 +31,13 @@ func NewAgenda(idx *graph.Index, today time.Time, width, height int) *Agenda {
 // recompute rebuilds items from the index plus the session's done rows and
 // reselects the task at selKey when hadSel and it is still listed.
 func (a *Agenda) recompute(selKey taskKey, hadSel bool) {
-	todos := append(slices.Clone(a.idx.Todos), slices.Collect(maps.Values(a.done))...)
+	todos := make([]graph.TodoBullet, 0, len(a.idx.Todos)+len(a.done))
+	for _, b := range a.idx.Todos {
+		if !a.done.shadows(b) {
+			todos = append(todos, b)
+		}
+	}
+	todos = append(todos, slices.Collect(maps.Values(a.done))...)
 	a.items = graph.BuildAgenda(todos, a.today)
 	if hadSel {
 		for i, it := range a.items {
