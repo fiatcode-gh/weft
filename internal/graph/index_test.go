@@ -154,6 +154,20 @@ func TestBuildIndexJournalsSorted(t *testing.T) {
 	}
 }
 
+func TestIndexJournals(t *testing.T) {
+	idx := buildFixtureIndex(t)
+
+	got := idx.Journals()
+	if len(got) != 9 || got[0] != "2026-01-10" || got[8] != "2026-05-25" {
+		t.Fatalf("Journals() = %v, want 9 ascending names 2026-01-10 … 2026-05-25", got)
+	}
+
+	got[0] = "x"
+	if name, ok := idx.JournalNeighbor("2026-03-15", -1); !ok || name != "2026-01-10" {
+		t.Errorf("JournalNeighbor after mutating the copy = (%q, %v), want (2026-01-10, true)", name, ok)
+	}
+}
+
 func TestBuildIndexResolvesCaseInsensitively(t *testing.T) {
 	idx := buildFixtureIndex(t)
 
