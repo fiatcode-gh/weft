@@ -5,6 +5,10 @@ behind the read view's top visible line on the editor's top row. A selected
 link that is on screen wins over the top line. An unscrolled page with no
 visible selected link still opens at the top of the file.
 
+**Superseded by `folding-heading-links.md`** for the anchor rule: `e` now opens
+on the row cursor's line, not the top visible line or the selected link. The
+rest of this record (the row-to-line map, same-screen-row round trip) stands.
+
 This supersedes the "open at top" decision in
 `docs/superpowers/specs/2026-06-12-in-app-editor-design.md` (decision 3) and
 `docs/superpowers/specs/2026-06-17-editor-markdown-editing-design.md`. Their

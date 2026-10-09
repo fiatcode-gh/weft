@@ -10,7 +10,8 @@ page's backlinks missed them. Tags stay a link, not a new kind of thing: weft
 stores no tag list and writes nothing into the file.
 
 Out of scope: a `tags::` property, a separate tag list or tag colour, `#`
-inside `[[…]]` (still part of the page name), tag rename (unit 10), editing
+inside `[[…]]` (still part of the page name, unless no such page exists and
+it names a heading: see `folding-heading-links.md`), tag rename (unit 10), editing
 aids beyond completion. A tag's page is an ordinary page and can hold notes.
 
 ## Decisions
