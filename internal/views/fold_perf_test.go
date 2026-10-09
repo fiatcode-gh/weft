@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -61,17 +62,25 @@ func TestFoldSpeed10000(t *testing.T) {
 				}
 				return p
 			}
-			rowMap := bestOf(2, func() { render.SourceRows(body, perfW, "") })
-
-			first := time.Duration(1<<63 - 1)
-			for range 2 {
+			// The first Tab is bounded by the row map it has to build. Time the
+			// two alternately, each from a collected heap, so concurrent test
+			// binaries and the render garbage left by fresh() load both alike
+			// (CI runs packages in parallel on two CPUs).
+			rowMap := time.Duration(1<<63 - 1)
+			first := rowMap
+			for range 3 {
 				p := fresh()
+				runtime.GC()
 				t0 := time.Now()
 				hint := p.ToggleFold()
 				first = min(first, time.Since(t0))
 				if hint != "" {
 					t.Fatalf("first Tab hint %q", hint)
 				}
+				runtime.GC()
+				t0 = time.Now()
+				render.SourceRows(body, perfW, "")
+				rowMap = min(rowMap, time.Since(t0))
 			}
 			t.Logf("first Tab %v, row map alone %v", first, rowMap)
 			if limit := rowMap*11/10 + time.Duration(50*raceFactor)*time.Millisecond; first > limit {
