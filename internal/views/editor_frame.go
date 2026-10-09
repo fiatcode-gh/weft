@@ -35,10 +35,10 @@ type lineCache struct {
 }
 
 // textHeight is the number of text rows: the terminal height less the rule
-// row, the status line, the completion strip and the find bar, at least one. With no strip
+// row, the status line, the completion strip, the find bar and the date prompt, at least one. With no strip
 // it is the read view's window, so switching views keeps every row in place.
 func (e *EditorView) textHeight() int {
-	return max(1, e.height-2-e.completer.rows()-e.findRows())
+	return max(1, e.height-2-e.completer.rows()-e.findRows()-e.promptRows())
 }
 
 // syncBuffer tells the scanner and the cache about edits since the last call.
@@ -374,6 +374,10 @@ func (e *EditorView) View() string {
 		bar, _ := e.find.barView(max(1, e.width-pad))
 		v += "\n" + indentBlock(bar, pad)
 	}
+	if p := e.prompt; p != nil {
+		row, _ := p.promptView(max(1, e.width-pad))
+		v += "\n" + indentBlock(row, pad)
+	}
 	return v + "\n" + indentBlock(e.statusLine(), pad)
 }
 
@@ -387,6 +391,10 @@ func (e *EditorView) Cursor() *tea.Cursor {
 	e.ensureVisible()
 	if f := e.find; f != nil {
 		_, x := f.barView(max(1, e.width-e.geo.Margin))
+		return tea.NewCursor(min(e.geo.Margin+x, max(0, e.width-1)), e.textHeight()+e.completer.rows()+1)
+	}
+	if p := e.prompt; p != nil {
+		_, x := p.promptView(max(1, e.width-e.geo.Margin))
 		return tea.NewCursor(min(e.geo.Margin+x, max(0, e.width-1)), e.textHeight()+e.completer.rows()+1)
 	}
 	cur, x := e.cursorRow()

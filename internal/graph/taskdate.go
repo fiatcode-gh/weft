@@ -2,6 +2,8 @@ package graph
 
 import (
 	"regexp"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -88,4 +90,65 @@ func ParseStampLine(line string) (StampLine, bool) {
 		}
 	}
 	return s, true
+}
+
+var relDateRe = regexp.MustCompile(`^\+(\d{1,4})([dw])$`)
+
+// ParseDateInput reads a date typed into the editor's date prompt, relative to
+// today's civil date: YYYY-MM-DD, "today", "tomorrow", "+Nd"/"+Nw", or an
+// English weekday name (full or three letters) meaning the next such day
+// strictly after today. Case and surrounding space are ignored. The result is
+// YYYY-MM-DD.
+func ParseDateInput(s string, today time.Time) (date string, ok bool) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	y, m, d := today.Date()
+	base := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+	const layout = "2006-01-02"
+	switch s {
+	case "today":
+		return base.Format(layout), true
+	case "tomorrow":
+		return base.AddDate(0, 0, 1).Format(layout), true
+	}
+	if t, err := time.Parse(layout, s); err == nil {
+		return t.Format(layout), true
+	}
+	if m := relDateRe.FindStringSubmatch(s); m != nil {
+		n, _ := strconv.Atoi(m[1])
+		if m[2] == "w" {
+			n *= 7
+		}
+		return base.AddDate(0, 0, n).Format(layout), true
+	}
+	for wd := time.Sunday; wd <= time.Saturday; wd++ {
+		name := strings.ToLower(wd.String())
+		if s == name || s == name[:3] {
+			ahead := (int(wd)-int(base.Weekday())+6)%7 + 1
+			return base.AddDate(0, 0, ahead).Format(layout), true
+		}
+	}
+	return "", false
+}
+
+// StampText is the stamp's text "KEYWORD: <date Www[ time][ repeater]>"; Www is
+// the date's weekday. date must be a valid YYYY-MM-DD.
+func StampText(kind StampKind, date, timeOfDay, repeater string) string {
+	var b strings.Builder
+	b.WriteString(kind.Keyword())
+	b.WriteString(": <")
+	b.WriteString(date)
+	if t, err := time.Parse("2006-01-02", date); err == nil {
+		b.WriteByte(' ')
+		b.WriteString(t.Weekday().String()[:3])
+	}
+	if timeOfDay != "" {
+		b.WriteByte(' ')
+		b.WriteString(timeOfDay)
+	}
+	if repeater != "" {
+		b.WriteByte(' ')
+		b.WriteString(repeater)
+	}
+	b.WriteByte('>')
+	return b.String()
 }

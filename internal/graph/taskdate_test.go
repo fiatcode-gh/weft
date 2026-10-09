@@ -1,6 +1,9 @@
 package graph
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestParseStampLine(t *testing.T) {
 	valid := []struct {
@@ -67,5 +70,40 @@ func TestStampLineStamp(t *testing.T) {
 	}
 	if StampScheduled.Keyword() != "SCHEDULED" || StampDeadline.Keyword() != "DEADLINE" {
 		t.Error("Keyword mismatch")
+	}
+}
+
+func TestParseDateInput(t *testing.T) {
+	today := time.Date(2026, 5, 25, 10, 0, 0, 0, time.UTC) // a Monday
+	valid := map[string]string{
+		"2026-06-03": "2026-06-03",
+		"today":      "2026-05-25",
+		"tomorrow":   "2026-05-26",
+		"+0d":        "2026-05-25",
+		"+3d":        "2026-05-28",
+		"+2w":        "2026-06-08",
+		"fri":        "2026-05-29",
+		"monday":     "2026-06-01",
+		"MON":        "2026-06-01",
+		" Tue ":      "2026-05-26",
+	}
+	for in, want := range valid {
+		if got, ok := ParseDateInput(in, today); !ok || got != want {
+			t.Errorf("ParseDateInput(%q) = (%q,%v), want %q", in, got, ok, want)
+		}
+	}
+	for _, in := range []string{"2026-02-30", "+d", "+3x", "+12345d", "yesterday", "5/26", ""} {
+		if got, ok := ParseDateInput(in, today); ok {
+			t.Errorf("ParseDateInput(%q) = %q, want invalid", in, got)
+		}
+	}
+}
+
+func TestStampText(t *testing.T) {
+	if got, want := StampText(StampScheduled, "2026-10-12", "", ""), "SCHEDULED: <2026-10-12 Mon>"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if got, want := StampText(StampScheduled, "2026-10-12", "10:00", ".+1d"), "SCHEDULED: <2026-10-12 Mon 10:00 .+1d>"; got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }

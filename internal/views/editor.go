@@ -2,6 +2,7 @@ package views
 
 import (
 	"strings"
+	"time"
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
@@ -53,8 +54,10 @@ type EditorView struct {
 	clash         clashPrompt
 	width, height int
 	completer     *linkCompleter
-	find          *findBar // nil while the find bar is closed
-	lastQuery     string   // the last find query of this editor session
+	find          *findBar         // nil while the find bar is closed
+	lastQuery     string           // the last find query of this editor session
+	prompt        *datePrompt      // nil while the date prompt is closed
+	now           func() time.Time // the clock for relative dates
 
 	theme    render.Theme
 	geo      render.Geometry
@@ -111,6 +114,7 @@ func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, wid
 		cache:     map[int]*lineCache{},
 		source:    source,
 		previewed: map[int]previewRow{},
+		now:       time.Now,
 	}
 	e.width, e.height = width, height
 	e.geo = render.NewGeometry(theme, width)
@@ -127,6 +131,9 @@ func NewEditorView(idx *graph.Index, name, path, content string, isNew bool, wid
 func (e *EditorView) Paste(msg tea.PasteMsg) tea.Cmd {
 	e.notice = ""
 	if e.mode != editing {
+		return nil
+	}
+	if e.prompt != nil {
 		return nil
 	}
 	if e.find != nil {
@@ -194,7 +201,7 @@ func (e *EditorView) cursorSplit() (before, after string) {
 // that triggered this refresh edited the buffer; only an edit may open a closed
 // strip (see linkCompleter.refresh).
 func (e *EditorView) refreshCompleter(allowOpen bool) {
-	if e.find != nil { // the bar owns the keys; no strip over it
+	if e.find != nil || e.prompt != nil { // the bar owns the keys; no strip over it
 		e.ensureVisible()
 		return
 	}
@@ -346,6 +353,10 @@ func (e *EditorView) Update(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
 		e.toggleSource()
 		return EditorResult{}, nil
 	}
+	if e.prompt != nil {
+		e.updatePrompt(msg)
+		return EditorResult{}, nil
+	}
 	if e.find != nil {
 		if res, handled := e.updateFind(msg); handled {
 			return res, nil
@@ -383,6 +394,12 @@ func (e *EditorView) Update(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
 		return EditorResult{Exit: true}, nil
 	case "ctrl+f":
 		e.openFind()
+		return EditorResult{}, nil
+	case "alt+s":
+		e.openDatePrompt(graph.StampScheduled)
+		return EditorResult{}, nil
+	case "alt+e":
+		e.openDatePrompt(graph.StampDeadline)
 		return EditorResult{}, nil
 	}
 
@@ -531,6 +548,10 @@ func (e *EditorView) edit(key, text string) tea.Cmd {
 		b.CaseWord(buffer.CaseUpper)
 	case "ctrl+t":
 		b.CycleMarker()
+	case "alt+p":
+		if !b.CyclePriority() {
+			e.notice = "not on a task"
+		}
 	case "tab":
 		b.Indent()
 	case "shift+tab":
@@ -597,6 +618,12 @@ func (e *EditorView) statusLine() string {
 	right := styleFaint.Render("^S save · ^F find · ^R " + other + " · esc exit")
 	if e.find != nil {
 		right = styleFaint.Render(e.find.hints())
+	}
+	if p := e.prompt; p != nil {
+		right = styleFaint.Render("↵ set · esc cancel")
+		if p.errMsg != "" {
+			right = styleTitle.Render(p.errMsg)
+		}
 	}
 	if e.errMsg != "" {
 		right = styleTitle.Render("save failed: " + e.errMsg)

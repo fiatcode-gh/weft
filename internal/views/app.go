@@ -460,6 +460,7 @@ func (a *App) enterEditor() tea.Cmd {
 	}
 	at.Line += leadingTrimmedLines(content)
 	a.editor = NewEditorView(a.idx, name, path, content, isNew, a.width, a.height, at, &a.clip, a.editorSource)
+	a.editor.now = a.nowFunc
 	return nil
 }
 
