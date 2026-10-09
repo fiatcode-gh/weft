@@ -495,7 +495,7 @@ func (p *PageView) FollowCursor() string {
 // to name and scrolls it into view. No-op when the page has no such link.
 func (p *PageView) FocusLinkTo(name string) {
 	for i, l := range p.result.Links {
-		if resolved, ok := p.idx.Resolve(l.Target); ok && resolved.Name == name {
+		if d, ok := p.idx.ResolveLink(l.Target); ok && d.Page.Name == name {
 			if l.Start >= 0 && l.Start <= len(p.result.Styled) && len(p.full) > 0 {
 				p.revealFull(p.fullRowOf(l.Start))
 			}
@@ -621,6 +621,46 @@ func (p *PageView) ScrollToTask(ordinal int) {
 		return
 	}
 	p.centreOnOffset(off)
+}
+
+// ScrollToHeading puts the cursor on the first heading whose text matches
+// heading (graph.HeadingKey), unfolding what hides it and its own section, with
+// the heading one row below the top of the window. false when the page has no
+// such heading or no row map; the view then stays at the top.
+func (p *PageView) ScrollToHeading(heading string) bool {
+	key := graph.HeadingKey(heading)
+	var h *graph.Heading
+	hs := graph.Headings(p.body)
+	for i := range hs {
+		if graph.HeadingKey(hs[i].Text) == key {
+			h = &hs[i]
+			break
+		}
+	}
+	if h == nil {
+		return false
+	}
+	lines := p.sourceRows()
+	fr := -1
+	for r := range min(len(lines), len(p.full)) {
+		if lines[r] == h.Line && nonBlank(p.full[r]) {
+			fr = r
+			break
+		}
+	}
+	if fr < 0 {
+		return false
+	}
+	p.reveal(h.Line)
+	if e := p.entry(false); e != nil && e.folded[h.Line] {
+		delete(e.folded, h.Line)
+		p.applyFolds()
+	}
+	row := p.visRow(fr)
+	p.row = row
+	p.top = clampInt(row-1, 0, p.maxTop())
+	p.follow()
+	return true
 }
 
 // centreOnOffset centres the view on the row holding byte offset off, first

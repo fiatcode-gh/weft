@@ -300,6 +300,27 @@ func (a *App) navigateToTask(name string, ordinal int) {
 	}
 }
 
+// followLink opens a link target: the page, or the page at the heading the
+// target names.
+func (a *App) followLink(target string) tea.Cmd {
+	if d, ok := a.idx.ResolveLink(target); ok && d.Heading != "" {
+		return a.navigateToHeading(d.Page.Name, d.Heading)
+	}
+	a.navigate(target)
+	return nil
+}
+
+// navigateToHeading is navigate plus landing on the first heading of name
+// whose text matches heading; a hint when the page has no such heading now.
+func (a *App) navigateToHeading(name, heading string) tea.Cmd {
+	a.pushHistory(name, -1)
+	a.page.SetPage(name)
+	if !a.page.ScrollToHeading(heading) {
+		return a.setHint("heading not found: " + heading)
+	}
+	return nil
+}
+
 // navigateFocusingLink is navigate plus positioning the destination page's link
 // cursor on the first link back to backTarget — so jumping from a backlink lands
 // on (and highlights) the referencing link. The resulting cursor is stored in
@@ -953,7 +974,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, a.setHint(a.page.CycleFoldLevel())
 		case keyEnter:
 			if t := a.page.FollowCursor(); t != "" {
-				a.navigate(t)
+				return a, a.followLink(t)
 			}
 		case keyJ, keyDown:
 			a.page.LineDown()
