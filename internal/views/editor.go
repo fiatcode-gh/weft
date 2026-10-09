@@ -222,24 +222,17 @@ func (e *EditorView) refreshCompleter(allowOpen bool) {
 // A tag completion replaces "#partial" with tagText(name), writing nothing
 // when the text already matches.
 func (e *EditorView) acceptCompletion() {
-	cand, ok := e.completer.selected()
+	del, ins, ok := e.completer.completion()
 	if !ok {
 		return
 	}
 	cur := e.buf.Cursor()
-	switch {
-	case e.completer.tag:
-		start := buffer.Pos{Line: cur.Line, Col: cur.Col - len(e.completer.partial) - 1}
-		text := tagText(cand.name)
-		if e.buf.Line(cur.Line)[start.Col:cur.Col] != text {
-			e.buf.ReplaceRange(buffer.Range{Start: start, End: cur}, text)
-		}
+	start := buffer.Pos{Line: cur.Line, Col: cur.Col - del}
+	if e.buf.Line(cur.Line)[start.Col:cur.Col] != ins {
+		e.buf.ReplaceRange(buffer.Range{Start: start, End: cur}, ins)
+	}
+	if e.completer.tag {
 		e.completer.dismiss()
-	case cand.create:
-		e.buf.ReplaceRange(buffer.Range{Start: cur, End: cur}, "]]")
-	default:
-		start := buffer.Pos{Line: cur.Line, Col: cur.Col - len(e.completer.partial)}
-		e.buf.ReplaceRange(buffer.Range{Start: start, End: cur}, cand.name+"]]")
 	}
 	e.goalOK = false
 	e.afterKey(false)

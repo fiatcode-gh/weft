@@ -91,6 +91,8 @@ func (a *Agenda) Update(key string) OverlayResult {
 	switch key {
 	case keyEsc, keyQ:
 		return overlayCancel()
+	case "c":
+		return overlayCapture()
 	case keyUp, keyK:
 		a.moveUp()
 	case keyDown, keyJ:

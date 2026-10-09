@@ -87,6 +87,10 @@ type App struct {
 	// focus. Set when an open-overlay key is pressed; cleared by terminal outcomes.
 	active Overlay
 
+	// capture is the capture prompt drawn over the screen. While non-nil it
+	// owns every key.
+	capture *CapturePrompt
+
 	width  int
 	height int
 
@@ -666,6 +670,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if a.editor != nil {
 			a.editor.SetSize(m.Width, m.Height)
 		}
+		if a.capture != nil {
+			a.capture.SetSize(m.Width, m.Height)
+		}
 		return a, nil
 	case tea.PasteMsg:
 		// Bubble Tea v1 delivered a bracketed paste as one key whose String()
@@ -737,6 +744,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return a, tea.Batch(cmds...)
 		}
+		if a.capture != nil {
+			if key == "ctrl+c" {
+				return a, tea.Quit
+			}
+			switch a.capture.Update(m) {
+			case captureCancel:
+				a.capture = nil
+			case captureSubmit:
+				return a, a.submitCapture()
+			}
+			return a, nil
+		}
 		// An open overlay swallows all keys until it accepts or cancels —
 		// except ctrl+c, which must always quit (Bubble Tea convention; it
 		// works in every other mode).
@@ -781,6 +800,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case overlayResultHighlight:
 				a.navigateHighlighting(res.page, res.target)
 				a.active = nil
+			case overlayResultCapture:
+				a.openCapture()
 			}
 			return a, nil
 		}
@@ -804,6 +825,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.historyBack()
 		case "]":
 			a.historyForward()
+		case "c":
+			a.openCapture()
 		case ".":
 			if cmd, blocked := a.blockIfSyncing(); blocked {
 				return a, cmd
@@ -896,6 +919,17 @@ func (a *App) View() tea.View {
 	v.AltScreen = true
 	if a.editor != nil {
 		v.Cursor = a.editor.Cursor()
+	} else if a.capture != nil {
+		block, x, y := a.capture.View()
+		rows := strings.Count(block, "\n") + 1
+		y += max(0, a.height-rows)
+		if a.height > 0 {
+			y = clampInt(y, 0, a.height-1)
+		}
+		if a.width > 0 {
+			x = clampInt(x, 0, a.width-1)
+		}
+		v.Cursor = tea.NewCursor(x, y)
 	}
 	return v
 }
@@ -916,10 +950,17 @@ func (a *App) frame() string {
 	if a.editor != nil {
 		return a.editor.View()
 	}
+	var base string
 	if a.active != nil {
-		return a.centerOverlay(a.active.View())
+		base = a.centerOverlay(a.active.View())
+	} else {
+		base = a.page.View() + "\n" + a.statusBar()
 	}
-	return a.page.View() + "\n" + a.statusBar()
+	if a.capture != nil {
+		block, _, _ := a.capture.View()
+		return spliceBottom(base, block, a.height)
+	}
+	return base
 }
 
 // centerOverlay places content in the middle of the terminal. Falls back to
@@ -992,19 +1033,18 @@ func (a *App) blockIfSyncing() (cmd tea.Cmd, blocked bool) {
 	if !a.syncing {
 		return nil, false
 	}
-	const msg = "sync in progress — retry when it finishes"
 	switch o := a.active.(type) {
 	case *Backlinks:
-		o.SetError(msg)
+		o.SetError(syncBusyMsg)
 		return nil, true
 	case *Picker:
-		o.SetError(msg)
+		o.SetError(syncBusyMsg)
 		return nil, true
 	case taskPanel:
-		o.SetError(msg)
+		o.SetError(syncBusyMsg)
 		return nil, true
 	default:
-		return a.setHint("⟳ " + msg), true
+		return a.setHint("⟳ " + syncBusyMsg), true
 	}
 }
 

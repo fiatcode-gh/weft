@@ -109,6 +109,8 @@ func (b *Backlinks) Update(key string) OverlayResult {
 	switch key {
 	case keyEsc, "b":
 		return overlayCancel()
+	case "c":
+		return overlayCapture()
 	case keyUp, keyK, keyCtrlK:
 		b.errMsg = ""
 		b.moveSel(-1)
