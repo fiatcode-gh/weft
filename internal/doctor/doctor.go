@@ -72,7 +72,8 @@ func RunWith(graphPath string, lay layout.Layout, mentions MentionScanner) (*Rep
 }
 
 // run assembles the report from a built index. Orphans and mention targets
-// are non-journal pages only; journals stay in scope as mention sources
+// are non-journal pages only (orphans listed by key; a mention names the
+// winner of a name, so a clash loser has none); journals stay in scope as mention sources
 // because the scanner covers every indexed file.
 func run(idx *graph.Index, graphPath string, mentions MentionScanner) (*Report, error) {
 	rep := &Report{
@@ -87,9 +88,11 @@ func run(idx *graph.Index, graphPath string, mentions MentionScanner) (*Report, 
 			continue
 		}
 		rep.Pages++
-		names = append(names, p.Name)
-		if !hasOtherBacklink(idx, p.Name) {
-			rep.Orphans = append(rep.Orphans, p.Name)
+		if p.Key == p.Name {
+			names = append(names, p.Name)
+		}
+		if !hasOtherBacklink(idx, p.Key) {
+			rep.Orphans = append(rep.Orphans, p.Key)
 		}
 	}
 	sort.Strings(rep.Orphans)
@@ -106,11 +109,11 @@ func run(idx *graph.Index, graphPath string, mentions MentionScanner) (*Report, 
 	return rep, nil
 }
 
-// hasOtherBacklink reports whether any page other than name links to it —
+// hasOtherBacklink reports whether any page other than key links to it —
 // the same self-ref exclusion the backlinks panel applies.
-func hasOtherBacklink(idx *graph.Index, name string) bool {
-	for _, r := range idx.BacklinksTo(name) {
-		if r.FromPage != name {
+func hasOtherBacklink(idx *graph.Index, key string) bool {
+	for _, r := range idx.BacklinksTo(key) {
+		if r.FromPage != key {
 			return true
 		}
 	}

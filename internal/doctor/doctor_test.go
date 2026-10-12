@@ -360,3 +360,93 @@ func TestRunWithCountsNestedPagesInConfiguredFolders(t *testing.T) {
 		t.Errorf("pages/journals = %d/%d, want 2/1", rep.Pages, rep.Journals)
 	}
 }
+
+func vaultPath(t *testing.T) (string, layout.Layout) {
+	t.Helper()
+	dir, err := filepath.Abs("../../testdata/obsidian-vault")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lay, err := layout.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir, lay
+}
+
+func TestRunWithVaultScansWinnersOnly(t *testing.T) {
+	dir, lay := vaultPath(t)
+	var scanned []string
+	scanner := func(name string) ([]graph.UnlinkedRef, error) {
+		scanned = append(scanned, name)
+		return nil, nil
+	}
+
+	rep, err := RunWith(dir, lay, scanner)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if want := []string{"Alpha", "Home", "Ideas", "Note"}; !reflect.DeepEqual(scanned, want) {
+		t.Errorf("scanned = %v, want %v (never b/Note)", scanned, want)
+	}
+	wantWarn := `page name "Note" is shared by 2 files (a/Note.md, b/Note.md); [[Note]] opens a/Note.md`
+	if !reflect.DeepEqual(rep.Warnings, []string{wantWarn}) {
+		t.Errorf("warnings = %q, want [%q]", rep.Warnings, wantWarn)
+	}
+	if rep.Pages != 5 || rep.Journals != 2 {
+		t.Errorf("counts = %d pages / %d journals, want 5 / 2", rep.Pages, rep.Journals)
+	}
+	if len(rep.Orphans) != 0 {
+		t.Errorf("orphans = %v, want none", rep.Orphans)
+	}
+}
+
+func TestRunWithOrphansListKeys(t *testing.T) {
+	dir := tempGraph(t, map[string]string{
+		".weft/config.toml": "pages_dir = \"\"\n",
+		"Note.md":           "- n\n",
+		"x/Note.md":         "- x\n",
+	})
+	lay, err := layout.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep, err := RunWith(dir, lay, func(string) ([]graph.UnlinkedRef, error) { return nil, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"Note", "x/Note"}; !reflect.DeepEqual(rep.Orphans, want) {
+		t.Errorf("orphans = %v, want %v", rep.Orphans, want)
+	}
+}
+
+func TestRunVaultReportsIndexedMentionsOnly(t *testing.T) {
+	skipIfNoRipgrep(t)
+	dir, lay := vaultPath(t)
+
+	rep, err := Run(dir, lay)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var alpha *PageMentions
+	for i := range rep.Mentions {
+		if rep.Mentions[i].Page == "Alpha" {
+			alpha = &rep.Mentions[i]
+		}
+	}
+	if alpha == nil {
+		t.Fatalf("no mentions of Alpha in %+v", rep.Mentions)
+	}
+	if len(alpha.Refs) != 1 || alpha.Refs[0].PageName != "Ideas" {
+		t.Errorf("Alpha mentions = %+v, want exactly Ideas", alpha.Refs)
+	}
+	for _, m := range rep.Mentions {
+		for _, r := range m.Refs {
+			if strings.Contains(r.FilePath, ".obsidian") || strings.Contains(r.FilePath, ".trash") {
+				t.Errorf("mention from unindexed %s", r.FilePath)
+			}
+		}
+	}
+}

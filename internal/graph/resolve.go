@@ -2,9 +2,12 @@ package graph
 
 import "strings"
 
-// Resolve returns the page whose name matches name exactly, or whose
-// case-folded form matches name's lower-case. The case-preserving
-// PageMeta is always returned, so callers see the on-disk name.
+// Resolve returns the page a link target opens: the page whose name matches
+// exactly, else whose case-folded name matches, else (target of two or more
+// non-empty '/' segments) the page whose graph-relative path without ".md"
+// ends with the target on whole segments, case-insensitively. A clash is won
+// by a journal, then the shallower path, then the smaller path. The
+// case-preserving PageMeta is always returned.
 func (idx *Index) Resolve(name string) (*PageMeta, bool) {
 	if p, ok := idx.ByName[name]; ok {
 		return p, true
@@ -12,7 +15,7 @@ func (idx *Index) Resolve(name string) (*PageMeta, bool) {
 	if p, ok := idx.ByNameFold[strings.ToLower(name)]; ok {
 		return p, true
 	}
-	return nil, false
+	return idx.resolvePath(name)
 }
 
 // LinkDest is where a link target leads: a page, and a heading on it when

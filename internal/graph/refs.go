@@ -56,7 +56,7 @@ func (idx *Index) FilterUnlinked(hits []search.Hit, targetPath string, read func
 		}
 		out = append(out, UnlinkedRef{
 			FilePath: h.FilePath,
-			PageName: page.Name,
+			PageName: page.Key,
 			Line:     h.Line,
 			Context:  h.Context,
 			Match:    span,

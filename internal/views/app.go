@@ -265,13 +265,13 @@ func (a *App) navigate(name string) {
 	a.navigateToTask(name, -1)
 }
 
-// canonicalName maps a raw wiki-link target to the indexed page's exact
-// (filename-derived) name, so downstream exact-match lookups agree with
-// the case-insensitive Resolve the read view uses. Unindexed names pass
-// through unchanged — they name pages that don't exist yet.
+// canonicalName maps a raw wiki-link target to the indexed page's key, so
+// downstream exact-match lookups agree with the Resolve the read view uses
+// (case-insensitive, path-qualified). Unindexed names pass through
+// unchanged — they name pages that don't exist yet.
 func (a *App) canonicalName(name string) string {
 	if meta, ok := a.idx.Resolve(name); ok {
-		return meta.Name
+		return meta.Key
 	}
 	return name
 }
@@ -312,7 +312,7 @@ func (a *App) navigateToTask(name string, ordinal int) {
 // target names.
 func (a *App) followLink(target string) tea.Cmd {
 	if d, ok := a.idx.ResolveLink(target); ok && d.Heading != "" {
-		return a.navigateToHeading(d.Page.Name, d.Heading)
+		return a.navigateToHeading(d.Page.Key, d.Heading)
 	}
 	a.navigate(target)
 	return nil
@@ -578,18 +578,22 @@ func (a *App) placeFromEditor(at Anchor) {
 	a.page.PlaceAnchor(at)
 }
 
-// unlinkedRefs finds bare-text mentions of `name` elsewhere in the graph that
-// aren't already links. Best-effort: a ripgrep failure yields no unlinked refs
+// unlinkedRefs finds bare-text mentions of the page key opens elsewhere in the
+// graph that aren't already links. A clash loser has none (a bare mention
+// names the winner); an unresolved key is scanned as written. Best-effort: a ripgrep failure yields no unlinked refs
 // rather than breaking the backlinks panel — and an error hint would be
 // invisible behind the overlay anyway (cf. the slice-1 hidden-hint lesson).
-func (a *App) unlinkedRefs(name string) []graph.UnlinkedRef {
+func (a *App) unlinkedRefs(key string) []graph.UnlinkedRef {
+	name, targetPath := key, ""
+	if meta, ok := a.idx.Resolve(key); ok {
+		if meta.Key != meta.Name {
+			return nil
+		}
+		name, targetPath = meta.Name, meta.Path
+	}
 	hits, err := search.Mentions(a.idx.Files(), name)
 	if err != nil {
 		return nil
-	}
-	targetPath := ""
-	if meta, ok := a.idx.Resolve(name); ok {
-		targetPath = meta.Path
 	}
 	return a.idx.FilterUnlinked(hits, targetPath, func(p string) (string, error) {
 		b, err := os.ReadFile(p)

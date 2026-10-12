@@ -5,6 +5,7 @@ import "time"
 // PageMeta is the indexed metadata for one .md file in the graph.
 type PageMeta struct {
 	Name      string    // filename stem; for pages "___" reads as "/" (e.g. "proj/nested"); for journals the stem as is ("2026_05_24")
+	Key       string    // link target that opens exactly this page: Name, or a clash loser's shortest resolving path suffix
 	Path      string    // filesystem path; absolute only when the supplied graph path is absolute
 	Rel       string    // graph-relative path, slash-separated, with ".md"
 	IsJournal bool      // matches journal_file_pattern under journals_dir

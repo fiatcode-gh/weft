@@ -27,8 +27,8 @@ type linkCandidate struct {
 // from the text before the cursor (refresh). It never touches the buffer;
 // EditorView translates between the two.
 type linkCompleter struct {
-	choices    []pickerChoice // deduped, mtime-sorted page names (reused from picker)
-	names      []string       // lockstep with choices, for fuzzy.Find
+	choices    []pickerChoice // every page, mtime-sorted (reused from picker); completion matches and inserts keys
+	names      []string       // choice keys, lockstep with choices, for fuzzy.Find
 	active     bool
 	dismissed  bool   // user pressed esc; stays closed until the partial changes
 	tag        bool   // the open list was triggered by #, not [[
@@ -44,7 +44,7 @@ func newLinkCompleter(idx *graph.Index) *linkCompleter {
 		c.choices = pickerChoices(idx)
 		c.names = make([]string, len(c.choices))
 		for i, ch := range c.choices {
-			c.names[i] = ch.name
+			c.names[i] = ch.key
 		}
 	}
 	return c
@@ -181,7 +181,7 @@ func (c *linkCompleter) buildCands(partial string) []linkCandidate {
 	var out []linkCandidate
 	if partial == "" {
 		for _, ch := range c.choices {
-			out = append(out, linkCandidate{name: ch.name})
+			out = append(out, linkCandidate{name: ch.key})
 		}
 		return out
 	}

@@ -19,16 +19,18 @@ type Index struct {
 	Layout     layout.Layout
 	GraphPath  string
 	Pages      []PageMeta
-	ByName     map[string]*PageMeta // case-preserving (filename-derived)
-	ByNameFold map[string]*PageMeta // case-folded (lowercase key) — for [[ALPHA]] → Alpha
+	ByName     map[string]*PageMeta // exact name → clash winner
+	ByNameFold map[string]*PageMeta // lower-cased name → clash winner — for [[ALPHA]] → Alpha
 	Todos      []TodoBullet
 
 	byPath map[string]*PageMeta // exact Path → page, pointers into Pages
 	files  []string             // every PageMeta.Path in walk order
 
-	backlinks   map[string][]Ref  // keyed by strings.ToLower(target) — resolution is case-insensitive
-	targetSpell map[string]string // folded target → first-seen original spelling (walk order)
-	journals    []PageMeta        // journal pages (copies), sorted ascending by Date
+	linksTo     map[string][]Ref       // resolved links, keyed by the target page's Path
+	unresolved  map[string][]Ref       // links no page opens, keyed by strings.ToLower(target)
+	targetSpell map[string]string      // folded unresolved target → first-seen spelling (walk order)
+	stems       map[string][]*PageMeta // lower-cased filename stem → pages, for path resolution
+	journals    []PageMeta             // journal pages (copies), sorted ascending by Date
 
 	// headingKeys holds each page's HeadingKey set, keyed by PageMeta.Path.
 	headingKeys map[string]map[string]struct{}
@@ -57,7 +59,8 @@ func BuildIndex(graphPath string, lay layout.Layout) (*Index, error) {
 		GraphPath:   graphPath,
 		ByName:      make(map[string]*PageMeta),
 		ByNameFold:  make(map[string]*PageMeta),
-		backlinks:   make(map[string][]Ref),
+		linksTo:     make(map[string][]Ref),
+		unresolved:  make(map[string][]Ref),
 		targetSpell: make(map[string]string),
 		headingKeys: make(map[string]map[string]struct{}),
 		byPath:      make(map[string]*PageMeta),
@@ -69,31 +72,14 @@ func BuildIndex(graphPath string, lay layout.Layout) (*Index, error) {
 		}
 	}
 
-	// ByName / ByNameFold must be built after Pages is final (so pointers are
-	// stable). Keep the first page walked for each (folded) key so resolution is
-	// deterministic — os.ReadDir returns entries sorted by filename — and warn on
-	// a genuine case-fold collision rather than silently letting the last win.
+	// Names, clashes and keys need Pages final (so pointers are stable).
 	for i := range idx.Pages {
 		idx.byPath[idx.Pages[i].Path] = &idx.Pages[i]
 		idx.files = append(idx.files, idx.Pages[i].Path)
-		name := idx.Pages[i].Name
-		fold := strings.ToLower(name)
-		if existing, ok := idx.ByNameFold[fold]; ok {
-			if existing.Name != name {
-				idx.warnf("ambiguous page name %q vs %q (case-insensitive); [[%s]] resolves to %q",
-					name, existing.Name, fold, existing.Name)
-				// The folded key stays first-wins, but an exact-name lookup
-				// has no ambiguity — it must still find this page.
-				if _, dup := idx.ByName[name]; !dup {
-					idx.ByName[name] = &idx.Pages[i]
-				}
-			}
-			continue
-		}
-		idx.ByNameFold[fold] = &idx.Pages[i]
-		idx.ByName[name] = &idx.Pages[i]
 	}
+	idx.buildNames()
 
+	// Journals are copied after the keys are set.
 	for _, p := range idx.Pages {
 		if p.IsJournal {
 			idx.journals = append(idx.journals, p)
@@ -125,11 +111,11 @@ func BuildIndex(graphPath string, lay layout.Layout) (*Index, error) {
 			idx.headingKeys[p.Path] = keys
 		}
 		for _, lh := range links {
-			pending = append(pending, pendingLink{p.Name, lh.Target, lh.Line, lineContext(lines, lh.Line)})
+			pending = append(pending, pendingLink{p.Key, lh.Target, lh.Line, lineContext(lines, lh.Line)})
 		}
 		for k, th := range todos {
 			idx.Todos = append(idx.Todos, TodoBullet{
-				Page:       p.Name,
+				Page:       p.Key,
 				LineNumber: th.Line,
 				Marker:     th.Marker,
 				Priority:   th.Priority,
@@ -141,24 +127,19 @@ func BuildIndex(graphPath string, lay layout.Layout) (*Index, error) {
 		}
 	}
 
-	// Phase B, in walk order: key each link. A link that resolves only as a
-	// heading link is keyed under its page.
+	// Phase B, in walk order: a link that resolves is filed under its page's
+	// Path; one that does not under its lower-cased target.
 	for _, pl := range pending {
-		spelling := pl.target
-		if _, ok := idx.Resolve(pl.target); !ok {
-			if dest, ok := idx.ResolveLink(pl.target); ok {
-				spelling = dest.Page.Name
-			}
+		ref := Ref{FromPage: pl.page, LineNumber: pl.line, Context: pl.context}
+		if dest, ok := idx.ResolveLink(pl.target); ok {
+			idx.linksTo[dest.Page.Path] = append(idx.linksTo[dest.Page.Path], ref)
+			continue
 		}
-		key := strings.ToLower(spelling)
+		key := strings.ToLower(pl.target)
 		if _, seen := idx.targetSpell[key]; !seen {
-			idx.targetSpell[key] = spelling
+			idx.targetSpell[key] = pl.target
 		}
-		idx.backlinks[key] = append(idx.backlinks[key], Ref{
-			FromPage:   pl.page,
-			LineNumber: pl.line,
-			Context:    pl.context,
-		})
+		idx.unresolved[key] = append(idx.unresolved[key], ref)
 	}
 	return idx, nil
 }
@@ -232,9 +213,13 @@ func mustRel(base, p string) string {
 	return r
 }
 
-// BacklinksTo returns a snapshot of references to name using the index's case-insensitive key.
-func (idx *Index) BacklinksTo(name string) []Ref {
-	return slices.Clone(idx.backlinks[strings.ToLower(name)])
+// BacklinksTo returns a snapshot of references to the page key opens, or —
+// when key opens no page — to that (case-insensitive) unresolved target.
+func (idx *Index) BacklinksTo(key string) []Ref {
+	if p, ok := idx.Resolve(key); ok {
+		return slices.Clone(idx.linksTo[p.Path])
+	}
+	return slices.Clone(idx.unresolved[strings.ToLower(key)])
 }
 
 // NewPagePath returns the file path a new page called name is created at,
@@ -304,7 +289,7 @@ func (idx *Index) JournalNeighbor(key string, dir int) (string, bool) {
 	if j < 0 || j >= len(idx.journals) {
 		return "", false
 	}
-	return idx.journals[j].Name, true
+	return idx.journals[j].Key, true
 }
 
 // lineContext returns the n-th 1-based line from a pre-split body with any

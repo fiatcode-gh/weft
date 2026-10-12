@@ -14,8 +14,11 @@ import (
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
 )
 
+// pickerChoice is one page row: label is what the row shows and fuzzy
+// matching runs on; key is the link target that opens exactly that page.
 type pickerChoice struct {
-	name  string
+	label string
+	key   string
 	mtime time.Time
 }
 
@@ -24,7 +27,7 @@ type Picker struct {
 	idx        *graph.Index
 	input      textinput.Model
 	choices    []pickerChoice
-	names      []string // derived from choices, kept in lockstep for fuzzy.Find
+	labels     []string // choice labels, kept in lockstep with choices for fuzzy.Find
 	matches    []fuzzy.Match
 	now        time.Time // captured at construction for stable relative-time hints
 	createName string    // non-empty when a "＋ Create" row should be offered
@@ -46,33 +49,37 @@ func NewPicker(idx *graph.Index, width, height int) *Picker {
 	ti.CharLimit = 200
 	p := &Picker{listBox: listBox{width: width, height: height}, idx: idx, input: ti, now: time.Now()}
 	p.choices = pickerChoices(idx)
-	p.names = make([]string, len(p.choices))
+	p.labels = make([]string, len(p.choices))
 	for i, c := range p.choices {
-		p.names[i] = c.name
+		p.labels[i] = c.label
 	}
 	p.search("")
 	return p
 }
 
-// pickerChoices returns the picker candidate list sorted with the most
-// recently modified files first. Only real on-disk pages and journals
-// appear here; the synthetic "＋ Create" row for a not-yet-existent page is
+// pickerChoices returns every page and journal, most recently modified first.
+// A page's label is its name; members of a name clash are labelled with their
+// path without ".md" instead, so every row is distinct. Only real on-disk
+// pages appear here; the synthetic "＋ Create" row for a not-yet-existent page is
 // handled separately (see refreshCreate / createName).
 func pickerChoices(idx *graph.Index) []pickerChoice {
-	seen := make(map[string]struct{}, len(idx.Pages))
+	shared := make(map[string]int, len(idx.Pages))
+	for _, p := range idx.Pages {
+		shared[p.Name]++
+	}
 	entries := make([]pickerChoice, 0, len(idx.Pages))
 	for _, p := range idx.Pages {
-		if _, ok := seen[p.Name]; ok {
-			continue
+		label := p.Name
+		if shared[p.Name] > 1 {
+			label = strings.TrimSuffix(p.Rel, ".md")
 		}
-		seen[p.Name] = struct{}{}
-		entries = append(entries, pickerChoice{name: p.Name, mtime: p.ModTime})
+		entries = append(entries, pickerChoice{label: label, key: p.Key, mtime: p.ModTime})
 	}
 	sort.SliceStable(entries, func(i, j int) bool {
 		if !entries[i].mtime.Equal(entries[j].mtime) {
 			return entries[i].mtime.After(entries[j].mtime)
 		}
-		return entries[i].name < entries[j].name
+		return entries[i].label < entries[j].label
 	})
 	return entries
 }
@@ -123,13 +130,13 @@ func (p *Picker) search(q string) {
 		// scroll to.
 		p.matches = p.matches[:0]
 		for i, c := range p.choices {
-			p.matches = append(p.matches, fuzzy.Match{Str: c.name, Index: i})
+			p.matches = append(p.matches, fuzzy.Match{Str: c.label, Index: i})
 		}
 		p.sel = 0
 		p.refreshCreate(q)
 		return
 	}
-	p.matches = fuzzy.Find(q, p.names)
+	p.matches = fuzzy.Find(q, p.labels)
 	p.sel = 0
 	p.refreshCreate(q)
 }
@@ -145,7 +152,7 @@ func (p *Picker) Update(key string) OverlayResult {
 			return overlayCreate(p.createName)
 		}
 		if p.sel >= 0 && p.sel < len(p.matches) {
-			return overlayOpen(p.matches[p.sel].Str)
+			return overlayOpen(p.choices[p.matches[p.sel].Index].key)
 		}
 		return OverlayResult{}
 	case keyUp, keyCtrlK:

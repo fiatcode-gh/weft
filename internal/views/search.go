@@ -30,11 +30,11 @@ func NewSearchView(idx *graph.Index, width, height int) *SearchView {
 	return s
 }
 
-// hitLabel returns the column-left label for a hit row: the page name when
+// hitLabel returns the column-left label for a hit row: the page key when
 // the file is in the index, falling back to the path itself otherwise.
 func (s *SearchView) hitLabel(filePath string) string {
 	if p, ok := s.idx.PageAt(filePath); ok {
-		return p.Name
+		return p.Key
 	}
 	return filePath
 }
@@ -86,7 +86,7 @@ func (s *SearchView) Apply(msg searchDoneMsg) {
 // file isn't in the index.
 func (s *SearchView) pageName(filePath string) string {
 	if p, ok := s.idx.PageAt(filePath); ok {
-		return p.Name
+		return p.Key
 	}
 	return ""
 }

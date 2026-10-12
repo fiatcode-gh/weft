@@ -23,8 +23,9 @@ func TestTodayJournalNameUsesNowFunc(t *testing.T) {
 }
 
 type bootConfig struct {
-	files map[string]string
-	now   time.Time
+	files   map[string]string
+	fixture string // testdata/<fixture> to clone when files is nil; default fixture-graph
+	now     time.Time
 }
 
 // bootApp loads a test graph and initializes PageView through the production
@@ -43,6 +44,8 @@ func bootApp(t *testing.T, configs ...bootConfig) *App {
 	var graphPath string
 	if cfg.files != nil {
 		graphPath, _ = writeGraph(t, cfg.files)
+	} else if cfg.fixture != "" {
+		graphPath = cloneGraph(t, cfg.fixture)
 	} else {
 		graphPath = cloneFixtureGraph(t)
 	}
