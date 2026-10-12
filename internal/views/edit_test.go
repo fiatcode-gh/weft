@@ -12,7 +12,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/fiatcode-gh/weft/v2/internal/graph"
 	"github.com/fiatcode-gh/weft/v2/internal/layout"
 	syncpkg "github.com/fiatcode-gh/weft/v2/internal/sync"
 )
@@ -142,14 +141,14 @@ func TestShiftE_ColdStartCreatesTodayJournal(t *testing.T) {
 	}
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
-	today := "2026-06-05"
+	today := "2026_06_05"
 	if a.page.Page() != today {
 		t.Fatalf("precondition: boot page should be %q, got %q", today, a.page.Page())
 	}
 	if _, ok := a.idx.ByName[today]; ok {
 		t.Fatalf("precondition: today's journal should NOT be in index; file doesn't exist")
 	}
-	journalPath := filepath.Join(dir, "journals", graph.FilenameFromPageName(today))
+	journalPath := filepath.Join(dir, "journals", today+".md")
 	if _, err := os.Stat(journalPath); !os.IsNotExist(err) {
 		t.Fatalf("precondition: journal file should not exist; stat err=%v", err)
 	}
@@ -188,8 +187,8 @@ func TestE_ColdStart_DefersCreation(t *testing.T) {
 	}
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
-	today := "2026-06-05"
-	journalPath := filepath.Join(dir, "journals", graph.FilenameFromPageName(today))
+	today := "2026_06_05"
+	journalPath := filepath.Join(dir, "journals", today+".md")
 
 	pressE(t, a)
 	if a.editor == nil {
@@ -223,8 +222,8 @@ func TestDotKey_CreatesMissingTodayJournal_ThenEditReachable(t *testing.T) {
 	}
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
-	today := "2026-06-05"
-	journalPath := filepath.Join(dir, "journals", graph.FilenameFromPageName(today))
+	today := "2026_06_05"
+	journalPath := filepath.Join(dir, "journals", today+".md")
 	if _, err := os.Stat(journalPath); !os.IsNotExist(err) {
 		t.Fatalf("precondition: journal file should not exist; stat err=%v", err)
 	}

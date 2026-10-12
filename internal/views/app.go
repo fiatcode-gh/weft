@@ -199,7 +199,13 @@ func New(graphPath string, lay layout.Layout, version string) *App {
 	return a
 }
 
-func (a *App) todayJournalName() string { return a.nowFunc().Format("2006-01-02") }
+// today is the civil date of the clock (UTC midnight, like every journal date).
+func (a *App) today() time.Time {
+	y, m, d := a.nowFunc().Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}
+
+func (a *App) todayJournalName() string { return a.lay.JournalName(a.today()) }
 
 // setHint stores s as the active status-bar hint, bumps hintGen, and returns
 // a tea.Cmd that delivers a hintExpireMsg after hintTTL. The handler clears
@@ -424,10 +430,11 @@ func (a *App) editCurrent() tea.Cmd {
 		// normal navigation (picker / wiki-links only point to
 		// indexed pages) and a missing journal is the only one
 		// worth handling automatically.
-		if !graph.IsJournalPageName(page) {
+		day, ok := a.idx.JournalDateOf(page)
+		if !ok {
 			return a.setHint("page not in index: " + page)
 		}
-		if err := a.createJournalAndReindex(page); err != nil {
+		if err := a.createJournalAndReindex(day); err != nil {
 			return a.setHint(err.Error())
 		}
 		newMeta, ok := a.idx.Resolve(page)
@@ -478,8 +485,8 @@ func (a *App) enterEditor() tea.Cmd {
 	var path string
 	if meta, ok := a.idx.Resolve(name); ok {
 		path = meta.Path
-	} else if graph.IsJournalPageName(name) {
-		path = a.journalPath(name)
+	} else if day, ok := a.idx.JournalDateOf(name); ok {
+		path = a.idx.JournalPath(day)
 	} else {
 		p, err := a.idx.NewPagePath(name)
 		if err != nil {
@@ -492,7 +499,7 @@ func (a *App) enterEditor() tea.Cmd {
 		return a.setHint("cannot read: " + err.Error())
 	}
 	content, isNew := snap.Content, !snap.Exists
-	if isNew && graph.IsJournalPageName(name) {
+	if _, isJournal := a.idx.JournalDateOf(name); isNew && isJournal {
 		// A new journal opens on the journal template; nothing is written
 		// until save.
 		tmpl, err := a.journalTemplate()
@@ -894,7 +901,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "A":
 			a.active = NewAgenda(a.idx, a.nowFunc(), a.width, a.height)
 		case "C":
-			a.active = NewCalendar(a.idx.Journals(), a.page.Page(), a.nowFunc(), a.width, a.height)
+			a.active = NewCalendar(a.idx, a.page.Page(), a.nowFunc(), a.width, a.height)
 		case "O":
 			a.active = NewOnThisDay(a.idx, a.nowFunc(), a.readSnapshot, a.width, a.height)
 		case "?":
@@ -909,10 +916,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if cmd, blocked := a.blockIfSyncing(); blocked {
 				return a, cmd
 			}
-			today := a.todayJournalName()
+			day := a.today()
+			today := a.lay.JournalName(day)
 			var probe tea.Cmd
-			if _, ok := a.idx.ByName[today]; !ok {
-				if err := a.createJournalAndReindex(today); err != nil {
+			if _, ok := a.idx.JournalOn(day); !ok {
+				if err := a.createJournalAndReindex(day); err != nil {
 					return a, a.setHint(err.Error())
 				}
 				// Creating the journal wrote a new file (from the journal
@@ -927,14 +935,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			page := a.page.Page()
 			if name, ok := a.idx.JournalNeighbor(page, -1); ok {
 				a.navigate(name)
-			} else if graph.IsJournalPageName(page) {
+			} else if _, ok := a.idx.JournalDateOf(page); ok {
 				return a, a.setHint("no earlier journal")
 			}
 		case ">":
 			page := a.page.Page()
 			if name, ok := a.idx.JournalNeighbor(page, +1); ok {
 				a.navigate(name)
-			} else if graph.IsJournalPageName(page) {
+			} else if _, ok := a.idx.JournalDateOf(page); ok {
 				return a, a.setHint("no later journal")
 			}
 		case "g":

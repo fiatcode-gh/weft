@@ -7,19 +7,6 @@ import (
 	"time"
 )
 
-const journalLayout = "2006-01-02"
-
-// JournalDate parses a journal page name (YYYY-MM-DD) as a real calendar date.
-// ok is false for any other name, including date-shaped names that are not
-// dates ("2026-13-01", "2027-02-29").
-func JournalDate(name string) (time.Time, bool) {
-	t, err := time.Parse(journalLayout, name)
-	if err != nil {
-		return time.Time{}, false
-	}
-	return civilDay(t), true
-}
-
 // civilDay drops the time of day, keeping the calendar date in UTC.
 func civilDay(t time.Time) time.Time {
 	y, m, d := t.Date()
@@ -36,17 +23,19 @@ func AddMonthsClamped(day time.Time, n int) time.Time {
 }
 
 // OnThisDayEntry is one existing journal "on this day": Label is
-// "1 week ago", "1 month ago" or the year ("2025"); Name is the journal page name.
-type OnThisDayEntry struct{ Label, Name string }
+// "1 week ago", "1 month ago" or the year ("2025").
+type OnThisDayEntry struct {
+	Label   string
+	Journal PageMeta
+}
 
-// OnThisDay lists the journals in journals (sorted page names, as
+// OnThisDay lists the journals in journals (sorted ascending by Date, as
 // Index.Journals returns) for one week before today, one month before
 // (AddMonthsClamped(today, -1)), and the same month and day in every
 // earlier year, newest year first, in that order. Dates without a journal are
-// left out; a February 29 has no entry in years without one (names that are
-// not real dates are ignored, so 2027-02-29 never matches and 02-28 is not
+// left out; a February 29 has no entry in years without one (02-28 is not
 // substituted). Returns nil when none exist.
-func OnThisDay(today time.Time, journals []string) []OnThisDayEntry {
+func OnThisDay(today time.Time, journals []PageMeta) []OnThisDayEntry {
 	today = civilDay(today)
 	var out []OnThisDayEntry
 	for _, c := range []struct {
@@ -56,20 +45,25 @@ func OnThisDay(today time.Time, journals []string) []OnThisDayEntry {
 		{"1 week ago", today.AddDate(0, 0, -7)},
 		{"1 month ago", AddMonthsClamped(today, -1)},
 	} {
-		name := c.day.Format(journalLayout)
-		if _, found := slices.BinarySearch(journals, name); found {
-			out = append(out, OnThisDayEntry{Label: c.label, Name: name})
+		if i, found := journalSearch(journals, c.day); found {
+			out = append(out, OnThisDayEntry{Label: c.label, Journal: journals[i]})
 		}
 	}
 	_, month, day := today.Date()
 	for i := len(journals) - 1; i >= 0; i-- {
-		d, ok := JournalDate(journals[i])
-		if !ok || d.Year() >= today.Year() || d.Month() != month || d.Day() != day {
+		d := journals[i].Date
+		if d.Year() >= today.Year() || d.Month() != month || d.Day() != day {
 			continue
 		}
-		out = append(out, OnThisDayEntry{Label: strconv.Itoa(d.Year()), Name: journals[i]})
+		out = append(out, OnThisDayEntry{Label: strconv.Itoa(d.Year()), Journal: journals[i]})
 	}
 	return out
+}
+
+// journalSearch binary-searches journals (ascending by Date) for day and
+// returns its position, or its insertion point and false.
+func journalSearch(journals []PageMeta, day time.Time) (int, bool) {
+	return slices.BinarySearchFunc(journals, day, func(p PageMeta, d time.Time) int { return p.Date.Compare(d) })
 }
 
 // AppendLine returns content with line added as a new last line. A missing

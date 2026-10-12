@@ -2,7 +2,6 @@ package views
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -22,24 +21,24 @@ var calToday = lipgloss.NewStyle().Bold(true).Underline(true)
 
 // Calendar is the month-grid overlay for moving between journals.
 type Calendar struct {
-	journals      []string  // idx.Journals(), sorted
-	today, cursor time.Time // civil dates (UTC midnight)
+	idx           *graph.Index // the index the calendar was opened with
+	today, cursor time.Time    // civil dates (UTC midnight)
 	width, height int
 	errMsg        string // in-panel feedback (panelFeedback)
 }
 
 // NewCalendar starts the cursor on page when it is a journal date, otherwise
-// on today.
-func NewCalendar(journals []string, page string, today time.Time, width, height int) *Calendar {
+// on today. It keeps idx as it is now: journals created later do not show.
+func NewCalendar(idx *graph.Index, page string, today time.Time, width, height int) *Calendar {
 	y, m, d := today.Date()
 	c := &Calendar{
-		journals: journals,
-		today:    time.Date(y, m, d, 0, 0, 0, 0, time.UTC),
-		width:    width,
-		height:   height,
+		idx:    idx,
+		today:  time.Date(y, m, d, 0, 0, 0, 0, time.UTC),
+		width:  width,
+		height: height,
 	}
 	c.cursor = c.today
-	if t, ok := graph.JournalDate(page); ok {
+	if t, ok := idx.JournalDateOf(page); ok {
 		c.cursor = t
 	}
 	return c
@@ -70,7 +69,10 @@ func (c *Calendar) Update(key string) OverlayResult {
 	case "t":
 		c.cursor = c.today
 	case keyEnter:
-		return overlayOpen(c.cursor.Format(calDayFormat))
+		if j, ok := c.idx.JournalOn(c.cursor); ok {
+			return overlayOpen(j.Name)
+		}
+		return overlayOpen(c.idx.Layout.JournalName(c.cursor))
 	case "c":
 		return overlayCapture()
 	}
@@ -101,7 +103,7 @@ func calWeekdayHeader() string {
 }
 
 func (c *Calendar) hasJournal(day time.Time) bool {
-	_, found := slices.BinarySearch(c.journals, day.Format(calDayFormat))
+	_, found := c.idx.JournalOn(day)
 	return found
 }
 

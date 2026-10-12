@@ -224,10 +224,10 @@ func TestAppTodosDeepLinkScrollsToBullet(t *testing.T) {
 	// Select the first row.
 	a.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
-	// The first open TODO in the fixture is on 2026-05-24, line 2
+	// The first open TODO in the fixture is on 2026_05_24, line 2
 	// ("TODO Ship the TUI MVP"). Sorting is by page name then line number.
-	if got := a.page.Page(); got != "2026-05-24" {
-		t.Fatalf("after deep-link: page want 2026-05-24, got %q", got)
+	if got := a.page.Page(); got != "2026_05_24" {
+		t.Fatalf("after deep-link: page want 2026_05_24, got %q", got)
 	}
 
 	// Strong pin: the deep-link target is recorded in the new history

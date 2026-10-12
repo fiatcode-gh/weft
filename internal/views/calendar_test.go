@@ -46,38 +46,40 @@ func TestMonthGrid(t *testing.T) {
 }
 
 func TestCalendarStartCursor(t *testing.T) {
+	idx := loadFixture(t)
 	for _, tc := range []struct {
 		page string
 		want time.Time
 	}{
-		{"2026-05-15", day(2026, 5, 15)},
+		{"2026_05_15", day(2026, 5, 15)},
 		{"Alpha", day(2026, 5, 26)},
-		{"2026-13-99", day(2026, 5, 26)},
+		{"2026_13_99", day(2026, 5, 26)},
 	} {
-		if got := NewCalendar(nil, tc.page, calNow, 80, 24).cursor; !got.Equal(tc.want) {
+		if got := NewCalendar(idx, tc.page, calNow, 80, 24).cursor; !got.Equal(tc.want) {
 			t.Errorf("page %q: cursor %v, want %v", tc.page, got, tc.want)
 		}
 	}
 }
 
 func TestCalendarMovement(t *testing.T) {
+	idx := loadFixture(t)
 	for _, tc := range []struct {
 		start, key, want string
 	}{
-		{"2026-05-31", "right", "2026-06-01"},
-		{"2026-01-01", "left", "2025-12-31"},
-		{"2026-01-03", "up", "2025-12-27"},
-		{"2025-12-29", "down", "2026-01-05"},
-		{"2026-01-31", "pgdown", "2026-02-28"},
-		{"2026-03-31", "pgup", "2026-02-28"},
-		{"2025-12-15", "pgdown", "2026-01-15"},
-		{"2026-01-31", "t", "2026-05-26"},
-		{"2026-05-10", "l", "2026-05-11"},
-		{"2026-05-10", "h", "2026-05-09"},
-		{"2026-05-10", "j", "2026-05-17"},
-		{"2026-05-10", "k", "2026-05-03"},
+		{"2026_05_31", "right", "2026-06-01"},
+		{"2026_01_01", "left", "2025-12-31"},
+		{"2026_01_03", "up", "2025-12-27"},
+		{"2025_12_29", "down", "2026-01-05"},
+		{"2026_01_31", "pgdown", "2026-02-28"},
+		{"2026_03_31", "pgup", "2026-02-28"},
+		{"2025_12_15", "pgdown", "2026-01-15"},
+		{"2026_01_31", "t", "2026-05-26"},
+		{"2026_05_10", "l", "2026-05-11"},
+		{"2026_05_10", "h", "2026-05-09"},
+		{"2026_05_10", "j", "2026-05-17"},
+		{"2026_05_10", "k", "2026-05-03"},
 	} {
-		c := NewCalendar(nil, tc.start, calNow, 80, 24)
+		c := NewCalendar(idx, tc.start, calNow, 80, 24)
 		c.Update(tc.key)
 		if got := c.cursor.Format("2006-01-02"); got != tc.want {
 			t.Errorf("%s %s: got %s, want %s", tc.start, tc.key, got, tc.want)
@@ -95,8 +97,8 @@ func TestCalendarKeyStrings(t *testing.T) {
 }
 
 func TestCalendarEnterAndCancel(t *testing.T) {
-	c := NewCalendar(nil, "2026-05-10", calNow, 80, 24)
-	if res := c.Update("enter"); res.kind != overlayResultOpen || res.page != "2026-05-10" {
+	c := NewCalendar(loadFixture(t), "2026_05_10", calNow, 80, 24)
+	if res := c.Update("enter"); res.kind != overlayResultOpen || res.page != "2026_05_10" {
 		t.Errorf("enter = %+v", res)
 	}
 	if res := c.Update("c"); res.kind != overlayResultCapture {
@@ -111,7 +113,7 @@ func TestCalendarEnterAndCancel(t *testing.T) {
 
 func TestCalendarMarksAndToday(t *testing.T) {
 	quietTerm(t)
-	c := NewCalendar(loadFixture(t).Journals(), "Alpha", calNow, 80, 24)
+	c := NewCalendar(loadFixture(t), "Alpha", calNow, 80, 24)
 	v := plain(c.View())
 	for _, want := range []string{"25•", "[26 ]", " 1•", "2026-05-26 Tue · no journal", "today 2026-05-26 Tue", "May 2026"} {
 		if !strings.Contains(v, want) {
@@ -134,7 +136,7 @@ func TestCalendarMarksAndToday(t *testing.T) {
 }
 
 func TestCalendarFitsTerminal(t *testing.T) {
-	c := NewCalendar(nil, "2026-08-10", calNow, 80, 24) // 6-week month
+	c := NewCalendar(loadFixture(t), "2026_08_10", calNow, 80, 24) // 6-week month
 	if h := strings.Count(c.View(), "\n") + 1; h > 24 {
 		t.Errorf("calendar is %d rows, want <= 24", h)
 	}
@@ -142,7 +144,7 @@ func TestCalendarFitsTerminal(t *testing.T) {
 
 func TestCalendarGolden(t *testing.T) {
 	quietTerm(t)
-	c := NewCalendar(loadFixture(t).Journals(), "Alpha", calNow, 80, 24)
+	c := NewCalendar(loadFixture(t), "Alpha", calNow, 80, 24)
 	teatest.RequireEqualOutput(t, []byte(plain(c.View())))
 }
 
@@ -158,7 +160,7 @@ func TestAppCalendarOpensJournal(t *testing.T) {
 	}
 	a.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
 	a.Update(keyEnt)
-	if got := a.page.Page(); got != "2026-05-25" || a.active != nil {
+	if got := a.page.Page(); got != "2026_05_25" || a.active != nil {
 		t.Errorf("page %q active %v", got, a.active)
 	}
 }
@@ -168,7 +170,7 @@ func TestAppCalendarMissingDayOpensPhantom(t *testing.T) {
 	a.Update(key("C"))
 	a.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	a.Update(keyEnt)
-	if got := a.page.Page(); got != "2026-05-19" || a.active != nil {
+	if got := a.page.Page(); got != "2026_05_19" || a.active != nil {
 		t.Fatalf("page %q active %v", got, a.active)
 	}
 	if _, err := os.Stat(filepath.Join(a.graphPath, "journals", "2026_05_19.md")); !os.IsNotExist(err) {

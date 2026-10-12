@@ -511,3 +511,16 @@ func TestWriteFileIfUnchanged(t *testing.T) {
 		}
 	})
 }
+
+func TestEnsureFileCreatesParentDirs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "journals", "2026", "06", "2026-06-05.md")
+
+	created, err := EnsureFile(path)
+
+	if err != nil || !created {
+		t.Fatalf("EnsureFile = (%v, %v), want (true, nil)", created, err)
+	}
+	if info, err := os.Stat(path); err != nil || info.IsDir() {
+		t.Fatalf("file not created: %v", err)
+	}
+}

@@ -51,13 +51,16 @@ func Resolve(env Env, lookPath func(string) (string, error)) (Resolved, error) {
 }
 
 // EnsureFile creates an empty file at path with mode 0o644 if it does
-// not exist. Returns (true, nil) on create, (false, nil) if the file
+// not exist, creating missing parent folders first. Returns (true, nil) on create, (false, nil) if the file
 // already existed, or (false, err) for any other failure (including the
 // case where path resolves to a directory). Creation uses O_EXCL so a
 // file that appears between check and create (e.g. a concurrent git
 // pull materializing today's journal) is never truncated.
 // This is the create-today-journal hook.
 func EnsureFile(path string) (created bool, err error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return false, err
+	}
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err == nil {
 		return true, f.Close()

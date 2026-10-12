@@ -17,8 +17,8 @@ import (
 func TestTodayJournalNameUsesNowFunc(t *testing.T) {
 	a := New("/unused", layout.Default(), "test")
 	a.nowFunc = func() time.Time { return time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC) }
-	if got := a.todayJournalName(); got != "2026-05-23" {
-		t.Errorf("todayJournalName: want 2026-05-23, got %q", got)
+	if got := a.todayJournalName(); got != "2026_05_23" {
+		t.Errorf("todayJournalName: want 2026_05_23, got %q", got)
 	}
 }
 
@@ -46,7 +46,11 @@ func bootApp(t *testing.T, configs ...bootConfig) *App {
 	} else {
 		graphPath = cloneFixtureGraph(t)
 	}
-	a := New(graphPath, layout.Default(), "test")
+	lay, err := layout.Load(graphPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := New(graphPath, lay, "test")
 	if !cfg.now.IsZero() {
 		now := cfg.now
 		a.nowFunc = func() time.Time { return now }

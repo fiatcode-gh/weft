@@ -88,12 +88,13 @@ func normalizeQuery(q string) string {
 }
 
 // refreshCreate decides whether to offer a "＋ Create" row for the current
-// query: a non-empty, non-date-shaped name that does not resolve to an
-// existing page. Fuzzy matches are irrelevant — the user may want a new page
+// query: a non-empty name that is not a journal name under the layout (a
+// journal is made by `.` or the calendar, not here) and does not resolve to
+// an existing page. Fuzzy matches are irrelevant — the user may want a new page
 // whose name is a subsequence of an existing one.
 func (p *Picker) refreshCreate(q string) {
 	name := normalizeQuery(q)
-	if name == "" || graph.IsJournalPageName(name) {
+	if name == "" || isJournalName(p.idx, name) {
 		p.createName = ""
 		return
 	}

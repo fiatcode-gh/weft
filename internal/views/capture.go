@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
@@ -31,7 +32,8 @@ const (
 // It is not an Overlay: App draws it over whatever is on screen and gives it
 // every key while it is open.
 type CapturePrompt struct {
-	target        string // journal page name the line goes to, fixed at open
+	day           time.Time // journal date the line goes to, fixed at open
+	target        string    // that journal's page name
 	input         string
 	todo          bool
 	errMsg        string
@@ -39,8 +41,8 @@ type CapturePrompt struct {
 	width, height int
 }
 
-func newCapturePrompt(idx *graph.Index, target string, width, height int) *CapturePrompt {
-	p := &CapturePrompt{target: target, completer: newLinkCompleter(idx)}
+func newCapturePrompt(idx *graph.Index, day time.Time, width, height int) *CapturePrompt {
+	p := &CapturePrompt{day: day, target: idx.Layout.JournalName(day), completer: newLinkCompleter(idx)}
 	p.SetSize(width, height)
 	return p
 }
@@ -181,18 +183,18 @@ func spliceBottom(base, block string, height int) string {
 type panelFeedback interface{ SetError(msg string) }
 
 func (a *App) openCapture() {
-	a.capture = newCapturePrompt(a.idx, a.todayJournalName(), a.width, a.height)
+	a.capture = newCapturePrompt(a.idx, a.today(), a.width, a.height)
 }
 
-// appendToJournal adds line to journal name's file in one guarded write,
+// appendToJournal adds line to the journal dated day in one guarded write,
 // seeding a missing file from the journal template. A file that changes
 // between read and write is re-read once; nothing is written on failure.
-func (a *App) appendToJournal(name, line string) (created bool, err error) {
-	path := a.journalPath(name)
+func (a *App) appendToJournal(day time.Time, line string) (created bool, err error) {
+	path := a.idx.JournalPath(day)
 	for range 2 {
 		snap, err := a.readSnapshot(path)
 		if err != nil {
-			return false, fmt.Errorf("cannot read %s: %w", name, err)
+			return false, fmt.Errorf("cannot read %s: %w", a.idx.Layout.JournalName(day), err)
 		}
 		base := snap.Content
 		if !snap.Exists {
@@ -219,7 +221,7 @@ func (a *App) submitCapture() tea.Cmd {
 		p.SetError(syncBusyMsg)
 		return nil
 	}
-	created, err := a.appendToJournal(p.target, p.Line())
+	created, err := a.appendToJournal(p.day, p.Line())
 	switch {
 	case errors.Is(err, edit.ErrChanged):
 		p.SetError(p.target + " kept changing on disk — nothing written; enter to retry")

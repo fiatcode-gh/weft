@@ -43,7 +43,7 @@ func capJournalExists(a *App) bool {
 	return err == nil
 }
 
-// bootCapture boots a temp graph at 2026-05-25 with the given files.
+// bootCapture boots a temp graph at 2026_05_25 with the given files.
 func bootCapture(t *testing.T, files map[string]string) *App {
 	t.Helper()
 	if _, ok := files["pages/Anchor.md"]; !ok {
@@ -64,7 +64,7 @@ func TestCaptureAppendsToExistingJournal(t *testing.T) {
 	if a.capture != nil {
 		t.Error("prompt should close after capture")
 	}
-	if a.hint != "captured to 2026-05-25" {
+	if a.hint != "captured to 2026_05_25" {
 		t.Errorf("hint = %q", a.hint)
 	}
 	if !strings.Contains(appText(a), "buy milk") {
@@ -403,7 +403,7 @@ func TestCaptureFrameLayersPrompt(t *testing.T) {
 		t.Errorf("first line = %q, want %q", lines[0], before[0])
 	}
 	tail := strings.Join(lines[len(lines)-6:], "\n")
-	for _, want := range []string{"Capture to 2026-05-25:", "enter add · tab TODO on/off · [[ link · # tag · esc cancel"} {
+	for _, want := range []string{"Capture to 2026_05_25:", "enter add · tab TODO on/off · [[ link · # tag · esc cancel"} {
 		if !strings.Contains(tail, want) {
 			t.Errorf("bottom rows missing %q:\n%s", want, tail)
 		}

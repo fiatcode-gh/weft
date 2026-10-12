@@ -251,15 +251,15 @@ func runewidthLen(s string) int {
 
 func TestPeriodJumpsToTodayJournal(t *testing.T) {
 	a := bootApp(t, bootConfig{now: time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)})
-	// Boot lands on today's journal (2026-05-23) per tryInitPage seeding.
+	// Boot lands on today's journal (2026_05_23) per tryInitPage seeding.
 	// Navigate elsewhere first so we can verify . actually moves us.
 	a.navigate("Alpha")
 	startHistLen := len(a.hist)
 
 	a.Update(key("."))
 
-	if got := a.page.Page(); got != "2026-05-23" {
-		t.Errorf("after .: want page 2026-05-23, got %q", got)
+	if got := a.page.Page(); got != "2026_05_23" {
+		t.Errorf("after .: want page 2026_05_23, got %q", got)
 	}
 	if got := len(a.hist); got != startHistLen+1 {
 		t.Errorf("history len: want %d, got %d", startHistLen+1, got)
@@ -270,18 +270,18 @@ func TestPeriodJumpsToTodayJournal(t *testing.T) {
 }
 
 func TestPeriodOnAbsentTodayCreatesAndNavigates(t *testing.T) {
-	// 2026-06-15 has no journal in the fixture; `.` must create the file
+	// 2026_06_15 has no journal in the fixture; `.` must create the file
 	// and navigate to it.
 	a := bootApp(t, bootConfig{now: time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)})
 	a.navigate("Alpha")
 
 	a.Update(key("."))
 
-	if got := a.page.Page(); got != "2026-06-15" {
-		t.Errorf("after . on absent today: want page 2026-06-15, got %q", got)
+	if got := a.page.Page(); got != "2026_06_15" {
+		t.Errorf("after . on absent today: want page 2026_06_15, got %q", got)
 	}
-	if _, ok := a.idx.ByName["2026-06-15"]; !ok {
-		t.Errorf("after . on absent today: 2026-06-15 should be in idx.ByName")
+	if _, ok := a.idx.ByName["2026_06_15"]; !ok {
+		t.Errorf("after . on absent today: 2026_06_15 should be in idx.ByName")
 	}
 	// The newly created file should be on disk in the throwaway clone
 	// (t.TempDir() cleans it up automatically — no manual cleanup needed).
@@ -339,13 +339,13 @@ func TestStaleHintTickIgnored(t *testing.T) {
 func TestPeriodIdempotentOnTodayJournal(t *testing.T) {
 	a := bootApp(t, bootConfig{now: time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)})
 	// Boot already lands on today's journal.
-	if got := a.page.Page(); got != "2026-05-23" {
-		t.Fatalf("setup: want boot page 2026-05-23, got %q", got)
+	if got := a.page.Page(); got != "2026_05_23" {
+		t.Fatalf("setup: want boot page 2026_05_23, got %q", got)
 	}
 	startHistLen := len(a.hist)
 	a.Update(key("."))
-	if got := a.page.Page(); got != "2026-05-23" {
-		t.Errorf("after . on today: want 2026-05-23, got %q", got)
+	if got := a.page.Page(); got != "2026_05_23" {
+		t.Errorf("after . on today: want 2026_05_23, got %q", got)
 	}
 	if got := len(a.hist); got != startHistLen {
 		t.Errorf("after . on today: history grew from %d to %d", startHistLen, got)
@@ -354,10 +354,10 @@ func TestPeriodIdempotentOnTodayJournal(t *testing.T) {
 
 func TestPrevJournalWalksBackwards(t *testing.T) {
 	a := bootApp(t, bootConfig{now: time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC)})
-	// Boot lands on 2026-05-24.
+	// Boot lands on 2026_05_24.
 	a.Update(key("<"))
-	if got := a.page.Page(); got != "2026-05-23" {
-		t.Errorf("after <: want 2026-05-23, got %q", got)
+	if got := a.page.Page(); got != "2026_05_23" {
+		t.Errorf("after <: want 2026_05_23, got %q", got)
 	}
 	if a.hint != "" {
 		t.Errorf("hint should be empty on successful walk, got %q", a.hint)
@@ -367,18 +367,18 @@ func TestPrevJournalWalksBackwards(t *testing.T) {
 func TestNextJournalWalksForward(t *testing.T) {
 	a := bootApp(t, bootConfig{now: time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC)})
 	a.Update(key(">"))
-	if got := a.page.Page(); got != "2026-05-24" {
-		t.Errorf("after >: want 2026-05-24, got %q", got)
+	if got := a.page.Page(); got != "2026_05_24" {
+		t.Errorf("after >: want 2026_05_24, got %q", got)
 	}
 }
 
 func TestPrevJournalSkipsGapDays(t *testing.T) {
-	// Fixture has 2026-04-20 then 2026-03-15 — large gap. < from 04-20 lands
+	// Fixture has 2026_04_20 then 2026_03_15 — large gap. < from 04-20 lands
 	// on 03-15, skipping the missing calendar days in between.
 	a := bootApp(t, bootConfig{now: time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)})
 	a.Update(key("<"))
-	if got := a.page.Page(); got != "2026-03-15" {
-		t.Errorf("after < across gap: want 2026-03-15, got %q", got)
+	if got := a.page.Page(); got != "2026_03_15" {
+		t.Errorf("after < across gap: want 2026_03_15, got %q", got)
 	}
 }
 
@@ -415,15 +415,15 @@ func TestNextJournalAtNewestShowsHint(t *testing.T) {
 }
 
 func TestPrevJournalFromPhantomToday(t *testing.T) {
-	// 2026-06-15 has no fixture journal; it's phantom-today. < should walk
-	// to the newest existing fixture journal (2026-05-25).
+	// 2026_06_15 has no fixture journal; it's phantom-today. < should walk
+	// to the newest existing fixture journal (2026_05_25).
 	a := bootApp(t, bootConfig{now: time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)})
-	if got := a.page.Page(); got != "2026-06-15" {
-		t.Fatalf("setup: want boot page 2026-06-15, got %q", got)
+	if got := a.page.Page(); got != "2026_06_15" {
+		t.Fatalf("setup: want boot page 2026_06_15, got %q", got)
 	}
 	a.Update(key("<"))
-	if got := a.page.Page(); got != "2026-05-25" {
-		t.Errorf("after < from phantom today: want 2026-05-25, got %q", got)
+	if got := a.page.Page(); got != "2026_05_25" {
+		t.Errorf("after < from phantom today: want 2026_05_25, got %q", got)
 	}
 	if a.hint != "" {
 		t.Errorf("hint should be empty on successful walk, got %q", a.hint)
@@ -431,7 +431,7 @@ func TestPrevJournalFromPhantomToday(t *testing.T) {
 }
 
 func TestNextJournalFromPhantomTodayShowsHint(t *testing.T) {
-	// 2026-06-15 is phantom-today; no fixture journal is later. > should
+	// 2026_06_15 is phantom-today; no fixture journal is later. > should
 	// surface "no later journal" without navigating.
 	a := bootApp(t, bootConfig{now: time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)})
 	startPage := a.page.Page()
@@ -481,7 +481,7 @@ func TestEditBootstrapRebuildsPageView(t *testing.T) {
 	dir, _ := writeGraph(t, map[string]string{"pages/Anchor.md": "anchor\n"})
 
 	a := New(dir, layout.Default(), "test")
-	today := "2026-05-26"
+	today := "2026_05_26"
 	a.nowFunc = func() time.Time { return time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC) }
 	cmd := a.Init()
 	if cmd != nil {

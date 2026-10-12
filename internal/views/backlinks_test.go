@@ -16,7 +16,7 @@ func TestNewBacklinksLoadsRefs(t *testing.T) {
 	quietTerm(t)
 	idx := loadFixture(t)
 
-	// Hub is referenced from kb/notes and journal 2026-05-25. Hub's own
+	// Hub is referenced from kb/notes and journal 2026_05_25. Hub's own
 	// page also contains `[[Hub]]` but NewBacklinks filters self-refs so
 	// the view doesn't show them — count must be exactly 2.
 	b := NewBacklinks(idx, "Hub", nil, 80, 30)
@@ -227,7 +227,7 @@ func TestBacklinksScrollHintsAppear(t *testing.T) {
 func unlinkedFixture() []graph.UnlinkedRef {
 	return []graph.UnlinkedRef{
 		{FilePath: "/g/pages/Beta.md", PageName: "Beta", Line: 3, Context: "a bare Hub mention", Match: search.Span{Start: 7, End: 10}},
-		{FilePath: "/g/journals/2026_05_24.md", PageName: "2026-05-24", Line: 9, Context: "Hub came up today", Match: search.Span{Start: 0, End: 3}},
+		{FilePath: "/g/journals/2026_05_24.md", PageName: "2026_05_24", Line: 9, Context: "Hub came up today", Match: search.Span{Start: 0, End: 3}},
 	}
 }
 
@@ -238,7 +238,7 @@ func TestBacklinksUnlinkedNavigation(t *testing.T) {
 		b.Update(keyDown)
 	}
 	res := b.Update(keyEnter)
-	if res.kind != overlayResultHighlight || res.page != "2026-05-24" || res.target != "Hub" {
+	if res.kind != overlayResultHighlight || res.page != "2026_05_24" || res.target != "Hub" {
 		t.Errorf("enter on last unlinked row should highlight Hub on its page; got %+v", res)
 	}
 }
@@ -267,7 +267,7 @@ func TestBacklinksUnlinkedRefHighlights(t *testing.T) {
 		b.Update(keyDown) // reach the last (unlinked) row
 	}
 	res := b.Update(keyEnter)
-	if res.kind != overlayResultHighlight || res.page != "2026-05-24" || res.target != "Hub" {
+	if res.kind != overlayResultHighlight || res.page != "2026_05_24" || res.target != "Hub" {
 		t.Errorf("unlinked-ref enter should highlight Hub on its page; got %+v", res)
 	}
 }

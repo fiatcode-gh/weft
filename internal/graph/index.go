@@ -8,8 +8,8 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
+	"time"
 
 	"github.com/fiatcode-gh/weft/v2/internal/layout"
 )
@@ -28,7 +28,7 @@ type Index struct {
 
 	backlinks   map[string][]Ref  // keyed by strings.ToLower(target) — resolution is case-insensitive
 	targetSpell map[string]string // folded target → first-seen original spelling (walk order)
-	journals    []string          // journal page names, sorted ascending
+	journals    []PageMeta        // journal pages (copies), sorted ascending by Date
 
 	// headingKeys holds each page's HeadingKey set, keyed by PageMeta.Path.
 	headingKeys map[string]map[string]struct{}
@@ -94,14 +94,12 @@ func BuildIndex(graphPath string, lay layout.Layout) (*Index, error) {
 		idx.ByName[name] = &idx.Pages[i]
 	}
 
-	// Collect journal page names sorted ascending. Names are YYYY-MM-DD so
-	// lexical order matches chronological order.
 	for _, p := range idx.Pages {
 		if p.IsJournal {
-			idx.journals = append(idx.journals, p.Name)
+			idx.journals = append(idx.journals, p)
 		}
 	}
-	sort.Strings(idx.journals)
+	slices.SortStableFunc(idx.journals, func(a, b PageMeta) int { return a.Date.Compare(b.Date) })
 
 	// Second pass, phase A: parse every body for headings, links and todos.
 	// Links stay pending until every page's headings are known.
@@ -209,11 +207,10 @@ func (idx *Index) walkRoot(root string) error {
 			return nil
 		}
 		filePath := filepath.Join(idx.GraphPath, filepath.FromSlash(rel))
-		meta := PageMeta{
-			Name:      PageNameFromFilename(d.Name()),
-			Path:      filePath,
-			Rel:       rel,
-			IsJournal: within(idx.Layout.JournalsDir(), rel),
+		stem := strings.TrimSuffix(d.Name(), ".md")
+		meta := PageMeta{Name: strings.ReplaceAll(stem, "___", "/"), Path: filePath, Rel: rel}
+		if day, ok := idx.Layout.Journal(rel); ok {
+			meta.Name, meta.IsJournal, meta.Date = stem, true, day
 		}
 		if info, err := d.Info(); err == nil {
 			meta.ModTime = info.ModTime()
@@ -233,12 +230,6 @@ func mustRel(base, p string) string {
 		return p
 	}
 	return r
-}
-
-// within reports whether the graph-relative path rel lies inside dir ("" is
-// the whole graph).
-func within(dir, rel string) bool {
-	return dir == "" || strings.HasPrefix(rel, dir+"/")
 }
 
 // BacklinksTo returns a snapshot of references to name using the index's case-insensitive key.
@@ -266,18 +257,46 @@ func (idx *Index) PageAt(path string) (*PageMeta, bool) {
 // the set of files search and mention scans cover.
 func (idx *Index) Files() []string { return slices.Clone(idx.files) }
 
-// Journals returns the indexed journal page names, sorted ascending (a copy).
-func (idx *Index) Journals() []string { return slices.Clone(idx.journals) }
+// Journals returns the indexed journals, ascending by Date (a copy).
+func (idx *Index) Journals() []PageMeta { return slices.Clone(idx.journals) }
 
-// JournalNeighbor returns the nearest indexed journal in dir (-1 or +1).
-// Phantom journal-shaped dates use their insertion point in the sorted index.
-func (idx *Index) JournalNeighbor(current string, dir int) (string, bool) {
-	if !IsJournalPageName(current) {
+// JournalOn returns the journal dated day.
+func (idx *Index) JournalOn(day time.Time) (*PageMeta, bool) {
+	i, ok := journalSearch(idx.journals, civilDay(day))
+	if !ok {
+		return nil, false
+	}
+	return &idx.journals[i], true
+}
+
+// JournalDateOf reports the date key names as a journal: a resolved page's
+// own date when it is a journal (false for any other page); an unresolved
+// key that parses as a journal name under the layout's pattern gives that
+// date, so a not-yet-created journal still has one.
+func (idx *Index) JournalDateOf(key string) (time.Time, bool) {
+	if p, ok := idx.Resolve(key); ok {
+		return p.Date, p.IsJournal
+	}
+	return idx.Layout.ParseJournalName(key)
+}
+
+// JournalPath is the file path a journal dated day lives at (or would be
+// created at), per the layout.
+func (idx *Index) JournalPath(day time.Time) string {
+	return filepath.Join(idx.GraphPath, filepath.FromSlash(idx.Layout.JournalRel(day)))
+}
+
+// JournalNeighbor returns the name of the nearest indexed journal in dir (-1
+// or +1) from the journal key names. A key that is not a journal has no
+// neighbours; a journal-shaped date with no file uses its insertion point.
+func (idx *Index) JournalNeighbor(key string, dir int) (string, bool) {
+	day, ok := idx.JournalDateOf(key)
+	if !ok {
 		return "", false
 	}
-	i := sort.SearchStrings(idx.journals, current)
+	i, found := journalSearch(idx.journals, day)
 	j := i
-	if i < len(idx.journals) && idx.journals[i] == current {
+	if found {
 		j = i + dir
 	} else if dir < 0 {
 		j = i - 1
@@ -285,7 +304,7 @@ func (idx *Index) JournalNeighbor(current string, dir int) (string, bool) {
 	if j < 0 || j >= len(idx.journals) {
 		return "", false
 	}
-	return idx.journals[j], true
+	return idx.journals[j].Name, true
 }
 
 // lineContext returns the n-th 1-based line from a pre-split body with any
