@@ -1,16 +1,22 @@
 package graph
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 )
 
 // Index is the read-only in-memory view of a Logseq graph.
 type Index struct {
+	Layout     layout.Layout
 	GraphPath  string
 	Pages      []PageMeta
 	ByName     map[string]*PageMeta // case-preserving (filename-derived)
@@ -27,7 +33,7 @@ type Index struct {
 	// headingKeys holds each page's HeadingKey set, keyed by PageMeta.Path.
 	headingKeys map[string]map[string]struct{}
 
-	// Warnings collects non-fatal problems found during the walk (skipped
+	// Warnings collects non-fatal problems found during the walk (unreadable
 	// subdirectories, case-fold collisions, unreadable pages, stat
 	// failures). The TUI logs and hints them; BuildIndex never writes to
 	// stderr — under the alt-screen nobody would see it.
@@ -40,11 +46,14 @@ func (idx *Index) warnf(format string, args ...any) {
 	idx.Warnings = append(idx.Warnings, fmt.Sprintf(format, args...))
 }
 
-// BuildIndex walks <graphPath>/pages and <graphPath>/journals once and returns
-// the populated Index. Unreadable files are skipped and recorded in
+// BuildIndex walks the layout's page and journal folders (recursively, in
+// lay.Roots() order) once and returns the populated Index. Only .md files
+// are indexed; folders lay.SkipDir names are not entered. A missing root is
+// skipped; unreadable files and subdirectories are skipped and recorded in
 // Index.Warnings.
-func BuildIndex(graphPath string) (*Index, error) {
+func BuildIndex(graphPath string, lay layout.Layout) (*Index, error) {
 	idx := &Index{
+		Layout:      lay,
 		GraphPath:   graphPath,
 		ByName:      make(map[string]*PageMeta),
 		ByNameFold:  make(map[string]*PageMeta),
@@ -54,35 +63,9 @@ func BuildIndex(graphPath string) (*Index, error) {
 		byPath:      make(map[string]*PageMeta),
 	}
 
-	for _, sub := range []string{"pages", "journals"} {
-		dir := filepath.Join(graphPath, sub)
-		entries, err := os.ReadDir(dir)
-		if os.IsNotExist(err) {
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("read %s: %w", dir, err)
-		}
-		for _, e := range entries {
-			if e.IsDir() {
-				idx.warnf("skipping subdirectory %s (weft does not recurse — use the ___ namespace convention instead)", filepath.Join(dir, e.Name()))
-				continue
-			}
-			if filepath.Ext(e.Name()) != ".md" {
-				continue
-			}
-			path := filepath.Join(dir, e.Name())
-			meta := PageMeta{
-				Name:      PageNameFromFilename(e.Name()),
-				Path:      path,
-				IsJournal: sub == "journals",
-			}
-			if info, err := e.Info(); err == nil {
-				meta.ModTime = info.ModTime()
-			} else {
-				idx.warnf("cannot stat %s: %v — page will sort last in the picker", path, err)
-			}
-			idx.Pages = append(idx.Pages, meta)
+	for _, root := range lay.Roots() {
+		if err := idx.walkRoot(root); err != nil {
+			return nil, err
 		}
 	}
 
@@ -182,12 +165,97 @@ func BuildIndex(graphPath string) (*Index, error) {
 	return idx, nil
 }
 
+// walkRoot appends every .md file under the graph-relative folder root to
+// idx.Pages, depth-first in lexical order. A root that is missing is skipped;
+// one that cannot be read is an error; a subdirectory that cannot be read is
+// skipped with a warning.
+func (idx *Index) walkRoot(root string) error {
+	dir := filepath.Join(idx.GraphPath, filepath.FromSlash(root))
+	info, err := os.Stat(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err == nil && !info.IsDir() {
+		err = errors.New("not a directory")
+	}
+	if err != nil {
+		return fmt.Errorf("read %s: %w", dir, err)
+	}
+	// WalkDir does not follow a symlinked start directory.
+	start, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", dir, err)
+	}
+
+	return filepath.WalkDir(start, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if p == start {
+				return fmt.Errorf("read %s: %w", dir, err)
+			}
+			idx.warnf("skipping %s: %v", filepath.Join(dir, mustRel(start, p)), err)
+			return nil
+		}
+		rel := root
+		if sub := mustRel(start, p); sub != "." {
+			rel = path.Join(root, filepath.ToSlash(sub))
+		}
+		if d.IsDir() {
+			if p != start && idx.Layout.SkipDir(rel) {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(d.Name()) != ".md" {
+			return nil
+		}
+		filePath := filepath.Join(idx.GraphPath, filepath.FromSlash(rel))
+		meta := PageMeta{
+			Name:      PageNameFromFilename(d.Name()),
+			Path:      filePath,
+			Rel:       rel,
+			IsJournal: within(idx.Layout.JournalsDir(), rel),
+		}
+		if info, err := d.Info(); err == nil {
+			meta.ModTime = info.ModTime()
+		} else {
+			idx.warnf("cannot stat %s: %v — page will sort last in the picker", filePath, err)
+		}
+		idx.Pages = append(idx.Pages, meta)
+		return nil
+	})
+}
+
+// mustRel is filepath.Rel for a path WalkDir produced under base, where it
+// cannot fail.
+func mustRel(base, p string) string {
+	r, err := filepath.Rel(base, p)
+	if err != nil {
+		return p
+	}
+	return r
+}
+
+// within reports whether the graph-relative path rel lies inside dir ("" is
+// the whole graph).
+func within(dir, rel string) bool {
+	return dir == "" || strings.HasPrefix(rel, dir+"/")
+}
+
 // BacklinksTo returns a snapshot of references to name using the index's case-insensitive key.
 func (idx *Index) BacklinksTo(name string) []Ref {
 	return slices.Clone(idx.backlinks[strings.ToLower(name)])
 }
 
-// Journals returns the indexed journal page names, sorted ascending (a copy).
+// NewPagePath returns the file path a new page called name is created at,
+// per the layout, or the layout's "cannot place page" error.
+func (idx *Index) NewPagePath(name string) (string, error) {
+	rel, err := idx.Layout.NewPageRel(name)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(idx.GraphPath, filepath.FromSlash(rel)), nil
+}
+
 // PageAt returns the page whose file is exactly path.
 func (idx *Index) PageAt(path string) (*PageMeta, bool) {
 	p, ok := idx.byPath[path]
@@ -198,6 +266,7 @@ func (idx *Index) PageAt(path string) (*PageMeta, bool) {
 // the set of files search and mention scans cover.
 func (idx *Index) Files() []string { return slices.Clone(idx.files) }
 
+// Journals returns the indexed journal page names, sorted ascending (a copy).
 func (idx *Index) Journals() []string { return slices.Clone(idx.journals) }
 
 // JournalNeighbor returns the nearest indexed journal in dir (-1 or +1).

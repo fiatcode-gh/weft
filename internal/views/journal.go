@@ -27,9 +27,10 @@ func (a *App) journalTemplate() (string, error) {
 	return snap.Content, nil
 }
 
-// journalPath is where journal name's file lives: journals/<YYYY_MM_DD>.md.
+// journalPath is where journal name's file lives: the journals folder, then
+// <YYYY_MM_DD>.md.
 func (a *App) journalPath(name string) string {
-	return filepath.Join(a.graphPath, "journals", graph.FilenameFromPageName(name))
+	return filepath.Join(a.graphPath, filepath.FromSlash(a.lay.JournalsDir()), graph.FilenameFromPageName(name))
 }
 
 // createJournal creates journal name's file from the journal template, or

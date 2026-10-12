@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/edit"
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 )
 
 const (
@@ -26,7 +27,7 @@ func bootTemplateApp(t *testing.T, files map[string]string) (*App, string) {
 	t.Helper()
 	quietTerm(t)
 	dir, _ := writeGraph(t, files)
-	a := New(dir, "test")
+	a := New(dir, layout.Default(), "test")
 	a.nowFunc = func() time.Time { return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC) }
 	if cmd := a.Init(); cmd != nil {
 		a.Update(cmd())

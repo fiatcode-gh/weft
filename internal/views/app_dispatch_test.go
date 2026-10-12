@@ -9,6 +9,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 )
 
 func TestPageEdgeKeys(t *testing.T) {
@@ -69,7 +71,7 @@ func TestAppStatusBarHidesIndicatorWhenFits(t *testing.T) {
 
 func TestAppLoadingSplashBeforePage(t *testing.T) {
 	quietTerm(t)
-	a := New("/nonexistent/before/build", "test")
+	a := New("/nonexistent/before/build", layout.Default(), "test")
 	v := appText(a)
 	if !strings.Contains(v, "weft") {
 		t.Errorf("splash should contain title; got:\n%s", v)
@@ -81,7 +83,7 @@ func TestAppLoadingSplashBeforePage(t *testing.T) {
 
 func TestAppErrorSplashOnIndexFailure(t *testing.T) {
 	quietTerm(t)
-	a := New("/some/graph", "test")
+	a := New("/some/graph", layout.Default(), "test")
 	a.Update(indexLoadedMsg{err: errors.New("synthetic build failure")})
 	v := appText(a)
 	if !strings.Contains(v, "failed to index") {
@@ -94,7 +96,7 @@ func TestAppErrorSplashOnIndexFailure(t *testing.T) {
 
 func TestAppRetryFromErrorSplash(t *testing.T) {
 	quietTerm(t)
-	a := New("/some/graph", "test")
+	a := New("/some/graph", layout.Default(), "test")
 	a.Update(indexLoadedMsg{err: errors.New("synthetic build failure")})
 	if a.loadErr == nil {
 		t.Fatalf("setup: loadErr should be set")
@@ -140,7 +142,7 @@ func TestAppMidSessionReindexFailureKeepsPage(t *testing.T) {
 
 func TestAppQuitsBeforePage(t *testing.T) {
 	quietTerm(t)
-	a := New("/no/such/path", "test")
+	a := New("/no/such/path", layout.Default(), "test")
 	_, cmd := a.Update(key("q"))
 	if cmd == nil {
 		t.Errorf("q before page should return Quit cmd, got nil")
@@ -478,7 +480,7 @@ func TestEditBootstrapRebuildsPageView(t *testing.T) {
 	// An anchor page, but no journal file — today's journal is missing on disk.
 	dir, _ := writeGraph(t, map[string]string{"pages/Anchor.md": "anchor\n"})
 
-	a := New(dir, "test")
+	a := New(dir, layout.Default(), "test")
 	today := "2026-05-26"
 	a.nowFunc = func() time.Time { return time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC) }
 	cmd := a.Init()
@@ -529,7 +531,7 @@ func TestSaveFailureKeepsEditorAndBuffer(t *testing.T) {
 	}
 	quietTerm(t)
 	dir, _ := writeGraph(t, map[string]string{"pages/A.md": "- start\n"})
-	a := New(dir, "test")
+	a := New(dir, layout.Default(), "test")
 	cmd := a.Init()
 	if cmd != nil {
 		a.Update(cmd())
@@ -577,7 +579,7 @@ func TestEditCurrentRecreatesDeletedFile(t *testing.T) {
 	// arrange — indexed page whose file vanished before E
 	quietTerm(t)
 	dir, _ := writeGraph(t, map[string]string{"pages/A.md": "- x\n"})
-	a := New(dir, "test")
+	a := New(dir, layout.Default(), "test")
 	a.Update(a.Init()())
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	a.navigate("A")
@@ -624,7 +626,7 @@ func TestEditCurrentSurfacesEditorResolutionFailure(t *testing.T) {
 	// arrange — no resolvable editor anywhere in the chain
 	quietTerm(t)
 	dir, _ := writeGraph(t, map[string]string{"pages/A.md": "- x\n"})
-	a := New(dir, "test")
+	a := New(dir, layout.Default(), "test")
 	a.Update(a.Init()())
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	a.navigate("A")
@@ -653,7 +655,7 @@ func TestEditorExitUnchangedMtimeSkipsReindex(t *testing.T) {
 	// arrange
 	quietTerm(t)
 	dir, _ := writeGraph(t, map[string]string{"pages/A.md": "- x\n"})
-	a := New(dir, "test")
+	a := New(dir, layout.Default(), "test")
 	a.Update(a.Init()())
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	a.navigate("A")

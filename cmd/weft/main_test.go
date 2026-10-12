@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -219,7 +220,7 @@ func TestRunDoctorExitCodes(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			if got := runDoctor(tc.args, tc.graph, &buf); got != tc.want {
+			if got := runDoctor(tc.args, tc.graph, &buf, io.Discard); got != tc.want {
 				t.Errorf("runDoctor(%v, %q) = %d, want %d", tc.args, tc.graph, got, tc.want)
 			}
 		})
@@ -229,7 +230,7 @@ func TestRunDoctorExitCodes(t *testing.T) {
 func TestRunDoctorHelpPrintsUsage(t *testing.T) {
 	// arrange + act
 	var buf bytes.Buffer
-	got := runDoctor([]string{"-h"}, "ignored", &buf)
+	got := runDoctor([]string{"-h"}, "ignored", &buf, io.Discard)
 
 	// assert
 	if got != 0 {

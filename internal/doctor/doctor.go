@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 	"github.com/fiatcode-gh/weft/v2/internal/search"
 )
 
@@ -42,8 +43,8 @@ func (r *Report) HasFindings() bool {
 // Run computes the report using the ripgrep-backed mention scanner — the
 // exact pipeline the backlinks panel uses (search.Mentions +
 // graph.FilterUnlinked, target's own file excluded).
-func Run(graphPath string) (*Report, error) {
-	idx, err := graph.BuildIndex(graphPath)
+func Run(graphPath string, lay layout.Layout) (*Report, error) {
+	idx, err := graph.BuildIndex(graphPath, lay)
 	if err != nil {
 		return nil, err
 	}
@@ -62,8 +63,8 @@ func Run(graphPath string) (*Report, error) {
 }
 
 // RunWith computes the report with a caller-supplied mention scanner.
-func RunWith(graphPath string, mentions MentionScanner) (*Report, error) {
-	idx, err := graph.BuildIndex(graphPath)
+func RunWith(graphPath string, lay layout.Layout, mentions MentionScanner) (*Report, error) {
+	idx, err := graph.BuildIndex(graphPath, lay)
 	if err != nil {
 		return nil, err
 	}

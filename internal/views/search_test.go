@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 	"github.com/fiatcode-gh/weft/v2/internal/search"
 )
 
@@ -479,7 +480,7 @@ func TestSearchUpdateBackspaceRuneAware(t *testing.T) {
 func TestSearchCmdRoundtrip(t *testing.T) {
 	skipIfNoRipgrep(t)
 	abs := cloneFixtureGraph(t)
-	idx, err := graph.BuildIndex(abs)
+	idx, err := graph.BuildIndex(abs, layout.Default())
 	if err != nil {
 		t.Fatal(err)
 	}

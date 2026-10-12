@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 )
 
 // fixturePath returns the absolute path to the shared testdata graph fixture.
@@ -49,7 +50,7 @@ func TestRunWithBuildsReport(t *testing.T) {
 	}
 
 	// act
-	rep, err := RunWith(fixturePath(t), scanner)
+	rep, err := RunWith(fixturePath(t), layout.Default(), scanner)
 
 	// assert
 	if err != nil {
@@ -83,7 +84,7 @@ func TestRunWithScannerErrorFailsRun(t *testing.T) {
 	}
 
 	// act
-	_, err := RunWith(fixturePath(t), scanner)
+	_, err := RunWith(fixturePath(t), layout.Default(), scanner)
 
 	// assert — the first scanned page in ascending name order is Alpha
 	if err == nil || !strings.Contains(err.Error(), "boom") || !strings.Contains(err.Error(), "Alpha") {
@@ -100,7 +101,7 @@ func TestRunWithCleanGraphHasNoFindings(t *testing.T) {
 	scanner := func(string) ([]graph.UnlinkedRef, error) { return nil, nil }
 
 	// act
-	rep, err := RunWith(dir, scanner)
+	rep, err := RunWith(dir, layout.Default(), scanner)
 
 	// assert
 	if err != nil {
@@ -112,25 +113,23 @@ func TestRunWithCleanGraphHasNoFindings(t *testing.T) {
 }
 
 func TestRunWithPassesThroughIndexWarnings(t *testing.T) {
-	// arrange — a subdirectory under pages/ makes BuildIndex warn
+	// arrange — a case-fold collision makes BuildIndex warn
 	dir := tempGraph(t, map[string]string{
-		"pages/Solo.md":  "- links to [[Other]]\n",
-		"pages/Other.md": "- links to [[Solo]]\n",
+		"pages/Alpha.md": "- links to [[Other]]\n",
+		"pages/alpha.md": "- links to [[Other]]\n",
+		"pages/Other.md": "- links to [[Alpha]]\n",
 	})
-	if err := os.MkdirAll(filepath.Join(dir, "pages", "subdir"), 0o755); err != nil {
-		t.Fatal(err)
-	}
 	scanner := func(string) ([]graph.UnlinkedRef, error) { return nil, nil }
 
 	// act
-	rep, err := RunWith(dir, scanner)
+	rep, err := RunWith(dir, layout.Default(), scanner)
 
 	// assert
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rep.Warnings) != 1 || !strings.Contains(rep.Warnings[0], "skipping subdirectory") {
-		t.Errorf("warnings = %v, want the one skipping-subdirectory warning", rep.Warnings)
+	if len(rep.Warnings) != 1 || !strings.Contains(rep.Warnings[0], "ambiguous page name") {
+		t.Errorf("warnings = %v, want the one ambiguous-page-name warning", rep.Warnings)
 	}
 	if !rep.HasFindings() {
 		t.Error("a graph with index warnings must have findings")
@@ -149,7 +148,7 @@ func TestRunAgainstFixture(t *testing.T) {
 	skipIfNoRipgrep(t)
 
 	// act
-	rep, err := Run(fixturePath(t))
+	rep, err := Run(fixturePath(t), layout.Default())
 
 	// assert
 	if err != nil {
@@ -295,7 +294,7 @@ func TestDoctorCountsHeadingLinks(t *testing.T) {
 	})
 	scanner := func(string) ([]graph.UnlinkedRef, error) { return nil, nil }
 
-	rep, err := RunWith(dir, scanner)
+	rep, err := RunWith(dir, layout.Default(), scanner)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -313,17 +312,16 @@ func TestDoctorCountsHeadingLinks(t *testing.T) {
 func TestRunScansOnlyIndexedFiles(t *testing.T) {
 	skipIfNoRipgrep(t)
 
-	// arrange — Alpha is mentioned by name in an indexed page (reported), in a
-	// non-.md file and in a nested folder (both outside the index).
+	// arrange — Alpha is mentioned by name in an indexed page (reported) and
+	// in a non-.md file (outside the index).
 	tmp := tempGraph(t, map[string]string{
-		"pages/Alpha.md":      "# Alpha\n",
-		"pages/Note.md":       "a bare Alpha mention\n",
-		"pages/notes.txt":     "Alpha in a text file\n",
-		"pages/sub/Nested.md": "Alpha in a nested folder\n",
+		"pages/Alpha.md":  "# Alpha\n",
+		"pages/Note.md":   "a bare Alpha mention\n",
+		"pages/notes.txt": "Alpha in a text file\n",
 	})
 
 	// act
-	rep, err := Run(tmp)
+	rep, err := Run(tmp, layout.Default())
 
 	// assert
 	if err != nil {
@@ -334,5 +332,31 @@ func TestRunScansOnlyIndexedFiles(t *testing.T) {
 	}
 	if got := rep.Mentions[0].Refs[0].PageName; got != "Note" {
 		t.Errorf("mention from %q, want Note", got)
+	}
+}
+
+func TestRunWithCountsNestedPagesInConfiguredFolders(t *testing.T) {
+	// arrange
+	dir := tempGraph(t, map[string]string{
+		".weft/config.toml":         "pages_dir = \"notes\"\njournals_dir = \"notes/daily\"\n",
+		"notes/A.md":                "- see [[B]]\n",
+		"notes/sub/B.md":            "- see [[A]]\n",
+		"notes/daily/2026_05_24.md": "- day\n",
+	})
+	lay, err := layout.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scanner := func(string) ([]graph.UnlinkedRef, error) { return nil, nil }
+
+	// act
+	rep, err := RunWith(dir, lay, scanner)
+
+	// assert
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Pages != 2 || rep.Journals != 1 {
+		t.Errorf("pages/journals = %d/%d, want 2/1", rep.Pages, rep.Journals)
 	}
 }

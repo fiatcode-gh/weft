@@ -11,10 +11,11 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/edit"
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 )
 
 func TestTodayJournalNameUsesNowFunc(t *testing.T) {
-	a := New("/unused", "test")
+	a := New("/unused", layout.Default(), "test")
 	a.nowFunc = func() time.Time { return time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC) }
 	if got := a.todayJournalName(); got != "2026-05-23" {
 		t.Errorf("todayJournalName: want 2026-05-23, got %q", got)
@@ -45,7 +46,7 @@ func bootApp(t *testing.T, configs ...bootConfig) *App {
 	} else {
 		graphPath = cloneFixtureGraph(t)
 	}
-	a := New(graphPath, "test")
+	a := New(graphPath, layout.Default(), "test")
 	if !cfg.now.IsZero() {
 		now := cfg.now
 		a.nowFunc = func() time.Time { return now }
@@ -95,7 +96,7 @@ func TestAppNavigateHighlighting(t *testing.T) {
 		"pages/Note.md": sb.String(),
 		"pages/Hub.md":  "# Hub\n",
 	})
-	a := New(tmp, "test")
+	a := New(tmp, layout.Default(), "test")
 	a.idx = idx
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	a.page = NewPageView(idx, "Hub", 80, 24)
@@ -127,7 +128,7 @@ func TestAppBacklinkUnlinkedEnterHighlights(t *testing.T) {
 		"pages/Topic.md": "# Topic\n",
 		"pages/Note.md":  sb.String(),
 	})
-	a := New(tmp, "test")
+	a := New(tmp, layout.Default(), "test")
 	a.idx = idx
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	a.page = NewPageView(idx, "Topic", 80, 24)
@@ -157,7 +158,7 @@ func TestAppUnlinkedRefs(t *testing.T) {
 		"pages/Alpha.md": "# Alpha\n",
 		"pages/Note.md":  "a bare Alpha mention\nand a linked [[Alpha]]\n",
 	})
-	a := New(tmp, "test")
+	a := New(tmp, layout.Default(), "test")
 	a.idx = idx
 
 	// act
@@ -182,7 +183,7 @@ func TestAppLinkifyWritesAndRefreshes(t *testing.T) {
 		"pages/Note.md":  "- a bare Topic mention\n",
 	})
 	notePath := filepath.Join(tmp, "pages", "Note.md")
-	a := New(tmp, "test")
+	a := New(tmp, layout.Default(), "test")
 	a.idx = idx
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	a.page = NewPageView(idx, "Topic", 80, 24)
@@ -222,7 +223,7 @@ func TestAppLinkifyMentionGoneShowsError(t *testing.T) {
 		"pages/Note.md":  "- a bare Topic mention\n",
 	})
 	notePath := filepath.Join(tmp, "pages", "Note.md")
-	a := New(tmp, "test")
+	a := New(tmp, layout.Default(), "test")
 	a.idx = idx
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	a.page = NewPageView(idx, "Topic", 80, 24)
@@ -265,7 +266,7 @@ func TestAppLinkifyFileChangedBetweenReadAndWrite(t *testing.T) {
 		"pages/Note.md":  "- a bare Topic mention\n",
 	})
 	notePath := filepath.Join(tmp, "pages", "Note.md")
-	a := New(tmp, "test")
+	a := New(tmp, layout.Default(), "test")
 	a.idx = idx
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	a.page = NewPageView(idx, "Topic", 80, 24)
@@ -326,7 +327,7 @@ func TestReindexPreservesScrollPosition(t *testing.T) {
 	dir, _ := writeGraph(t, map[string]string{
 		"pages/Long.md": strings.Repeat("- line\n", 80),
 	})
-	a := New(dir, "test")
+	a := New(dir, layout.Default(), "test")
 	a.Update(a.Init()())
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 12})
 	a.navigate("Long")
@@ -358,7 +359,7 @@ func TestEditorDiscardExitPreservesScrollPosition(t *testing.T) {
 	dir, _ := writeGraph(t, map[string]string{
 		"pages/Long.md": strings.Repeat("- line\n", 80),
 	})
-	a := New(dir, "test")
+	a := New(dir, layout.Default(), "test")
 	a.Update(a.Init()())
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 12})
 	a.navigate("Long")
@@ -444,8 +445,9 @@ func TestIndexWarningsSurfaceAsHintAndLog(t *testing.T) {
 	cache := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", cache)
 	a := bootApp(t, bootConfig{files: map[string]string{
-		"pages/Home.md":       "- hello\n",
-		"pages/sub/Nested.md": "- nested\n", // pages/sub/ → one subdir warning
+		"pages/Home.md":  "- hello\n",
+		"pages/Alpha.md": "- a\n", // Alpha/alpha → one case-fold warning
+		"pages/alpha.md": "- b\n",
 	}})
 
 	// assert — boot indexing already ran inside bootApp
@@ -456,13 +458,13 @@ func TestIndexWarningsSurfaceAsHintAndLog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected warnings appended to the debug log: %v", err)
 	}
-	if !strings.Contains(string(logBytes), "skipping subdirectory") {
+	if !strings.Contains(string(logBytes), "ambiguous page name") {
 		t.Fatalf("log missing warning detail, got:\n%s", logBytes)
 	}
 }
 
 // TestStandingIndexWarningsDoNotRenag pins the fix for a standing warning
-// (an intentional pages/sub/, a long-lived case collision) re-nagging on
+// (a long-lived case collision) re-nagging on
 // every reindex: boot already logged and hinted the one warning above; a
 // second reindex (R) that turns up the identical warning set must not hint
 // "indexed with" again or append a second log line.
@@ -472,15 +474,16 @@ func TestStandingIndexWarningsDoNotRenag(t *testing.T) {
 	cache := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", cache)
 	a := bootApp(t, bootConfig{files: map[string]string{
-		"pages/Home.md":       "- hello\n",
-		"pages/sub/Nested.md": "- nested\n", // pages/sub/ → one subdir warning
+		"pages/Home.md":  "- hello\n",
+		"pages/Alpha.md": "- a\n", // Alpha/alpha → one case-fold warning
+		"pages/alpha.md": "- b\n",
 	}})
 	if !strings.Contains(a.hint, "indexed with 1 warning — see ") {
 		t.Fatalf("precondition: hint = %q, want indexed-with-warnings hint", a.hint)
 	}
 	a.hint = ""
 
-	// act — R reindexes; the warning set is unchanged (still just pages/sub/)
+	// act — R reindexes; the warning set is unchanged (still just Alpha/alpha)
 	_, cmd := a.Update(key("R"))
 	drainCmds(t, a, cmd)
 
@@ -493,8 +496,8 @@ func TestStandingIndexWarningsDoNotRenag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected warnings appended to the debug log: %v", err)
 	}
-	if got := strings.Count(string(logBytes), "skipping subdirectory"); got != 1 {
-		t.Fatalf("log has %d 'skipping subdirectory' lines, want exactly 1:\n%s", got, logBytes)
+	if got := strings.Count(string(logBytes), "ambiguous page name"); got != 1 {
+		t.Fatalf("log has %d 'ambiguous page name' lines, want exactly 1:\n%s", got, logBytes)
 	}
 }
 

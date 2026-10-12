@@ -34,7 +34,7 @@ func NewOnThisDay(idx *graph.Index, today time.Time, read func(string) (edit.Sna
 	o := &OnThisDay{listBox: listBox{width: width, height: height}, today: today}
 	for _, e := range graph.OnThisDay(today, idx.Journals()) {
 		row := onThisDayRow{OnThisDayEntry: e}
-		path := filepath.Join(idx.GraphPath, "journals", graph.FilenameFromPageName(e.Name))
+		path := filepath.Join(idx.GraphPath, filepath.FromSlash(idx.Layout.JournalsDir()), graph.FilenameFromPageName(e.Name))
 		if snap, err := read(path); err != nil {
 			row.readErr = "cannot read: " + err.Error()
 		} else if snap.Exists {

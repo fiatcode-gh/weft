@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/fiatcode-gh/weft/v2/internal/buffer"
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 )
 
 // key builds the key press Bubble Tea v2 reports for typing s (one rune).
@@ -92,7 +93,11 @@ func writeGraph(t *testing.T, files map[string]string) (string, *graph.Index) {
 			t.Fatal(err)
 		}
 	}
-	idx, err := graph.BuildIndex(dir)
+	lay, err := layout.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx, err := graph.BuildIndex(dir, lay)
 	if err != nil {
 		t.Fatal(err)
 	}

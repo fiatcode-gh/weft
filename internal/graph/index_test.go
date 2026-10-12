@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"unsafe"
+
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 )
 
 func TestBuildIndex(t *testing.T) {
@@ -213,41 +215,6 @@ func TestBuildIndexJournalsEmptyWhenNoJournals(t *testing.T) {
 	}
 }
 
-func TestBuildIndexWarnsOnSubdirectory(t *testing.T) {
-	// arrange — a page plus a nested file under pages/sub/ that must be skipped.
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "pages", "sub"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "pages", "Alpha.md"), []byte("# Alpha\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "pages", "sub", "nested.md"), []byte("# nested\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// act
-	idx, err := BuildIndex(dir)
-
-	// assert
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(idx.Pages) != 1 {
-		t.Errorf("want 1 page (the subdir file is skipped), got %d", len(idx.Pages))
-	}
-	// assert — in TestBuildIndexWarnsOnSubdirectory
-	found := false
-	for _, w := range idx.Warnings {
-		if strings.Contains(w, "skipping subdirectory") {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("expected subdirectory warning in idx.Warnings, got %v", idx.Warnings)
-	}
-}
-
 // An unreadable page must not abort boot: it stays in the picker (first
 // pass) but its body parse is skipped with a warning (second pass).
 func TestBuildIndexCollectsUnreadablePageWarning(t *testing.T) {
@@ -271,7 +238,7 @@ func TestBuildIndexCollectsUnreadablePageWarning(t *testing.T) {
 	t.Cleanup(func() { os.Chmod(bad, 0o644) }) // so TempDir removal works
 
 	// act
-	idx, err := BuildIndex(dir)
+	idx, err := BuildIndex(dir, layout.Default())
 
 	// assert
 	if err != nil {
@@ -416,7 +383,7 @@ func TestBacklinksAreCaseInsensitive(t *testing.T) {
 	write("Note.md", "- see [[ALPHA]] here\n")
 
 	// act
-	idx, err := BuildIndex(dir)
+	idx, err := BuildIndex(dir, layout.Default())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -477,7 +444,7 @@ func TestBuildIndexFoldCollisionIsDeterministicAndWarns(t *testing.T) {
 	}
 
 	// act
-	idx, err := BuildIndex(dir)
+	idx, err := BuildIndex(dir, layout.Default())
 
 	// assert
 	if err != nil {
@@ -520,7 +487,7 @@ func TestFoldCollisionKeepsExactNameResolution(t *testing.T) {
 	}
 
 	// act
-	idx, err := BuildIndex(dir)
+	idx, err := BuildIndex(dir, layout.Default())
 	if err != nil {
 		t.Fatal(err)
 	}

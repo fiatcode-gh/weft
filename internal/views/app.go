@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 
 	"github.com/fiatcode-gh/weft/v2/internal/edit"
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 	"github.com/fiatcode-gh/weft/v2/internal/merge"
 	"github.com/fiatcode-gh/weft/v2/internal/search"
 	syncpkg "github.com/fiatcode-gh/weft/v2/internal/sync"
@@ -68,6 +68,7 @@ var editorStartsInSource bool
 
 type App struct {
 	graphPath string
+	lay       layout.Layout
 
 	idx     *graph.Index
 	loadErr error
@@ -180,9 +181,10 @@ type historyEntry struct {
 // New returns an App that has not yet built its index. The index is built
 // asynchronously in Init so the first frame can render a "loading" splash
 // instead of freezing the terminal while a large graph is walked.
-func New(graphPath, version string) *App {
+func New(graphPath string, lay layout.Layout, version string) *App {
 	a := &App{
 		graphPath:    graphPath,
+		lay:          lay,
 		histIdx:      -1,
 		version:      version,
 		nowFunc:      time.Now,
@@ -218,9 +220,9 @@ func (a *App) buildIndexCmd() tea.Cmd {
 	// which of their disk walks finishes first.
 	a.indexGen++
 	gen := a.indexGen
-	path := a.graphPath
+	path, lay := a.graphPath, a.lay
 	return func() tea.Msg {
-		idx, err := graph.BuildIndex(path)
+		idx, err := graph.BuildIndex(path, lay)
 		return indexLoadedMsg{idx: idx, err: err, gen: gen}
 	}
 }
@@ -380,7 +382,7 @@ func (a *App) historyForward() {
 // and the linkify path, both of which mutate the graph while a view is open and
 // need the refresh before returning (no indexLoadedMsg round-trip).
 func (a *App) reindex() error {
-	idx, err := graph.BuildIndex(a.graphPath)
+	idx, err := graph.BuildIndex(a.graphPath, a.lay)
 	if err != nil {
 		return err
 	}
@@ -467,9 +469,10 @@ func (a *App) editCurrent() tea.Cmd {
 
 // enterEditor opens the in-app editor on the current page. The target file
 // path is computed but NOT created — a brand-new page is written to disk
-// only on save (Ctrl+S). Journals route to journals/, every other name to
-// pages/ (flat, "/" mangled to "___" by FilenameFromPageName). The cursor
-// opens on the read view's anchor line.
+// only on save (Ctrl+S). Journals route to the journals folder, every other
+// name to where the layout places a new page (Index.NewPagePath); a name the
+// layout cannot place shows its error as a hint and opens nothing. The
+// cursor opens on the read view's anchor line.
 func (a *App) enterEditor() tea.Cmd {
 	name := a.page.Page()
 	var path string
@@ -478,7 +481,11 @@ func (a *App) enterEditor() tea.Cmd {
 	} else if graph.IsJournalPageName(name) {
 		path = a.journalPath(name)
 	} else {
-		path = filepath.Join(a.graphPath, "pages", graph.FilenameFromPageName(name))
+		p, err := a.idx.NewPagePath(name)
+		if err != nil {
+			return a.setHint(err.Error())
+		}
+		path = p
 	}
 	snap, err := a.readSnapshot(path)
 	if err != nil {
