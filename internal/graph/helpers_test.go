@@ -1,7 +1,6 @@
 package graph
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -47,16 +46,4 @@ func buildTempIndex(t *testing.T, files map[string]string) *Index {
 		t.Fatalf("BuildIndex: %v", err)
 	}
 	return idx
-}
-
-// mapReader returns a reader closure over a fixed map of file bodies, the shape
-// FilterUnlinked expects. A missing path yields an error.
-func mapReader(bodies map[string]string) func(string) (string, error) {
-	return func(p string) (string, error) {
-		b, ok := bodies[p]
-		if !ok {
-			return "", fmt.Errorf("no file %s", p)
-		}
-		return b, nil
-	}
 }

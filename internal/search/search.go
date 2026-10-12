@@ -1,4 +1,4 @@
-// Package search runs ripgrep against a Logseq graph and parses its JSON
+// Package search runs ripgrep over a set of graph files and parses its JSON
 // output into structured hits. It performs process I/O and decoding so the UI
 // layer can consume plain []Hit values.
 package search
@@ -8,9 +8,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 )
 
@@ -29,12 +27,15 @@ type Span struct {
 	Start, End int
 }
 
-// Run executes ripgrep for query against <graphPath>/pages and
-// <graphPath>/journals and returns the parsed hits. It returns (nil, nil) when
-// neither subdirectory exists. A ripgrep exit code of 1 (no matches) is
-// treated as success.
-func Run(graphPath, query string) ([]Hit, error) {
-	out, err := runRipgrep(graphPath, []string{"--smart-case"}, query)
+// argBudget caps the summed length of the file paths passed to one rg
+// invocation, keeping the command line well under the OS argument limit.
+var argBudget = 128 << 10
+
+// Run executes ripgrep for query over exactly the given files and returns the
+// parsed hits. It returns (nil, nil) when files is empty. A ripgrep exit code
+// of 1 (no matches) is treated as success.
+func Run(files []string, query string) ([]Hit, error) {
+	out, err := runRipgrep(files, []string{"--smart-case"}, query)
 	if err != nil {
 		return nil, err
 	}
@@ -42,46 +43,60 @@ func Run(graphPath, query string) ([]Hit, error) {
 }
 
 // Mentions finds whole-word, case-insensitive, literal occurrences of name
-// across pages/ and journals/. Used to detect unlinked references to a page;
-// word boundaries keep "Go" from matching "Google", and -F treats names with
-// regex metacharacters literally.
-func Mentions(graphPath, name string) ([]Hit, error) {
-	out, err := runRipgrep(graphPath, []string{"-w", "-F", "--ignore-case"}, name)
+// across exactly the given files. Used to detect unlinked references to a
+// page; word boundaries keep "Go" from matching "Google", and -F treats names
+// with regex metacharacters literally.
+func Mentions(files []string, name string) ([]Hit, error) {
+	out, err := runRipgrep(files, []string{"-w", "-F", "--ignore-case"}, name)
 	if err != nil {
 		return nil, err
 	}
 	return parseJSON(out)
 }
 
-// runRipgrep runs `rg --json <flags...> -- <query> <pages> <journals>` and
-// returns raw stdout. A ripgrep exit code of 1 (no matches) is treated as
-// success. Returns (nil, nil) when neither subdirectory exists.
-func runRipgrep(graphPath string, flags []string, query string) ([]byte, error) {
-	args := append([]string{"--json"}, flags...)
-	args = append(args, "--", query)
-	baseArgs := len(args)
-	for _, sub := range []string{"pages", "journals"} {
-		p := filepath.Join(graphPath, sub)
-		if _, err := os.Stat(p); err == nil {
-			args = append(args, p)
+// runRipgrep runs `rg --json <flags...> -- <query> <files...>` and returns the
+// raw stdout. Large file lists are split into batches under argBudget and the
+// outputs concatenated. A ripgrep exit code of 1 (no matches) is treated as
+// success for a batch. Returns (nil, nil) when files is empty.
+func runRipgrep(files []string, flags []string, query string) ([]byte, error) {
+	var all []byte
+	for _, batch := range batches(files) {
+		args := append([]string{"--json"}, flags...)
+		args = append(args, "--", query)
+		args = append(args, batch...)
+		cmd := exec.Command("rg", args...)
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+			err = nil
 		}
+		if err != nil {
+			return nil, fmt.Errorf("rg failed: %w (%s)", err, stderr.String())
+		}
+		all = append(all, stdout.Bytes()...)
 	}
-	if len(args) == baseArgs {
-		// No pages/ or journals/ dir — nothing to search.
-		return nil, nil
+	return all, nil
+}
+
+// batches splits files into consecutive groups whose summed len(path)+1 stays
+// within argBudget; a group always holds at least one file.
+func batches(files []string) [][]string {
+	var out [][]string
+	start, size := 0, 0
+	for i, f := range files {
+		n := len(f) + 1
+		if i > start && size+n > argBudget {
+			out = append(out, files[start:i])
+			start, size = i, 0
+		}
+		size += n
 	}
-	cmd := exec.Command("rg", args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-		return stdout.Bytes(), nil
+	if start < len(files) {
+		out = append(out, files[start:])
 	}
-	if err != nil {
-		return nil, fmt.Errorf("rg failed: %w (%s)", err, stderr.String())
-	}
-	return stdout.Bytes(), nil
+	return out
 }
 
 func parseJSON(b []byte) ([]Hit, error) {

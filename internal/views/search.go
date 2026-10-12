@@ -14,34 +14,29 @@ import (
 
 type SearchView struct {
 	listBox
-	idx        *graph.Index
-	input      textinput.Model
-	gen        int // bumped on every query mutation; tags in-flight searches
-	hits       []search.Hit
-	running    bool
-	searched   bool // a search has completed for the current query (vs. never run)
-	err        error
-	pathToName map[string]string // file path → logical page name, for tidy row prefixes
+	idx      *graph.Index
+	input    textinput.Model
+	gen      int // bumped on every query mutation; tags in-flight searches
+	hits     []search.Hit
+	running  bool
+	searched bool // a search has completed for the current query (vs. never run)
+	err      error
 }
 
 func NewSearchView(idx *graph.Index, width, height int) *SearchView {
 	ti := textinput.New()
 	ti.Focus()
 	s := &SearchView{listBox: listBox{width: width, height: height}, idx: idx, input: ti}
-	s.pathToName = make(map[string]string, len(idx.Pages))
-	for _, p := range idx.Pages {
-		s.pathToName[p.Path] = p.Name
-	}
 	return s
 }
 
 // hitLabel returns the column-left label for a hit row: the page name when
-// the file is in the index, falling back to a short path otherwise.
+// the file is in the index, falling back to the path itself otherwise.
 func (s *SearchView) hitLabel(filePath string) string {
-	if name, ok := s.pathToName[filePath]; ok {
-		return name
+	if p, ok := s.idx.PageAt(filePath); ok {
+		return p.Name
 	}
-	return shortPath(filePath)
+	return filePath
 }
 
 func (s *SearchView) Query() string { return s.input.Value() }
@@ -55,11 +50,11 @@ func (s *SearchView) SetQuery(q string) { s.input.SetValue(q) }
 // with this view instance and the query's generation at launch time, so a
 // result for an edited-away query (or a since-replaced overlay) can be
 // dropped instead of landing under whatever query is current now.
-func (s *SearchView) SearchCmd(graphPath string) tea.Cmd {
+func (s *SearchView) SearchCmd() tea.Cmd {
 	q := s.input.Value()
 	gen := s.gen
 	return func() tea.Msg {
-		hits, err := search.Run(graphPath, q)
+		hits, err := search.Run(s.idx.Files(), q)
 		return searchDoneMsg{view: s, gen: gen, hits: hits, err: err}
 	}
 }
@@ -88,9 +83,12 @@ func (s *SearchView) Apply(msg searchDoneMsg) {
 }
 
 // pageName returns the logical page name for a hit's file path, or "" when the
-// file isn't in the index (e.g. a result outside pages/ and journals/).
+// file isn't in the index.
 func (s *SearchView) pageName(filePath string) string {
-	return s.pathToName[filePath]
+	if p, ok := s.idx.PageAt(filePath); ok {
+		return p.Name
+	}
+	return ""
 }
 
 // Update handles a key and reports the result to the App.
@@ -107,7 +105,7 @@ func (s *SearchView) Update(key string) OverlayResult {
 				return OverlayResult{} // already searched, no matches — don't re-run
 			}
 			s.running = true
-			return overlayCommand(s.SearchCmd(s.idx.GraphPath))
+			return overlayCommand(s.SearchCmd())
 		}
 		if s.sel >= 0 && s.sel < len(s.hits) {
 			return overlayOpen(s.pageName(s.hits[s.sel].FilePath))
@@ -275,12 +273,4 @@ func (s *SearchView) View() string {
 	// Width includes horizontal padding (2 cells each side) but excludes the
 	// border, so adding 4 keeps the text area at exactly `inner` cells.
 	return renderBordered(inner+4, b.String())
-}
-
-func shortPath(p string) string {
-	parts := strings.Split(p, "/")
-	if len(parts) < 2 {
-		return p
-	}
-	return strings.Join(parts[len(parts)-2:], "/")
 }

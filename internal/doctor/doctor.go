@@ -15,7 +15,7 @@ import (
 )
 
 // MentionScanner returns the unlinked (bare-text) references to one page.
-type MentionScanner func(graphPath, name string) ([]graph.UnlinkedRef, error)
+type MentionScanner func(name string) ([]graph.UnlinkedRef, error)
 
 // PageMentions collects one page's bare-text mentions elsewhere in the graph.
 type PageMentions struct {
@@ -47,8 +47,9 @@ func Run(graphPath string) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	return run(idx, graphPath, func(gp, name string) ([]graph.UnlinkedRef, error) {
-		hits, err := search.Mentions(gp, name)
+	files := idx.Files()
+	return run(idx, graphPath, func(name string) ([]graph.UnlinkedRef, error) {
+		hits, err := search.Mentions(files, name)
 		if err != nil {
 			return nil, err
 		}
@@ -56,7 +57,7 @@ func Run(graphPath string) (*Report, error) {
 		if meta, ok := idx.Resolve(name); ok {
 			targetPath = meta.Path
 		}
-		return graph.FilterUnlinked(hits, targetPath, readFile), nil
+		return idx.FilterUnlinked(hits, targetPath, readFile), nil
 	})
 }
 
@@ -71,7 +72,7 @@ func RunWith(graphPath string, mentions MentionScanner) (*Report, error) {
 
 // run assembles the report from a built index. Orphans and mention targets
 // are non-journal pages only; journals stay in scope as mention sources
-// because the scanner greps pages/ and journals/ alike.
+// because the scanner covers every indexed file.
 func run(idx *graph.Index, graphPath string, mentions MentionScanner) (*Report, error) {
 	rep := &Report{
 		GraphPath:  graphPath,
@@ -93,7 +94,7 @@ func run(idx *graph.Index, graphPath string, mentions MentionScanner) (*Report, 
 	sort.Strings(rep.Orphans)
 	sort.Strings(names)
 	for _, name := range names {
-		refs, err := mentions(graphPath, name)
+		refs, err := mentions(name)
 		if err != nil {
 			return nil, fmt.Errorf("scan unlinked mentions for %q: %w", name, err)
 		}

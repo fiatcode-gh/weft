@@ -17,6 +17,9 @@ type Index struct {
 	ByNameFold map[string]*PageMeta // case-folded (lowercase key) — for [[ALPHA]] → Alpha
 	Todos      []TodoBullet
 
+	byPath map[string]*PageMeta // exact Path → page, pointers into Pages
+	files  []string             // every PageMeta.Path in walk order
+
 	backlinks   map[string][]Ref  // keyed by strings.ToLower(target) — resolution is case-insensitive
 	targetSpell map[string]string // folded target → first-seen original spelling (walk order)
 	journals    []string          // journal page names, sorted ascending
@@ -48,6 +51,7 @@ func BuildIndex(graphPath string) (*Index, error) {
 		backlinks:   make(map[string][]Ref),
 		targetSpell: make(map[string]string),
 		headingKeys: make(map[string]map[string]struct{}),
+		byPath:      make(map[string]*PageMeta),
 	}
 
 	for _, sub := range []string{"pages", "journals"} {
@@ -87,6 +91,8 @@ func BuildIndex(graphPath string) (*Index, error) {
 	// deterministic — os.ReadDir returns entries sorted by filename — and warn on
 	// a genuine case-fold collision rather than silently letting the last win.
 	for i := range idx.Pages {
+		idx.byPath[idx.Pages[i].Path] = &idx.Pages[i]
+		idx.files = append(idx.files, idx.Pages[i].Path)
 		name := idx.Pages[i].Name
 		fold := strings.ToLower(name)
 		if existing, ok := idx.ByNameFold[fold]; ok {
@@ -182,6 +188,16 @@ func (idx *Index) BacklinksTo(name string) []Ref {
 }
 
 // Journals returns the indexed journal page names, sorted ascending (a copy).
+// PageAt returns the page whose file is exactly path.
+func (idx *Index) PageAt(path string) (*PageMeta, bool) {
+	p, ok := idx.byPath[path]
+	return p, ok
+}
+
+// Files returns a copy of every indexed page's path, in walk order — exactly
+// the set of files search and mention scans cover.
+func (idx *Index) Files() []string { return slices.Clone(idx.files) }
+
 func (idx *Index) Journals() []string { return slices.Clone(idx.journals) }
 
 // JournalNeighbor returns the nearest indexed journal in dir (-1 or +1).

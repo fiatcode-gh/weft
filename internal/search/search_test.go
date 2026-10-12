@@ -1,6 +1,7 @@
 package search
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,13 +33,24 @@ func fixtureGraph(t *testing.T) string {
 // the shared arrange step for tests that grep over a freshly built temp graph.
 func writePage(t *testing.T, dir, name, body string) {
 	t.Helper()
-	pages := filepath.Join(dir, "pages")
-	if err := os.MkdirAll(pages, 0o755); err != nil {
+	path := filepath.Join(dir, "pages", name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(pages, name), []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// graphFiles lists the .md files one level under dir's subdirectories, the way
+// the index would hand them to Run.
+func graphFiles(t *testing.T, dir string) []string {
+	t.Helper()
+	files, err := filepath.Glob(filepath.Join(dir, "*", "*.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
 }
 
 func TestParseJSON(t *testing.T) {
@@ -117,7 +129,7 @@ func TestRunFindsHits(t *testing.T) {
 	graph := fixtureGraph(t)
 
 	// act
-	hits, err := Run(graph, "Beta")
+	hits, err := Run(graphFiles(t, graph), "Beta")
 
 	// assert
 	if err != nil {
@@ -140,7 +152,7 @@ func TestRunNoMatchReturnsEmpty(t *testing.T) {
 	graph := fixtureGraph(t)
 
 	// act
-	hits, err := Run(graph, "thisstringshouldnotexistanywhere_xyzzy_1234")
+	hits, err := Run(graphFiles(t, graph), "thisstringshouldnotexistanywhere_xyzzy_1234")
 
 	// assert
 	if err != nil {
@@ -158,7 +170,7 @@ func TestRunMalformedRegexSurfacesRipgrepFailure(t *testing.T) {
 	graph := fixtureGraph(t)
 
 	// act
-	_, err := Run(graph, "[")
+	_, err := Run(graphFiles(t, graph), "[")
 
 	// assert
 	if err == nil || !strings.Contains(err.Error(), "rg failed") {
@@ -166,19 +178,80 @@ func TestRunMalformedRegexSurfacesRipgrepFailure(t *testing.T) {
 	}
 }
 
-func TestRunMissingDirsReturnsNil(t *testing.T) {
-	// arrange — an empty temp dir has neither pages/ nor journals/.
-	tmp := t.TempDir()
-
-	// act
-	hits, err := Run(tmp, "anything")
+func TestRunEmptyFileListReturnsNil(t *testing.T) {
+	// act — no rg needed: nothing to search short-circuits
+	hits, err := Run(nil, "anything")
 
 	// assert
 	if err != nil {
-		t.Errorf("missing dirs: want nil err, got %v", err)
+		t.Errorf("empty file list: want nil err, got %v", err)
 	}
 	if hits != nil {
-		t.Errorf("missing dirs: want nil hits, got %+v", hits)
+		t.Errorf("empty file list: want nil hits, got %+v", hits)
+	}
+}
+
+func TestRunSearchesOnlyGivenFiles(t *testing.T) {
+	skipIfNoRipgrep(t)
+
+	// arrange — a non-.md sibling and a nested folder both contain the needle
+	tmp := t.TempDir()
+	writePage(t, tmp, "a.md", "needle\n")
+	writePage(t, tmp, "b.txt", "needle\n")
+	writePage(t, tmp, "sub/c.md", "needle\n")
+	a := filepath.Join(tmp, "pages", "a.md")
+
+	// act
+	hits, err := Run([]string{a}, "needle")
+
+	// assert
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 1 || hits[0].FilePath != a {
+		t.Fatalf("hits = %+v, want exactly one hit in %s", hits, a)
+	}
+}
+
+func TestRunBatchesLargeFileLists(t *testing.T) {
+	skipIfNoRipgrep(t)
+
+	// arrange — 10 files with a match each plus a matchless one; a tiny budget
+	// forces several rg invocations, including a batch with no match.
+	tmp := t.TempDir()
+	var files []string
+	for i := 0; i < 10; i++ {
+		name := fmt.Sprintf("p%02d.md", i)
+		writePage(t, tmp, name, "needle\n")
+		files = append(files, filepath.Join(tmp, "pages", name))
+	}
+	writePage(t, tmp, "none.md", "nothing\n")
+	files = append(files[:5], append([]string{filepath.Join(tmp, "pages", "none.md")}, files[5:]...)...)
+	old := argBudget
+	argBudget = len(files[0]) * 3
+	t.Cleanup(func() { argBudget = old })
+
+	// act
+	hits, err := Run(files, "needle")
+
+	// assert
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 10 {
+		t.Fatalf("hits = %d, want 10: %+v", len(hits), hits)
+	}
+}
+
+func TestBatchesRespectBudget(t *testing.T) {
+	old := argBudget
+	argBudget = 10
+	t.Cleanup(func() { argBudget = old })
+
+	got := batches([]string{"aaaa", "bbbb", "cccc", "waytoolongpath"})
+
+	if len(got) != 3 || len(got[0]) != 2 || len(got[1]) != 1 || len(got[2]) != 1 {
+		t.Fatalf("batches = %v, want [[aaaa bbbb] [cccc] [waytoolongpath]]", got)
 	}
 }
 
@@ -191,7 +264,7 @@ func TestMentionsWholeWordCaseInsensitive(t *testing.T) {
 	writePage(t, tmp, "Note.md", "see Alpha here\nan alpha mention\nAlphabet soup\n")
 
 	// act
-	hits, err := Mentions(tmp, "Alpha")
+	hits, err := Mentions(graphFiles(t, tmp), "Alpha")
 
 	// assert
 	if err != nil {

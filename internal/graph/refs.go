@@ -1,7 +1,6 @@
 package graph
 
 import (
-	"path/filepath"
 	"strings"
 
 	"github.com/fiatcode-gh/weft/v2/internal/search"
@@ -22,12 +21,17 @@ type UnlinkedRef struct {
 // references, dropping any hit that is in the target's own file, inside a
 // fenced code block, or already inside a [[…]] link or a tag. read returns a file's
 // body; a read error drops every hit from that file (we can't verify its
-// fence state).
-func FilterUnlinked(hits []search.Hit, targetPath string, read func(path string) (string, error)) []UnlinkedRef {
+// fence state). A hit's page is found by its exact path in the index; hits on
+// unindexed paths are dropped.
+func (idx *Index) FilterUnlinked(hits []search.Hit, targetPath string, read func(path string) (string, error)) []UnlinkedRef {
 	fencedByFile := map[string]map[int]bool{} // nil value == unreadable file
 	var out []UnlinkedRef
 	for _, h := range hits {
 		if h.FilePath == targetPath {
+			continue
+		}
+		page, ok := idx.PageAt(h.FilePath)
+		if !ok {
 			continue
 		}
 		fenced, seen := fencedByFile[h.FilePath]
@@ -52,7 +56,7 @@ func FilterUnlinked(hits []search.Hit, targetPath string, read func(path string)
 		}
 		out = append(out, UnlinkedRef{
 			FilePath: h.FilePath,
-			PageName: PageNameFromFilename(filepath.Base(h.FilePath)),
+			PageName: page.Name,
 			Line:     h.Line,
 			Context:  h.Context,
 			Match:    span,

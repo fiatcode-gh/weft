@@ -569,15 +569,15 @@ func (a *App) placeFromEditor(at Anchor) {
 // rather than breaking the backlinks panel — and an error hint would be
 // invisible behind the overlay anyway (cf. the slice-1 hidden-hint lesson).
 func (a *App) unlinkedRefs(name string) []graph.UnlinkedRef {
-	hits, err := search.Mentions(a.graphPath, name)
+	hits, err := search.Mentions(a.idx.Files(), name)
 	if err != nil {
 		return nil
 	}
 	targetPath := ""
-	if meta, ok := a.idx.ByName[name]; ok {
+	if meta, ok := a.idx.Resolve(name); ok {
 		targetPath = meta.Path
 	}
-	return graph.FilterUnlinked(hits, targetPath, func(p string) (string, error) {
+	return a.idx.FilterUnlinked(hits, targetPath, func(p string) (string, error) {
 		b, err := os.ReadFile(p)
 		return string(b), err
 	})

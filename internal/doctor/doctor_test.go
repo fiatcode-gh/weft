@@ -41,7 +41,7 @@ func tempGraph(t *testing.T, files map[string]string) string {
 
 func TestRunWithBuildsReport(t *testing.T) {
 	// arrange — the scanner fabricates exactly one mention for Alpha
-	scanner := func(_, name string) ([]graph.UnlinkedRef, error) {
+	scanner := func(name string) ([]graph.UnlinkedRef, error) {
 		if name == "Alpha" {
 			return []graph.UnlinkedRef{{PageName: "Workbench", Line: 8}}, nil
 		}
@@ -78,7 +78,7 @@ func TestRunWithBuildsReport(t *testing.T) {
 
 func TestRunWithScannerErrorFailsRun(t *testing.T) {
 	// arrange
-	scanner := func(_, name string) ([]graph.UnlinkedRef, error) {
+	scanner := func(name string) ([]graph.UnlinkedRef, error) {
 		return nil, errors.New("boom")
 	}
 
@@ -97,7 +97,7 @@ func TestRunWithCleanGraphHasNoFindings(t *testing.T) {
 		"pages/Solo.md":  "- links to [[Other]]\n",
 		"pages/Other.md": "- links to [[Solo]]\n",
 	})
-	scanner := func(_, _ string) ([]graph.UnlinkedRef, error) { return nil, nil }
+	scanner := func(string) ([]graph.UnlinkedRef, error) { return nil, nil }
 
 	// act
 	rep, err := RunWith(dir, scanner)
@@ -120,7 +120,7 @@ func TestRunWithPassesThroughIndexWarnings(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "pages", "subdir"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	scanner := func(_, _ string) ([]graph.UnlinkedRef, error) { return nil, nil }
+	scanner := func(string) ([]graph.UnlinkedRef, error) { return nil, nil }
 
 	// act
 	rep, err := RunWith(dir, scanner)
@@ -293,7 +293,7 @@ func TestDoctorCountsHeadingLinks(t *testing.T) {
 		"pages/Alpha.md": "## Summary\ntext\n",
 		"pages/Note.md":  "- [[Alpha#Summary]]\n- [[Alpha#Nope]]\n- [[Note#Self]]\n",
 	})
-	scanner := func(_, _ string) ([]graph.UnlinkedRef, error) { return nil, nil }
+	scanner := func(string) ([]graph.UnlinkedRef, error) { return nil, nil }
 
 	rep, err := RunWith(dir, scanner)
 	if err != nil {
@@ -307,5 +307,32 @@ func TestDoctorCountsHeadingLinks(t *testing.T) {
 		if o == "Alpha" {
 			t.Errorf("Alpha is linked by a heading link, orphans = %v", rep.Orphans)
 		}
+	}
+}
+
+func TestRunScansOnlyIndexedFiles(t *testing.T) {
+	skipIfNoRipgrep(t)
+
+	// arrange — Alpha is mentioned by name in an indexed page (reported), in a
+	// non-.md file and in a nested folder (both outside the index).
+	tmp := tempGraph(t, map[string]string{
+		"pages/Alpha.md":      "# Alpha\n",
+		"pages/Note.md":       "a bare Alpha mention\n",
+		"pages/notes.txt":     "Alpha in a text file\n",
+		"pages/sub/Nested.md": "Alpha in a nested folder\n",
+	})
+
+	// act
+	rep, err := Run(tmp)
+
+	// assert
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Mentions) != 1 || rep.Mentions[0].Page != "Alpha" || len(rep.Mentions[0].Refs) != 1 {
+		t.Fatalf("mentions = %+v, want exactly Note's one mention of Alpha", rep.Mentions)
+	}
+	if got := rep.Mentions[0].Refs[0].PageName; got != "Note" {
+		t.Errorf("mention from %q, want Note", got)
 	}
 }
