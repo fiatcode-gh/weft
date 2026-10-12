@@ -20,6 +20,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Under `NO_COLOR` every screen now shows bold, italic, underline, strikethrough, faint and reverse video; only colour is dropped. Migration: use `TERM=dumb` for fully unstyled output.
 - `#word` outside code is now a tag: a link to the page `word` (also in backlinks and `weft doctor`). Migration: wrap literal `#word` text in backticks.
 - `Ctrl+T` in the editor cycles any open marker (`TODO`, `LATER`, `DOING`, `WAITING`, `NOW`) → `DONE` → plain → `TODO`, keeps the `[#A]` priority, and turns `CANCELED` into plain; it no longer makes `LATER x` into `TODO LATER x`. Migration: to turn a `LATER`/`DOING`/`WAITING` bullet into `TODO`, press `Ctrl+T` until it is plain, then once more.
+- Journals are named by their filename stem: `2026_10_12` with the default layout, not `2026-10-12`. `[[2026-10-12]]` no longer opens the journal. Migration: link journals as `[[2026_10_12]]` (the form Logseq and the `weft-worklog` skill already write); search the graph for `\[\[\d{4}-\d{2}-\d{2}` to find old links.
+- A page that shares a journal's name no longer wins `[[name]]`; the journal does. Migration: reach the page as `[[pages/name]]`. `Alpha` and `alpha` in different files no longer share backlinks.
 
 ### Added
 
@@ -46,6 +48,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Any markdown file opens in the in-app editor (CRLF, tabs, more than 10000 lines) and saves byte-for-byte; the `E`/`$EDITOR` refusal hint is gone.
 - Under `NO_COLOR` the read view's selected link shows in reverse video.
 - Tags: `#tag` and `#[[Multi Word]]` link to a page like `[[Page]]` — rendered as links with `#` kept, followed with `n`/`N` and `Enter`, counted in backlinks and `weft doctor`, never reported as unlinked mentions. Typing `#` and a letter in the editor offers page completion. Issue numbers, hex colours, headings, `#+`/`#!` lines, URL fragments and code are never tags.
+- A graph layout config, `<graph>/.weft/config.toml`, with `pages_dir`, `journals_dir`, `journal_file_pattern` and `namespace_files`. No file keeps the Logseq layout. A bad file stops weft and `weft doctor` with exit status 2. See the README, Configuration.
+- Pages in folders, and path links such as `[[folder/Page]]`.
+- Journal filename patterns, including folders (`YYYY/MM/YYYY-MM-DD`).
+- `weft doctor` warns about pages that share a name, and about a page no link can open.
+- The picker lists every page that shares a name, each with its path.
 
 ### Changed
 
@@ -55,6 +62,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A word or URL wider than the page column now wraps onto the next row instead of running past the right margin. A `[[link]]` wider than the column stays on one row, cut at the screen edge, with blank space below where its wrap would have gone. Markdown tables lay out slightly differently (column widths and the header rule).
 - With `TERM=dumb` or no `TERM`, the page body is now drawn without colour, like the rest of the screen.
 - The in-app editor shows your terminal's own cursor instead of drawing one.
+- Subfolders of `pages/` and `journals/` are indexed instead of skipped with a warning. Dot-folders are skipped.
+- Search and unlinked mentions read only the indexed `.md` files, not other file types or dot-folders.
+- A new journal, or a page saved into a missing folder, creates the folder.
 
 ### Fixed
 
