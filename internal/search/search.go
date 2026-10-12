@@ -57,7 +57,11 @@ func Mentions(files []string, name string) ([]Hit, error) {
 // runRipgrep runs `rg --json <flags...> -- <query> <files...>` and returns the
 // raw stdout. Large file lists are split into batches under argBudget and the
 // outputs concatenated. A ripgrep exit code of 1 (no matches) is treated as
-// success for a batch. Returns (nil, nil) when files is empty.
+// success for a batch. Exit code 2 is also success when rg got as far as its
+// summary record: it finished searching and only some listed files failed to
+// open, as happens when a file vanished since the last index. Exit 2 with no
+// summary (a bad regex, say) is an error. Returns (nil, nil) when files is
+// empty.
 func runRipgrep(files []string, flags []string, query string) ([]byte, error) {
 	var all []byte
 	for _, batch := range batches(files) {
@@ -69,8 +73,15 @@ func runRipgrep(files []string, flags []string, query string) ([]byte, error) {
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 		err := cmd.Run()
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-			err = nil
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			switch exitErr.ExitCode() {
+			case 1:
+				err = nil
+			case 2:
+				if bytes.Contains(stdout.Bytes(), summaryMarker) {
+					err = nil
+				}
+			}
 		}
 		if err != nil {
 			return nil, fmt.Errorf("rg failed: %w (%s)", err, stderr.String())
@@ -79,6 +90,10 @@ func runRipgrep(files []string, flags []string, query string) ([]byte, error) {
 	}
 	return all, nil
 }
+
+// summaryMarker identifies rg's closing JSON record. Text inside other records
+// is JSON-escaped, so these raw bytes only occur in a real summary record.
+var summaryMarker = []byte(`"type":"summary"`)
 
 // batches splits files into consecutive groups whose summed len(path)+1 stays
 // within argBudget; a group always holds at least one file.

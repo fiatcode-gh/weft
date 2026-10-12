@@ -52,7 +52,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Pages in folders, and path links such as `[[folder/Page]]`.
 - Journal filename patterns, including folders (`YYYY/MM/YYYY-MM-DD`).
 - `weft doctor` warns about pages that share a name, and about a page no link can open.
-- The picker lists every page that shares a name, each with its path.
+- The picker shows a page that loses a name clash by its shortest path that opens it, such as `b/Note`.
 
 ### Changed
 

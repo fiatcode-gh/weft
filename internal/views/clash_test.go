@@ -17,20 +17,25 @@ func bootVault(t *testing.T) *App {
 	return bootApp(t, bootConfig{fixture: "obsidian-vault"})
 }
 
-func TestVaultPickerLabelsClashesByPath(t *testing.T) {
-	a := bootVault(t)
-	a.active = NewPicker(a.idx, a.width, a.height)
-	p := a.active.(*Picker)
-
+func pickerLabels(p *Picker) []string {
 	var labels []string
 	for _, m := range p.matches {
 		labels = append(labels, m.Str)
 	}
-	if !slices.Contains(labels, "a/Note") || !slices.Contains(labels, "b/Note") {
-		t.Errorf("labels = %v, want a/Note and b/Note rows", labels)
+	return labels
+}
+
+func TestVaultPickerLabelsLoserByKey(t *testing.T) {
+	a := bootVault(t)
+	a.active = NewPicker(a.idx, a.width, a.height)
+	p := a.active.(*Picker)
+
+	labels := pickerLabels(p)
+	if !slices.Contains(labels, "Note") || !slices.Contains(labels, "b/Note") {
+		t.Errorf("labels = %v, want Note (winner) and b/Note (loser) rows", labels)
 	}
-	if slices.Contains(labels, "Note") {
-		t.Errorf("labels = %v: bare Note must not be a row", labels)
+	if slices.Contains(labels, "a/Note") {
+		t.Errorf("labels = %v: the winner shows its name, not a/Note", labels)
 	}
 	if !slices.Contains(labels, "Alpha") {
 		t.Errorf("labels = %v: unshared Alpha keeps its name", labels)
@@ -49,6 +54,22 @@ func TestVaultPickerLabelsClashesByPath(t *testing.T) {
 	}
 	if v := appText(a); !strings.Contains(v, "note in b") {
 		t.Errorf("page body lacks %q:\n%s", "note in b", v)
+	}
+}
+
+func TestPickerLabelsDefaultLayoutLoserByKey(t *testing.T) {
+	a := bootApp(t, bootConfig{files: map[string]string{
+		"pages/Note.md":     "- top\n",
+		"pages/sub/Note.md": "- nested\n",
+	}})
+	p := NewPicker(a.idx, a.width, a.height)
+
+	labels := pickerLabels(p)
+	if !slices.Contains(labels, "Note") || !slices.Contains(labels, "sub/Note") {
+		t.Errorf("labels = %v, want Note and sub/Note rows", labels)
+	}
+	if slices.Contains(labels, "pages/sub/Note") {
+		t.Errorf("labels = %v: the loser shows its key, not its path from the graph root", labels)
 	}
 }
 

@@ -87,5 +87,5 @@ numbers, a configurable `O` offset list, and a template watcher.
 - A journal wins its name over a same-named page (`graph-layout-config.md`), and
   `NewOnThisDay` reads each entry's `PageMeta.Path` from `Index.Journals()`
   instead of resolving the name.
-- The calendar's `journals` slice is a snapshot taken when it opens; a capture
-  made from it shows its new mark only after reopening.
+- The calendar keeps the index it was opened with; a capture made from it shows
+  its new mark only after reopening.

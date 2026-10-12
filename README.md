@@ -62,6 +62,8 @@ weft needs no config for a Logseq-style graph. To change where pages and journal
 
 Folder values are relative to the graph and cannot leave it (no absolute path, no `..`). A folder that does not exist indexes nothing.
 
+With `journals_dir = ""` and a non-empty `pages_dir`, the whole graph is walked, so every `.md` outside dot-folders is indexed.
+
 The pattern uses three tokens: `YYYY` (four digits), `MM` and `DD` (two digits, zero-padded). Every other character is literal, and `/` makes subfolders, as in `YYYY/MM/YYYY-MM-DD`. The last segment must contain all three tokens, so each date has one name. A segment cannot be empty, `.` or `..`, or start with `.`. A file counts as a journal only when its path matches the pattern and the date is a real calendar date. Any other `.md` file under `journals_dir` is a page.
 
 A config problem stops weft and `weft doctor` with exit status 2. The message names the file and the problem, for example `weft: <graph>/.weft/config.toml: unknown key "bogus"`. The problems are: the file cannot be read, a TOML syntax error, a wrong type or repeated key, an unknown key, a folder outside the graph, a `namespace_files` value other than the two above, and an invalid pattern. weft never falls back to the defaults.
@@ -94,7 +96,7 @@ If your daily notes sit in year and month folders, use `journal_file_pattern = "
 - `[[a/Note]]` picks a page by its path, relative to the graph, without `.md`. It matches whole folders and ignores case, so `[[pages/2026_05_24]]` reaches a page that a journal of the same name hides.
 - A link resolves in this order: an exact name, a name that differs only in case, then a path.
 - When several pages share a name, the bare name opens a journal first, then the page with the shallowest path, then the one whose path comes first alphabetically.
-- The picker lists every clashing page with its path. Other lists (backlinks, tasks, agenda, search) show a page that lost a clash by its shortest path link, such as `b/Note`, which is also what `[[b/Note]]` opens.
+- The picker and every other list (backlinks, tasks, agenda, search) show a page that loses a name clash by its shortest path that opens it, such as `b/Note`, which is also what `[[b/Note]]` opens.
 - `weft doctor` warns about each clash.
 - Dot-folders (`.obsidian`, `.git`, `.trash`, `.weft`) are skipped. Only `.md` files are indexed, and search and unlinked mentions read only those files.
 - A new page goes to `pages_dir`. A new journal goes to `journals_dir` through the pattern. weft creates a missing folder when the file is first saved.

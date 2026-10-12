@@ -14,10 +14,9 @@ import (
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
 )
 
-// pickerChoice is one page row: label is what the row shows and fuzzy
-// matching runs on; key is the link target that opens exactly that page.
+// pickerChoice is one page row. key is both what the row shows (and fuzzy
+// matching runs on) and the link target that opens exactly that page.
 type pickerChoice struct {
-	label string
 	key   string
 	mtime time.Time
 }
@@ -51,35 +50,27 @@ func NewPicker(idx *graph.Index, width, height int) *Picker {
 	p.choices = pickerChoices(idx)
 	p.labels = make([]string, len(p.choices))
 	for i, c := range p.choices {
-		p.labels[i] = c.label
+		p.labels[i] = c.key
 	}
 	p.search("")
 	return p
 }
 
 // pickerChoices returns every page and journal, most recently modified first.
-// A page's label is its name; members of a name clash are labelled with their
-// path without ".md" instead, so every row is distinct. Only real on-disk
-// pages appear here; the synthetic "＋ Create" row for a not-yet-existent page is
-// handled separately (see refreshCreate / createName).
+// A page's label is its Key: its name, or for a page that loses a name clash
+// its shortest path that opens it. Only real on-disk pages appear here; the
+// synthetic "＋ Create" row for a not-yet-existent page is handled separately
+// (see refreshCreate / createName).
 func pickerChoices(idx *graph.Index) []pickerChoice {
-	shared := make(map[string]int, len(idx.Pages))
-	for _, p := range idx.Pages {
-		shared[p.Name]++
-	}
 	entries := make([]pickerChoice, 0, len(idx.Pages))
 	for _, p := range idx.Pages {
-		label := p.Name
-		if shared[p.Name] > 1 {
-			label = strings.TrimSuffix(p.Rel, ".md")
-		}
-		entries = append(entries, pickerChoice{label: label, key: p.Key, mtime: p.ModTime})
+		entries = append(entries, pickerChoice{key: p.Key, mtime: p.ModTime})
 	}
 	sort.SliceStable(entries, func(i, j int) bool {
 		if !entries[i].mtime.Equal(entries[j].mtime) {
 			return entries[i].mtime.After(entries[j].mtime)
 		}
-		return entries[i].label < entries[j].label
+		return entries[i].key < entries[j].key
 	})
 	return entries
 }
@@ -130,7 +121,7 @@ func (p *Picker) search(q string) {
 		// scroll to.
 		p.matches = p.matches[:0]
 		for i, c := range p.choices {
-			p.matches = append(p.matches, fuzzy.Match{Str: c.label, Index: i})
+			p.matches = append(p.matches, fuzzy.Match{Str: c.key, Index: i})
 		}
 		p.sel = 0
 		p.refreshCreate(q)

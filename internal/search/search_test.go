@@ -213,6 +213,40 @@ func TestRunSearchesOnlyGivenFiles(t *testing.T) {
 	}
 }
 
+// The index can go stale: a listed file deleted outside weft must not fail
+// the search, and the other files' hits still come back.
+func TestRunAndMentionsSkipVanishedFiles(t *testing.T) {
+	skipIfNoRipgrep(t)
+
+	// arrange — b.md is deleted after the file list was built
+	tmp := t.TempDir()
+	writePage(t, tmp, "a.md", "needle here\n")
+	writePage(t, tmp, "b.md", "needle there\n")
+	a := filepath.Join(tmp, "pages", "a.md")
+	b := filepath.Join(tmp, "pages", "b.md")
+	if err := os.Remove(b); err != nil {
+		t.Fatal(err)
+	}
+
+	// act
+	runHits, runErr := Run([]string{a, b}, "needle")
+	mentionHits, mentionErr := Mentions([]string{a, b}, "needle")
+
+	// assert
+	if runErr != nil {
+		t.Fatalf("Run error = %v, want nil", runErr)
+	}
+	if len(runHits) != 1 || runHits[0].FilePath != a {
+		t.Fatalf("Run hits = %+v, want exactly one hit in %s", runHits, a)
+	}
+	if mentionErr != nil {
+		t.Fatalf("Mentions error = %v, want nil", mentionErr)
+	}
+	if len(mentionHits) != 1 || mentionHits[0].FilePath != a {
+		t.Fatalf("Mentions hits = %+v, want exactly one hit in %s", mentionHits, a)
+	}
+}
+
 func TestRunBatchesLargeFileLists(t *testing.T) {
 	skipIfNoRipgrep(t)
 

@@ -44,7 +44,8 @@ rewriting existing links, live reload, a folder browser.
   (one root when one contains the other; pages first otherwise). Dot-folders are
   skipped, except the pages dir, the journals dir and their ancestors. Only `.md`
   files are read. A journals folder inside the pages folder is walked once.
-  Dot-files such as `.x.md` are indexed. Symlinked folders are not followed.
+  Dot-files such as `.x.md` are indexed. A symlinked pages or journals root is
+  followed; symlinked subfolders are not.
 - **Resolution order.** A link target resolves by exact name, then by name
   ignoring case, then by path: two or more segments, matched against the page's
   graph-relative path without `.md`, on whole segments, ignoring case. So

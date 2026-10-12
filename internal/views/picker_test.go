@@ -291,6 +291,7 @@ func TestPickerNoSilentCap(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		meta := graph.PageMeta{
 			Name: fmt.Sprintf("synthetic-%03d", i),
+			Key:  fmt.Sprintf("synthetic-%03d", i),
 			Path: fmt.Sprintf("/synthetic/%03d.md", i),
 		}
 		idx.Pages = append(idx.Pages, meta)
