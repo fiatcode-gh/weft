@@ -25,6 +25,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Live reload: weft checks the graph every 2 seconds and rebuilds the index when pages or journals change outside it (an agent, another editor, `git pull`). The page on screen updates and keeps its place; open panels keep their rows until reopened; `R` still rebuilds at once.
+- The in-app editor says when its file changed outside weft (`Ctrl+S` merges or asks, as before), and its `[[`/`#` completion sees pages created meanwhile.
 - A page tree (`F`): pages grouped by folder and namespace, opened on the current page; `Enter` opens a page, groups expand for the session.
 - A row cursor in the read view, drawn as a highlighted row.
 - Folding: `Tab` folds a heading's section or a bullet's children, `z` cycles top-level bullets → an outline of headings (each heading stays visible, its text folded) → all. Folds last for the session, are dropped when the page's text changes, and are never saved.

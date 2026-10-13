@@ -47,6 +47,7 @@ type EditorView struct {
 	pageName      string        // logical page name, for the status line
 	baseline      string        // content as last loaded/saved, exactly
 	disk          edit.Snapshot // the file as weft last read or wrote it: the base for the save guard
+	outside       bool          // the file differs on disk from disk; set by NoteDisk, shown in the status line
 	saved         bool          // at least one successful save this session
 	mode          editorMode
 	errMsg        string // non-empty while a save error is pending display
@@ -253,12 +254,24 @@ func (e *EditorView) afterKey(edited bool) {
 	e.refreshCompleter(edited)
 }
 
+// outsideNotice replaces the status-line key hints while the file differs on
+// disk from what the editor last read or wrote.
+const outsideNotice = "changed outside weft — ^S merges or asks"
+
+// SetIndex gives link completion a fresh page corpus.
+func (e *EditorView) SetIndex(idx *graph.Index) { e.completer.setIndex(idx) }
+
+// NoteDisk records whether the file now on disk differs from the editor's
+// disk baseline. It never touches the buffer or the baseline.
+func (e *EditorView) NoteDisk(now edit.Snapshot) { e.outside = now != e.disk }
+
 // Content is the buffer's exact text.
 func (e *EditorView) Content() string { return e.buf.String() }
 
 // MarkSaved records a successful save: the given content becomes the new
 // clean baseline and the file now exists.
 func (e *EditorView) MarkSaved(content string) {
+	e.outside = false
 	e.baseline = content
 	e.dirtyOK = false
 	e.disk = edit.Snapshot{Content: content, Exists: true}
@@ -320,6 +333,7 @@ func (e *EditorView) Update(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
 				e.baseline = e.clash.theirs.Content
 				e.dirtyOK = false
 				e.disk = e.clash.theirs
+				e.outside = false
 				e.errMsg = ""
 				e.mode = editing
 			}
@@ -614,6 +628,9 @@ func (e *EditorView) statusLine() string {
 	}
 	left := styleTitle.Render(e.pageName) + styleFaint.Render(" [edit · "+look+"]"+mark)
 	right := styleFaint.Render("^S save · ^F find · ^R " + other + " · esc exit")
+	if e.outside {
+		right = styleTitle.Render(outsideNotice)
+	}
 	if e.find != nil {
 		right = styleFaint.Render(e.find.hints())
 	}

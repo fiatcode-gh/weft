@@ -78,8 +78,9 @@ numbers, a configurable `O` offset list, and a template watcher.
 
 ## Traps
 
-- A template created outside weft needs a reindex (`R`) before `idx.Resolve`
-  finds it; once indexed, edits to its content are picked up without one.
+- A template created outside weft is found after the next live-reload poll
+  (about two seconds), or at once with `R`; edits to its content are picked up
+  without either.
 - Lists under the prompt are not refreshed after a capture: the reindex runs,
   but an open todos or agenda panel keeps its rows until it is reopened.
 - `App.editCurrent`'s branch for a file that vanished after indexing stays

@@ -55,5 +55,5 @@ when the index changes (unit 10b).
   `pages/a/b.md` in a folders graph) show as two rows with the same label. The
   page with the smaller `Rel` holds the group row. Nothing tells them apart yet.
 - A `Name` made only of `/` has no segment, so the filename stem is the label.
-- An open tree does not refresh on reindex (unit 10b).
+- An open tree does not refresh on reindex or live reload; reopen it.
 - Paths left in `treeOpen` after a reindex are ignored: they are only looked up.

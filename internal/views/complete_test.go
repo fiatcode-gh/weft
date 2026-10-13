@@ -215,3 +215,24 @@ func TestLinkCompleterClosingAhead(t *testing.T) {
 		t.Errorf("should activate; the ]] ahead is part of a separate later link")
 	}
 }
+
+func TestLinkCompleterSetIndexKeepsState(t *testing.T) {
+	quietTerm(t)
+	c := newLinkCompleter(nil)
+	c.refresh("[[Alp", "", true, true)
+	if _, ok := c.selected(); !ok || !c.active {
+		t.Fatal("strip should be open before setIndex")
+	}
+	partial, cands, sel := c.partial, append([]linkCandidate(nil), c.cands...), c.sel
+
+	c.setIndex(loadFixture(t))
+
+	if !c.active || c.partial != partial || c.sel != sel || len(c.cands) != len(cands) {
+		t.Errorf("setIndex changed strip state: active=%v partial=%q sel=%d cands=%v", c.active, c.partial, c.sel, c.cands)
+	}
+	c.refresh("[[Alp", "", true, true)
+	cand, ok := c.selected()
+	if !ok || cand.name != "Alpha" || cand.create {
+		t.Errorf("selected() after refresh = (%+v, %v), want Alpha from the new corpus", cand, ok)
+	}
+}
