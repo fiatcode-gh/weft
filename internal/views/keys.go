@@ -11,6 +11,7 @@ const (
 	keyDown      = "down"
 	keyE         = "e"
 	keyShiftE    = "E"
+	keyShiftF    = "F"
 	keyK         = "k"
 	keyJ         = "j"
 	keyCtrlK     = "ctrl+k"

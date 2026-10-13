@@ -126,6 +126,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | Key        | Action                              |
 |------------|-------------------------------------|
 | `Ctrl-P`   | open picker (recent + fuzzy)        |
+| `F`        | page tree: folders and namespaces (`→`/`←` expand/collapse, `Enter` open) |
 | `/`        | open full-text search (ripgrep)     |
 | `T`        | open TODO dashboard (`x` marks done / undoes) |
 | `A`        | open the agenda (overdue, today, next 7 days) |
@@ -188,9 +189,17 @@ A task is a bullet that starts with a marker (`TODO`, `LATER`, `DOING`, `WAITING
 ### Journals
 
 - **Template.** If a page named `Journal Template` exists (in any folder), its file is copied as-is into every journal weft creates: with `.`, `E`, capture (`c`), or the first save in the in-app editor. A journal that already exists is never changed. The page is read each time it is used, so edits apply to the next new journal. A template created outside weft needs `R` before weft finds it. Without the page, a new journal starts empty.
-- **Capture.** `c` opens a one-line prompt over the current screen (also over the dashboard, agenda, backlinks, calendar and on-this-day overlays). `Enter` appends `- <text>` as the last line of today's journal, creating the file from the template when missing. `Tab` writes `- TODO <text>` instead; `[[` and `#` complete page names; `Esc` cancels. The write is append-only and guarded: if the file changes between read and write, weft re-reads and tries once more, then writes nothing and keeps your text in the prompt. It is refused while a sync runs. The day is fixed when the prompt opens.
+- **Capture.** `c` opens a one-line prompt over the current screen (also over the dashboard, agenda, backlinks, calendar, on-this-day and page tree overlays). `Enter` appends `- <text>` as the last line of today's journal, creating the file from the template when missing. `Tab` writes `- TODO <text>` instead; `[[` and `#` complete page names; `Esc` cancels. The write is append-only and guarded: if the file changes between read and write, weft re-reads and tries once more, then writes nothing and keeps your text in the prompt. It is refused while a sync runs. The day is fixed when the prompt opens.
 - **Calendar.** `C` shows a month grid, Monday first, a `•` after each day that has a journal, `[ ]` around the cursor day. `←`/`→` move a day, `↑`/`↓` a week, `PgUp`/`PgDn` a month (the day clamps to the month's end), `t` goes to today, `Enter` opens that day's journal; a day without one opens as an empty page and nothing is written until you save.
 - **On this day.** `O` lists the journals from one week ago, one month ago (the day clamps to the month's end) and the same month and day in earlier years, newest year first, each with its first lines. Dates without a journal are left out; a February 29 has no entry in years without one.
+
+### Page tree
+
+- **What it shows.** `F` lists non-journal pages grouped by folder (relative to `pages_dir`, or to the graph root for files outside it), then by `/` namespace. `kb___notes.md` and `kb/notes.md` both sit under `kb`. A page that is also a group is one row.
+- **Rows.** `▸` marks a collapsed group, `▾` an expanded one, with the number of pages below it.
+- **Keys.** `↑`/`↓`/`j`/`k` move. `→`/`l` expands a group, or steps into it when open. `←`/`h` collapses it, or steps to the parent. `Enter` opens a page (on a group with no page it expands or collapses). `c` captures. `Esc`/`q`/`F` close.
+- **State.** It opens on the page you are reading. Expanded groups last for the session and are never saved.
+- **Journals** are left out: use the calendar, `<`/`>` and `O`.
 
 ## What gets rendered
 

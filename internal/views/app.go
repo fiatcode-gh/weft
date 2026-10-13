@@ -138,6 +138,9 @@ type App struct {
 	// folds is the read view's folds and row maps, kept across the PageViews
 	// the app rebuilds. Nothing in it is written to disk.
 	folds foldStore
+	// treeOpen is the page tree's expanded groups, kept across openings of the
+	// tree overlay for the session; never written anywhere.
+	treeOpen treeExpansion
 
 	// Browser-style page history. hist[histIdx] is the entry currently on
 	// screen. histIdx == -1 before the first page is shown.
@@ -190,6 +193,7 @@ func New(graphPath string, lay layout.Layout, version string) *App {
 		nowFunc:      time.Now,
 		editorSource: editorStartsInSource,
 		folds:        foldStore{},
+		treeOpen:     treeExpansion{},
 	}
 	a.syncFunc = func(repoDir string) syncpkg.Result {
 		return syncpkg.Run(repoDir, a.nowFunc())
@@ -908,6 +912,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.active = NewCalendar(a.idx, a.page.Page(), a.nowFunc(), a.width, a.height)
 		case "O":
 			a.active = NewOnThisDay(a.idx, a.nowFunc(), a.readSnapshot, a.width, a.height)
+		case keyShiftF:
+			a.active = NewTree(a.idx, a.page.Page(), a.treeOpen, a.width, a.height)
 		case "?":
 			a.active = NewHelp(a.version, a.width, a.height)
 		case "[":
