@@ -72,7 +72,7 @@ func BuildIndex(graphPath string, lay layout.Layout) (*Index, error) {
 	err := walkGraph(graphPath, lay, idx.warnf, func(rel string, d fs.DirEntry) {
 		filePath := filepath.Join(graphPath, filepath.FromSlash(rel))
 		stem := strings.TrimSuffix(d.Name(), ".md")
-		meta := PageMeta{Name: strings.ReplaceAll(stem, "___", "/"), Path: filePath, Rel: rel}
+		meta := PageMeta{Name: pageName(stem), Path: filePath, Rel: rel}
 		if day, ok := lay.Journal(rel); ok {
 			meta.Name, meta.IsJournal, meta.Date = stem, true, day
 		}
@@ -161,6 +161,10 @@ func BuildIndex(graphPath string, lay layout.Layout) (*Index, error) {
 	}
 	return idx, nil
 }
+
+// pageName is the page name a file stem stands for: "___" is a namespace
+// separator.
+func pageName(stem string) string { return strings.ReplaceAll(stem, "___", "/") }
 
 // walkGraph is the one walk rule set shared by BuildIndex and ScanSignature.
 // For every lay.Roots() folder, in order, it calls visit for each .md file

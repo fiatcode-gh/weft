@@ -2,6 +2,7 @@ package layout
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -199,5 +200,59 @@ func TestNewPageRelTripleLowbar(t *testing.T) {
 	}
 	if _, err := l.NewPageRel(""); err == nil {
 		t.Error("empty name must fail")
+	}
+}
+
+func TestRenameRelPlacement(t *testing.T) {
+	folders := mustLoad(t, "pages_dir = \"\"\nnamespace_files = \"folders\"\n")
+	tests := []struct {
+		name   string
+		l      Layout
+		oldRel string
+		newN   string
+		want   string
+	}{
+		{"default namespaced", Default(), "pages/Old.md", "kb/Notes", "pages/kb___Notes.md"},
+		{"folders root page", folders, "Home.md", "x/y", "x/y.md"},
+		{"folders subfolder page", folders, "a/Note.md", "kb/Notes", "a/kb/Notes.md"},
+		{"plain name", Default(), "pages/kb___Old.md", "New", "pages/New.md"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tt.l.RenameRel(tt.oldRel, tt.newN)
+			if err != nil || got != tt.want {
+				t.Errorf("RenameRel(%q, %q) = %q, %v; want %q", tt.oldRel, tt.newN, got, err, tt.want)
+			}
+		})
+	}
+}
+
+func TestRenameRelRefusesEscapes(t *testing.T) {
+	layouts := map[string]struct {
+		l      Layout
+		oldRel string
+	}{
+		"triple-lowbar": {Default(), "pages/Old.md"},
+		"folders":       {mustLoad(t, "pages_dir = \"\"\nnamespace_files = \"folders\"\n"), "a/Old.md"},
+	}
+	names := []string{"../x", "a/../../x", "/abs", "..", "x/..", ".hid/x", "a//b", ""}
+	for mode, lc := range layouts {
+		dir := path.Dir(lc.oldRel)
+		for _, n := range names {
+			got, err := lc.l.RenameRel(lc.oldRel, n)
+			if err != nil {
+				if !strings.Contains(err.Error(), "cannot place page") {
+					t.Errorf("%s %q: error %q lacks \"cannot place page\"", mode, n, err)
+				}
+				continue
+			}
+			if mode != "triple-lowbar" {
+				t.Errorf("%s %q: placed at %q, want refusal", mode, n, got)
+				continue
+			}
+			if path.Dir(got) != dir || strings.Contains(path.Base(got), "/") || path.Clean(got) != got {
+				t.Errorf("%s %q: %q escapes %q", mode, n, got, dir)
+			}
+		}
 	}
 }
