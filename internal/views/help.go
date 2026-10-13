@@ -83,6 +83,7 @@ var helpGroups = []helpGroup{
 		{"C", "calendar — move between journals"},
 		{"O", "on this day: week, month, years ago"},
 		{"ctrl-p", "picker — find any page"},
+		{"F", "page tree: folders and namespaces"},
 		{"/", "search the graph (ripgrep)"},
 		{"b", "backlinks + unlinked refs for the current page"},
 		{"T", "todos dashboard (x: done / undo)"},
