@@ -210,11 +210,60 @@ func TestTreeExpansionKeptAcrossOpenings(t *testing.T) {
 	}
 }
 
+var _ panelFeedback = (*Tree)(nil)
+
+func nestedTreeApp(t *testing.T) *App {
+	t.Helper()
+	return bootApp(t, bootConfig{files: map[string]string{
+		"pages/x.md":         "# x\n",
+		"pages/x___a.md":     "# a\n",
+		"pages/x___a___b.md": "# b\n",
+	}})
+}
+
+func TestTreeCollapseKeepsDescendantsExpanded(t *testing.T) {
+	a := nestedTreeApp(t)
+	tr := openTree(t, a)
+	treePress(tr, "l", "j", "l")
+	if !tr.open["x"] || !tr.open["x/a"] {
+		t.Fatalf("open = %v, want x and x/a", tr.open)
+	}
+	treePress(tr, "k", "h")
+	if tr.open["x"] || !tr.open["x/a"] {
+		t.Fatalf("after collapsing x: open = %v", tr.open)
+	}
+	treePress(tr, "l")
+	if !tr.open["x"] || !tr.open["x/a"] {
+		t.Fatalf("after reopening x: open = %v", tr.open)
+	}
+	if got := rowLabels(tr); fmt.Sprint(got) != "[x a b]" {
+		t.Fatalf("rows = %v, want [x a b]", got)
+	}
+}
+
+func TestTreeOpensAncestorsNotOwnGroup(t *testing.T) {
+	a := nestedTreeApp(t)
+	a.navigate("x/a")
+	tr := openTree(t, a)
+	if !a.treeOpen["x"] || a.treeOpen["x/a"] {
+		t.Fatalf("treeOpen = %v, want only x", a.treeOpen)
+	}
+	if got := selLabel(t, tr); got != "a" {
+		t.Fatalf("selected %q, want a", got)
+	}
+}
+
 func TestVaultTreeOpensLoserFile(t *testing.T) {
 	a := bootVault(t)
 	tr := openTree(t, a)
-	for selLabel(t, tr) != "b" {
+	for range tr.rows {
+		if selLabel(t, tr) == "b" {
+			break
+		}
 		treePress(tr, "j")
+	}
+	if selLabel(t, tr) != "b" {
+		t.Fatalf("b not among rows %v", rowLabels(tr))
 	}
 	treePress(tr, "l", "l")
 	a.Update(key("enter"))

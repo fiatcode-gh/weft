@@ -10,7 +10,8 @@ import (
 const (
 	treeVisibleRowsMax = 20
 	// treeChrome is the terminal rows the panel spends outside the tree rows:
-	// border, title, rule, spacing, footer and the screen margin.
+	// border (2), padding (2), title, blank line, rule, the two scroll lines,
+	// blank line, error line and footer.
 	treeChrome = 12
 )
 

@@ -18,7 +18,7 @@ when the index changes (unit 10b).
 
 - **One tree path per page.** The folders of `Rel`, relative to `pages_dir`
   when the file is inside it and to the graph root otherwise, then the segments
-  of `Name` split on `/`. Empty segments are dropped. `graph.PageTree` builds
+  of `Name` split on `/`. Empty segments are dropped. `(*Index).PageTree` builds
   it in `internal/graph/tree.go`, with no UI imports.
 - **Journals are left out.** The calendar, `<`/`>` and on-this-day cover them.
   A non-journal file in the journals folder is a page and appears.
@@ -36,7 +36,8 @@ when the index changes (unit 10b).
   it does nothing. `←`/`h` collapses an expanded group, or moves to the parent;
   at top level it does nothing. `c` opens capture. `Esc`, `q` and `F` close.
   Other keys do nothing.
-- **Starting state.** Top-level rows are visible and collapsed. On each opening
+- **Starting state.** Top-level rows start collapsed on the first opening, and
+  later openings keep what was expanded. On each opening
   the ancestors of the page on screen are added to the session's expanded set
   and the cursor sits on that page's row. For a journal, or a page not in the
   tree, the cursor starts on the first row.
