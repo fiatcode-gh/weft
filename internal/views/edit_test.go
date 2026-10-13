@@ -508,10 +508,10 @@ func TestEscPutsCursorOnEditorLine(t *testing.T) {
 	}
 }
 
-// A cursor on a row no source line spells (a table's top border, borrowed
-// from the header below it) comes back exactly there after e, Esc: placing the
-// anchor would move it onto the header row.
-func TestEscUnmovedRestoresExactFrame(t *testing.T) {
+// borrowedRowApp opens a long page with the read cursor on a row no source
+// line spells (a table's top border, borrowed from the header below it).
+func borrowedRowApp(t *testing.T) *App {
+	t.Helper()
 	orig := sourceRowsFor
 	t.Cleanup(func() { sourceRowsFor = orig })
 	var a *App
@@ -539,6 +539,13 @@ func TestEscUnmovedRestoresExactFrame(t *testing.T) {
 		}
 		a.Update(key("j"))
 	}
+	return a
+}
+
+// A cursor on a row no source line spells comes back exactly there after e,
+// Esc: placing the anchor would move it onto the header row.
+func TestEscUnmovedRestoresExactFrame(t *testing.T) {
+	a := borrowedRowApp(t)
 	before := a.View().Content
 	pressE(t, a)
 	if a.editor == nil {

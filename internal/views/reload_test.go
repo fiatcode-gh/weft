@@ -269,7 +269,17 @@ func TestPollFailedRebuildDoesNotLoop(t *testing.T) {
 	if !strings.Contains(a.hint, "reindex failed") {
 		t.Errorf("hint = %q, want reindex failed", a.hint)
 	}
-	if poll(t, a) {
+	if a.indexBuilding() {
+		t.Fatal("a failed load must end the build, or polling stays paused forever")
+	}
+	_, cmd = a.Update(pollTickMsg{})
+	done, ok := cmd().(pollDoneMsg)
+	if !ok {
+		t.Fatal("the tick after a failed load must walk the graph, not stay paused")
+	}
+	gen := a.indexGen
+	a.Update(done)
+	if a.indexGen != gen {
 		t.Error("a failed poll-driven rebuild must not retry every interval")
 	}
 }
@@ -408,11 +418,33 @@ func TestEditorOutsideNoticeAfterOwnSaveIsQuiet(t *testing.T) {
 	typeApp(a, "X")
 	a.Update(ctrlS)
 
-	if !poll(t, a) {
-		t.Fatal("a plain save is not reflected in the index; one rebuild expected")
+	expectOneRebuildKeeping(t, a, func() {
+		if strings.Contains(plain(a.editor.View()), outsideText) {
+			t.Error("own save must not raise the notice")
+		}
+	})
+}
+
+func TestEditorOutsideNoticeForNewFileOnceCreated(t *testing.T) {
+	a, dir := bootTemplateApp(t, map[string]string{"pages/Journal Template.md": tplText, tplAnchor: "anchor\n"})
+	instantPolls(a)
+	pressE(t, a)
+	if a.editor == nil {
+		t.Fatalf("e should open the editor; hint %q", a.hint)
 	}
-	if strings.Contains(plain(a.editor.View()), outsideText) {
-		t.Error("own save must not raise the notice")
+	if poll(t, a) || strings.Contains(plain(a.editor.View()), outsideText) {
+		t.Fatal("a file nobody created must stay quiet")
+	}
+
+	p := filepath.Join(dir, tplJFile)
+	if err := os.WriteFile(p, []byte("- made elsewhere\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !poll(t, a) {
+		t.Fatal("the created file must rebuild")
+	}
+	if !strings.Contains(plain(a.editor.View()), outsideText) {
+		t.Error("view lacks the outside-change notice once the new file exists")
 	}
 }
 
@@ -456,6 +488,55 @@ func TestEditorOutsideNoticeOtherFileQuiet(t *testing.T) {
 	}
 	if strings.Contains(plain(a.editor.View()), outsideText) {
 		t.Error("a different file must not raise the notice")
+	}
+}
+
+// An index load the poll started while the editor is open must not spend the
+// record of where the read view stood: Esc without moving still restores the
+// exact frame.
+func TestEscUnmovedRestoresExactFrameAfterPollRebuild(t *testing.T) {
+	a := borrowedRowApp(t)
+	before := a.View().Content
+	pressE(t, a)
+	if a.editor == nil {
+		t.Fatal("editor did not open")
+	}
+	outsideWrite(t, a, "pages/Other.md", "# Other\n")
+	a.Update(a.buildIndexCmd()())
+	if a.editor == nil {
+		t.Fatal("the rebuild closed the editor")
+	}
+	a.Update(esc)
+	if a.editor != nil {
+		t.Fatal("Esc did not close the editor")
+	}
+	if got := a.View().Content; got != before {
+		t.Fatalf("frame after e, rebuild, Esc differs from before:\n%s\nwant:\n%s", plain(got), plain(before))
+	}
+}
+
+// A save-and-exit whose load lands after e reopened the editor leaves its
+// placement unspent; an unsaved Esc must not leave it for a later poll load.
+func TestEscDropsPlacementLeftByEarlierSaveExit(t *testing.T) {
+	a := bootApp(t, bootConfig{files: map[string]string{journalPath: journalBody}})
+	a.navigate(journalPage)
+	a.Update(key("e"))
+	typeApp(a, "X")
+	a.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	_, cmd := a.Update(key("s"))
+	loaded := drainFor[indexLoadedMsg](t, cmd)
+
+	a.Update(key("e"))
+	if a.editor == nil {
+		t.Fatal("editor did not reopen")
+	}
+	a.Update(loaded)
+	a.Update(esc)
+	if a.editor != nil {
+		t.Fatal("Esc did not close the editor")
+	}
+	if a.pendingPlace != nil {
+		t.Error("an unsaved exit left a stale placement for the next index load")
 	}
 }
 

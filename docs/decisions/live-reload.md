@@ -71,3 +71,6 @@ buffer, reloading the config, incremental indexing.
   stale async result may land. The next poll repairs it within one interval.
 - A plain `Ctrl+S` that stays in the editor does not rebuild the index, so the
   next poll rebuilds it once, by design.
+- A failed rebuild started by `R` or a sync pull leaves the last-seen disk state
+  alone, so the next poll retries it once and the failure is reported twice.
+  A failed rebuild the poll itself started is reported once.

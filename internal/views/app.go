@@ -680,7 +680,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// tell the user via a hint. The working page stays on
 				// screen; the boot path (a.page == nil) still surfaces
 				// the splash so the user can retry.
-				a.applyPendingPlace()
+				if a.editor == nil {
+					a.applyPendingPlace()
+				}
 				return a, a.setHint("reindex failed: " + m.err.Error())
 			}
 			a.loadErr = m.err
@@ -699,7 +701,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			off, row, cur := a.page.Offset(), a.page.CursorRow(), a.page.Cursor()
 			a.page = newPageView(a.idx, a.page.Page(), a.width, a.height, a.folds)
 			a.page.Restore(off, row, cur)
-			a.applyPendingPlace()
+			if a.editor == nil {
+				// An open editor still owns readFrom for its own exit.
+				a.applyPendingPlace()
+			}
 		} else {
 			a.tryInitPage()
 		}
@@ -831,6 +836,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				at, place, keep := a.exitPlacement(saved)
 				a.editorSource = a.editor.source
 				a.editor = nil
+				a.pendingPlace = nil // a load that never landed must not place this exit's line
 				switch {
 				case saved:
 					// Reindex picks up the saved file; its indexLoadedMsg
