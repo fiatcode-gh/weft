@@ -407,6 +407,16 @@ func (a *App) historyForward() {
 // and the linkify path, both of which mutate the graph while a view is open and
 // need the refresh before returning (no indexLoadedMsg round-trip).
 func (a *App) reindex() error {
+	name := ""
+	if a.page != nil {
+		name = a.page.Page()
+	}
+	return a.reindexTo(name)
+}
+
+// reindexTo is reindex with the rebuilt PageView showing name — the current
+// page's new key after a rename. The reader's place is kept.
+func (a *App) reindexTo(name string) error {
 	idx, err := graph.BuildIndex(a.graphPath, a.lay)
 	if err != nil {
 		return err
@@ -417,7 +427,7 @@ func (a *App) reindex() error {
 		// Same-page rebuild: keep the reader's place, exactly like the
 		// async indexLoadedMsg path. Restore clamps if the page shrank.
 		off, row, cur := a.page.Offset(), a.page.CursorRow(), a.page.Cursor()
-		a.page = newPageView(a.idx, a.page.Page(), a.width, a.height, a.folds)
+		a.page = newPageView(a.idx, name, a.width, a.height, a.folds)
 		a.page.Restore(off, row, cur)
 	}
 	if fresh := a.newIndexWarnings(idx.Warnings); fresh && len(idx.Warnings) > 0 {
