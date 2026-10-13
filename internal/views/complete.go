@@ -40,14 +40,23 @@ type linkCompleter struct {
 
 func newLinkCompleter(idx *graph.Index) *linkCompleter {
 	c := &linkCompleter{maxVisible: maxCompleterRows}
-	if idx != nil {
-		c.choices = pickerChoices(idx)
-		c.names = make([]string, len(c.choices))
-		for i, ch := range c.choices {
-			c.names[i] = ch.key
-		}
-	}
+	c.setIndex(idx)
 	return c
+}
+
+// setIndex swaps the page corpus for idx (nil means no pages). The open
+// strip, partial and selection are left alone; the next refresh matches
+// against the new corpus.
+func (c *linkCompleter) setIndex(idx *graph.Index) {
+	c.choices, c.names = nil, nil
+	if idx == nil {
+		return
+	}
+	c.choices = pickerChoices(idx)
+	c.names = make([]string, len(c.choices))
+	for i, ch := range c.choices {
+		c.names[i] = ch.key
+	}
 }
 
 // visible is the number of candidate rows the strip may show, clamped to the

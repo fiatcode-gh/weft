@@ -687,6 +687,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		a.idx = m.idx
+		if a.editor != nil {
+			a.refreshEditor()
+		}
 		a.diskSig = m.idx.Signature()
 		a.loadErr = nil
 		if a.page != nil {

@@ -8,6 +8,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/teatest/v2"
+
+	"github.com/fiatcode-gh/weft/v2/internal/edit"
 )
 
 func TestEditorView_LoadsContentAndTracksDirty(t *testing.T) {
@@ -879,4 +881,11 @@ func BenchmarkEditorViewLargePage(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = e.View()
 	}
+}
+
+func TestEditorView_OutsideNoticeGolden(t *testing.T) {
+	quietTerm(t)
+	e := NewEditorView(nil, "Alpha", "/tmp/a.md", "# Alpha\n\n- one\n", false, 80, 10, Anchor{ScreenRow: 1}, nil, false)
+	e.NoteDisk(edit.Snapshot{Content: "# Alpha\n\n- one\n- agent\n", Exists: true})
+	teatest.RequireEqualOutput(t, []byte(plain(e.View())))
 }

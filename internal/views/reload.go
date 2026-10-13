@@ -64,3 +64,13 @@ func (a *App) onPollDone(m pollDoneMsg) tea.Cmd {
 	a.diskSig = m.sig
 	return tea.Batch(a.buildIndexCmd(), a.pollTick())
 }
+
+// refreshEditor gives the open editor the new index for completion and
+// tells it whether its file now differs from what it last read or wrote.
+// The buffer is never changed.
+func (a *App) refreshEditor() {
+	a.editor.SetIndex(a.idx)
+	if snap, err := a.readSnapshot(a.editor.path); err == nil {
+		a.editor.NoteDisk(snap)
+	}
+}

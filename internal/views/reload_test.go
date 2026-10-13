@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/fiatcode-gh/weft/v2/internal/edit"
 	"github.com/fiatcode-gh/weft/v2/internal/layout"
 	syncpkg "github.com/fiatcode-gh/weft/v2/internal/sync"
 )
@@ -354,4 +355,153 @@ func TestPollArmsOnceOnFirstLoad(t *testing.T) {
 			t.Errorf("armed %d times after a failed load, want 0", *n)
 		}
 	})
+}
+
+const outsideText = "changed outside weft"
+
+func editorApp(t *testing.T) (*App, string) {
+	t.Helper()
+	a, path := openJournal(t)
+	instantPolls(a)
+	return a, path
+}
+
+func TestEditorOutsideChangeShowsNotice(t *testing.T) {
+	a, path := editorApp(t)
+	typeApp(a, "X")
+	content, dirty, disk := a.editor.Content(), a.editor.dirty(), a.editor.disk
+	appendTo(t, path, "- agent\n")
+
+	if !poll(t, a) {
+		t.Fatal("outside change must rebuild")
+	}
+
+	if !strings.Contains(plain(a.editor.View()), outsideText) {
+		t.Error("view lacks the outside-change notice")
+	}
+	if a.editor.Content() != content || a.editor.dirty() != dirty || a.editor.disk != disk {
+		t.Error("reload must not touch buffer, dirty state or disk baseline")
+	}
+}
+
+func TestEditorOutsideNoticeClearsOnSave(t *testing.T) {
+	a, path := editorApp(t)
+	typeApp(a, "X")
+	appendTo(t, path, "- agent\n")
+	poll(t, a)
+
+	a.Update(ctrlS)
+	v := plain(a.editor.View())
+	if strings.Contains(v, outsideText) || !strings.Contains(v, "merged") {
+		t.Errorf("after a merged save want the merged notice only, got %q", v)
+	}
+
+	a.Update(key("Y"))
+	v = plain(a.editor.View())
+	if strings.Contains(v, outsideText) || !strings.Contains(v, "^S save") {
+		t.Errorf("after one more key want default hints, got %q", v)
+	}
+}
+
+func TestEditorOutsideNoticeAfterOwnSaveIsQuiet(t *testing.T) {
+	a, _ := editorApp(t)
+	typeApp(a, "X")
+	a.Update(ctrlS)
+
+	if !poll(t, a) {
+		t.Fatal("a plain save is not reflected in the index; one rebuild expected")
+	}
+	if strings.Contains(plain(a.editor.View()), outsideText) {
+		t.Error("own save must not raise the notice")
+	}
+}
+
+func TestEditorOutsideNoticeKeepsAfterClashKeep(t *testing.T) {
+	clash := func(t *testing.T) *App {
+		a, path := editorApp(t)
+		typeApp(a, "X")
+		writeOutside(t, path, "- ONE\n- two\n- three\n")
+		poll(t, a)
+		if !strings.Contains(plain(a.editor.View()), outsideText) {
+			t.Fatal("notice missing before the clash prompt")
+		}
+		a.Update(ctrlS)
+		if a.editor.mode != confirmingClash {
+			t.Fatalf("mode = %v, want confirmingClash", a.editor.mode)
+		}
+		return a
+	}
+	t.Run("keep", func(t *testing.T) {
+		a := clash(t)
+		a.Update(key("k"))
+		if !strings.Contains(plain(a.editor.View()), outsideText) {
+			t.Error("notice must return after keep editing")
+		}
+	})
+	t.Run("reload", func(t *testing.T) {
+		a := clash(t)
+		a.Update(key("r"))
+		if strings.Contains(plain(a.editor.View()), outsideText) {
+			t.Error("reload must clear the notice")
+		}
+	})
+}
+
+func TestEditorOutsideNoticeOtherFileQuiet(t *testing.T) {
+	a, _ := editorApp(t)
+	outsideWrite(t, a, "pages/Other.md", "# Other\n")
+
+	if !poll(t, a) {
+		t.Fatal("outside change must rebuild")
+	}
+	if strings.Contains(plain(a.editor.View()), outsideText) {
+		t.Error("a different file must not raise the notice")
+	}
+}
+
+func TestEditorCompletionSeesOutsidePage(t *testing.T) {
+	a, _ := editorApp(t)
+	outsideWrite(t, a, "pages/Zeta.md", "# Zeta\n")
+	if !poll(t, a) {
+		t.Fatal("outside change must rebuild")
+	}
+
+	typeApp(a, "[[Zet")
+
+	found := false
+	for _, c := range a.editor.completer.cands {
+		if c.name == "Zeta" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Zeta missing from candidates %+v", a.editor.completer.cands)
+	}
+	if !strings.Contains(plain(a.editor.View()), "Zeta") {
+		t.Error("strip does not show Zeta")
+	}
+}
+
+func TestEditorReloadReadErrorKeepsNotice(t *testing.T) {
+	a, path := editorApp(t)
+	appendTo(t, path, "- agent\n")
+	poll(t, a)
+	if !strings.Contains(plain(a.editor.View()), outsideText) {
+		t.Fatal("notice missing")
+	}
+	real := a.readSnapshot
+	a.readSnapshot = func(p string) (edit.Snapshot, error) {
+		if p == path {
+			return edit.Snapshot{}, errors.New("boom")
+		}
+		return real(p)
+	}
+	appendTo(t, path, "- more\n")
+
+	if !poll(t, a) {
+		t.Fatal("second outside change must rebuild")
+	}
+	if !strings.Contains(plain(a.editor.View()), outsideText) {
+		t.Error("a failed read must leave the notice as it was")
+	}
 }
