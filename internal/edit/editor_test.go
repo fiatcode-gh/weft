@@ -524,3 +524,110 @@ func TestEnsureFileCreatesParentDirs(t *testing.T) {
 		t.Fatalf("file not created: %v", err)
 	}
 }
+
+func TestRenameIfUnchangedMoves(t *testing.T) {
+	dir := t.TempDir()
+	from := seedFile(t, dir, "a.md", "hello", 0o600)
+	to := filepath.Join(dir, "b.md")
+	seen, _ := ReadSnapshot(from)
+	if err := RenameIfUnchanged(from, to, seen); err != nil {
+		t.Fatal(err)
+	}
+	if got := readBack(t, to); got != "hello" {
+		t.Errorf("content = %q", got)
+	}
+	if got := permOf(t, to); got != 0o600 {
+		t.Errorf("perm = %v", got)
+	}
+	if _, err := os.Stat(from); !os.IsNotExist(err) {
+		t.Errorf("from still present: %v", err)
+	}
+}
+
+func TestRenameIfUnchangedCreatesFolder(t *testing.T) {
+	dir := t.TempDir()
+	from := seedFile(t, dir, "a.md", "x", 0o644)
+	to := filepath.Join(dir, "sub", "deep", "a.md")
+	seen, _ := ReadSnapshot(from)
+	if err := RenameIfUnchanged(from, to, seen); err != nil {
+		t.Fatal(err)
+	}
+	if got := readBack(t, to); got != "x" {
+		t.Errorf("content = %q", got)
+	}
+}
+
+func TestRenameIfUnchangedRefusesChanged(t *testing.T) {
+	dir := t.TempDir()
+	from := seedFile(t, dir, "a.md", "old", 0o644)
+	to := filepath.Join(dir, "b.md")
+	seen, _ := ReadSnapshot(from)
+	if err := os.WriteFile(from, []byte("new"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := RenameIfUnchanged(from, to, seen); !errors.Is(err, ErrChanged) {
+		t.Fatalf("err = %v, want ErrChanged", err)
+	}
+	if got := readBack(t, from); got != "new" {
+		t.Errorf("from = %q", got)
+	}
+	if _, err := os.Stat(to); !os.IsNotExist(err) {
+		t.Errorf("to exists: %v", err)
+	}
+	if err := os.Remove(from); err != nil {
+		t.Fatal(err)
+	}
+	if err := RenameIfUnchanged(from, to, seen); !errors.Is(err, ErrChanged) {
+		t.Fatalf("missing from: err = %v, want ErrChanged", err)
+	}
+}
+
+func TestRenameIfUnchangedRefusesExisting(t *testing.T) {
+	dir := t.TempDir()
+	from := seedFile(t, dir, "a.md", "mine", 0o644)
+	to := seedFile(t, dir, "b.md", "theirs", 0o644)
+	seen, _ := ReadSnapshot(from)
+	if err := RenameIfUnchanged(from, to, seen); !errors.Is(err, ErrExists) {
+		t.Fatalf("err = %v, want ErrExists", err)
+	}
+	if readBack(t, from) != "mine" || readBack(t, to) != "theirs" {
+		t.Error("files modified")
+	}
+}
+
+func TestCheckRenameDestHardLinkIsTaken(t *testing.T) {
+	dir := t.TempDir()
+	from := seedFile(t, dir, "a.md", "x", 0o644)
+	other := filepath.Join(dir, "other.md")
+	if err := os.Link(from, other); err != nil {
+		t.Skipf("os.Link unsupported: %v", err)
+	}
+	if err := CheckRenameDest(from, other); !errors.Is(err, ErrExists) {
+		t.Fatalf("err = %v, want ErrExists", err)
+	}
+}
+
+func TestRenameIfUnchangedCaseOnly(t *testing.T) {
+	dir := t.TempDir()
+	from := seedFile(t, dir, "a.md", "keep", 0o644)
+	to := filepath.Join(dir, "A.md")
+	seen, _ := ReadSnapshot(from)
+	if err := RenameIfUnchanged(from, to, seen); err != nil {
+		t.Fatal(err)
+	}
+	names := fileNames(t, dir)
+	if len(names) != 1 || names[0] != "A.md" {
+		t.Fatalf("names = %v, want [A.md]", names)
+	}
+	if got := readBack(t, to); got != "keep" {
+		t.Errorf("content = %q", got)
+	}
+}
+
+func TestCheckRenameDestFree(t *testing.T) {
+	dir := t.TempDir()
+	from := seedFile(t, dir, "a.md", "x", 0o644)
+	if err := CheckRenameDest(from, filepath.Join(dir, "none.md")); err != nil {
+		t.Fatalf("err = %v, want nil", err)
+	}
+}
