@@ -631,3 +631,26 @@ func TestCheckRenameDestFree(t *testing.T) {
 		t.Fatalf("err = %v, want nil", err)
 	}
 }
+
+func TestRenameIfUnchangedCaseOnlyRefusesSeparateFile(t *testing.T) {
+	dir := t.TempDir()
+	from := seedFile(t, dir, "a.md", "mine", 0o644)
+	to := filepath.Join(dir, "A.md")
+	if err := os.WriteFile(to, []byte("theirs"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(from); err != nil {
+		t.Fatal(err)
+	} else if ti, err := os.Stat(to); err != nil {
+		t.Fatal(err)
+	} else if os.SameFile(fi, ti) {
+		t.Skip("case-insensitive filesystem: a.md and A.md cannot be two files")
+	}
+	seen, _ := ReadSnapshot(from)
+	if err := RenameIfUnchanged(from, to, seen); !errors.Is(err, ErrExists) {
+		t.Fatalf("err = %v, want ErrExists", err)
+	}
+	if readBack(t, from) != "mine" || readBack(t, to) != "theirs" {
+		t.Error("files modified")
+	}
+}

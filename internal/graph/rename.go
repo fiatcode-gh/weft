@@ -59,6 +59,13 @@ func (idx *Index) RenameTo(page *PageMeta, newName string) (RenameTarget, error)
 		}
 		return RenameTarget{}, fmt.Errorf("%q is already a page: %s", name, other)
 	}
+	// Defensive: unreachable today. The checks above leave no page whose
+	// name is fold-equal to moved.Name, so ByName[moved.Name] is moved and
+	// moved.Key is its Name, which Resolve returns first. Tried and refused
+	// earlier: a "___" name equal to another page's path suffix, a name
+	// shadowed by a journal, a destination Rel owned by another page. This
+	// keeps a future Key or Resolve change from producing a rename whose
+	// rewritten links open nothing.
 	if got, ok := h.Resolve(moved.Key); !ok || got != moved {
 		return RenameTarget{}, fmt.Errorf("cannot place page %q: no link would open it", name)
 	}

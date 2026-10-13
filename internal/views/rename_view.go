@@ -210,6 +210,20 @@ func (r *RenamePreview) Update(key string) OverlayResult {
 	return OverlayResult{}
 }
 
+// footer is the stopped panel's hint for what to do about the stop.
+func (k stopKind) footer() string {
+	switch k {
+	case stopPageChanged:
+		return "esc close · check the page, then F2 with the same name"
+	case stopDestTaken:
+		return "esc close · move that file away, then F2 with the same name"
+	case stopPageFailed:
+		return "esc close · fix the cause above, then F2 with the same name"
+	default:
+		return "F2 with the same name finishes the rename · esc close"
+	}
+}
+
 func (r *RenamePreview) View() string {
 	inner := r.innerWidth()
 	head := r.head()
@@ -240,7 +254,7 @@ func (r *RenamePreview) View() string {
 	var footer string
 	switch {
 	case r.stop != nil:
-		footer = "F2 with the same name finishes the rename · esc close"
+		footer = r.stop.kind.footer()
 	case overflow:
 		footer = "y rename · n/esc cancel · ↑/↓ scroll"
 	default:

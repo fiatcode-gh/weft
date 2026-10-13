@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/exp/teatest/v2"
+	"github.com/fiatcode-gh/weft/v2/internal/edit"
 )
 
 var (
@@ -238,4 +239,80 @@ func TestRenameStoppedGolden(t *testing.T) {
 		pending: []string{"pages/Hub.md", "journals/2026_05_15.md", "journals/2026_05_24.md"},
 	}, nil)
 	teatest.RequireEqualOutput(t, []byte(plain(pv.View())))
+}
+
+// stoppedFooter is the panel's last text row, without its border.
+func stoppedFooter(t *testing.T, pv *RenamePreview) string {
+	t.Helper()
+	rows := strings.Split(plain(pv.View()), "\n")
+	for i := len(rows) - 1; i >= 0; i-- {
+		if text := strings.TrimSpace(strings.Trim(strings.TrimSpace(rows[i]), "│╭╮╰╯─")); text != "" {
+			return text
+		}
+	}
+	t.Fatal("empty panel")
+	return ""
+}
+
+func TestRenameStoppedFooterRewriteStop(t *testing.T) {
+	a := bootApp(t, fixtureCfg)
+	p, err := a.planRename(pageMeta(t, a, "Alpha"), "Gamma")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeRel(t, a, "pages/Hub.md", readRel(t, a, "pages/Hub.md")+"- added elsewhere\n")
+	res, err := a.applyRename(p)
+	if err != nil || res.stop == nil {
+		t.Fatalf("res = %+v err = %v, want a stop", res, err)
+	}
+	pv := NewRenamePreview(p, 80, 24)
+	pv.SetStopped(*res.stop, res.reindexErr)
+	if got, want := stoppedFooter(t, pv), "F2 with the same name finishes the rename · esc close"; got != want {
+		t.Errorf("footer = %q, want %q", got, want)
+	}
+}
+
+func TestRenameStoppedFooterPageChanged(t *testing.T) {
+	a := bootApp(t, fixtureCfg)
+	p, err := a.planRename(pageMeta(t, a, "Alpha"), "Gamma")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeRel(t, a, "pages/Alpha.md", readRel(t, a, "pages/Alpha.md")+"- more\n")
+	read := a.readSnapshot
+	a.readSnapshot = func(path string) (edit.Snapshot, error) {
+		if path == p.page.Path {
+			return p.pageRead, nil // let the guard at y pass; only the rename step sees the change
+		}
+		return read(path)
+	}
+	res, err := a.applyRename(p)
+	if err != nil || res.stop == nil {
+		t.Fatalf("res = %+v err = %v, want a stop", res, err)
+	}
+	pv := NewRenamePreview(p, 80, 24)
+	pv.SetStopped(*res.stop, res.reindexErr)
+	if got, want := stoppedFooter(t, pv), "esc close · check the page, then F2 with the same name"; got != want {
+		t.Errorf("footer = %q, want %q", got, want)
+	}
+}
+
+func TestRenameStoppedFooterByKind(t *testing.T) {
+	tests := []struct {
+		name string
+		kind stopKind
+		want string
+	}{
+		{"dest taken", stopDestTaken, "esc close · move that file away, then F2 with the same name"},
+		{"page failed", stopPageFailed, "esc close · fix the cause above, then F2 with the same name"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pv := goldenPreview(t)
+			pv.SetStopped(renameStop{kind: tt.kind, reason: "stopped", done: []string{"pages/Beta.md"}}, nil)
+			if got := stoppedFooter(t, pv); got != tt.want {
+				t.Errorf("footer = %q, want %q", got, tt.want)
+			}
+		})
+	}
 }

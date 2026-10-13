@@ -70,8 +70,20 @@ func (a *App) planRename(page *graph.PageMeta, name string) (*renamePlan, error)
 	return p, nil
 }
 
+// stopKind is why a rename stopped; the stopped panel's footer says what to
+// do about it.
+type stopKind int
+
+const (
+	stopRewrite     stopKind = iota // a linking file could not be rewritten
+	stopPageChanged                 // the page file changed before it was renamed
+	stopDestTaken                   // a file appeared at the page's new path
+	stopPageFailed                  // the page's rename failed for another reason
+)
+
 // renameStop says where a confirmed rename stopped.
 type renameStop struct {
+	kind    stopKind
 	reason  string
 	done    []string // rels rewritten, in write order
 	pending []string // rels not rewritten, the failing one first
@@ -116,16 +128,19 @@ func (a *App) applyRename(p *renamePlan) (renameResult, error) {
 	}
 
 	if err := edit.RenameIfUnchanged(p.page.Path, p.to.Path, p.pageSeen); err != nil {
-		var reason string
+		var (
+			kind   stopKind
+			reason string
+		)
 		switch {
 		case errors.Is(err, edit.ErrChanged):
-			reason = p.page.Rel + " changed on disk — page not renamed"
+			kind, reason = stopPageChanged, p.page.Rel+" changed on disk — page not renamed"
 		case errors.Is(err, edit.ErrExists):
-			reason = fmt.Sprintf("a file already exists at %s — page not renamed", p.to.Rel)
+			kind, reason = stopDestTaken, fmt.Sprintf("a file already exists at %s — page not renamed", p.to.Rel)
 		default:
-			reason = fmt.Sprintf("cannot rename %s: %v", p.page.Rel, err)
+			kind, reason = stopPageFailed, fmt.Sprintf("cannot rename %s: %v", p.page.Rel, err)
 		}
-		return renameResult{stop: &renameStop{reason: reason, done: rels}, reindexErr: a.reindex()}, nil
+		return renameResult{stop: &renameStop{kind: kind, reason: reason, done: rels}, reindexErr: a.reindex()}, nil
 	}
 
 	// The body PageView.loadResult stores for a page, so a self-linking
