@@ -32,6 +32,8 @@ commits). `internal/sync/` is the project's second deliberate disk-mutating
 surface, alongside `internal/edit/`; it shells out to the system `git` and bails
 to the shell on conflicts rather than resolving them in the alt-screen.
 
+weft polls the graph every 2 s for outside changes (`graph.ScanSignature`: the index walk's rules, stat only) and rebuilds through the normal async reindex. Polling is read-only.
+
 ## Commands
 
 ```bash
@@ -57,7 +59,7 @@ an intentional UI change, run with `-update` and visually diff the golden before
   Tea v2 sends on its own, so weft sends no queries and keeps the terminal's normal key
   encoding.
 - `internal/layout/` — the one layout definition: config load and validation (`.weft/config.toml`), the journal filename pattern, and new-page placement. Used by `graph`, `views`, `doctor` and `cmd/weft`. `Layout`'s zero value is invalid; use `layout.Default()` or `layout.Load`.
-- `internal/graph/` — recursive filesystem walk, page parsing (wiki links and tags; `tag.go` is the one tag definition every consumer uses), name resolution, index. `task.go`/`taskdate.go`/`agenda.go` are the one task grammar (markers, priorities, stamps, ownership, agenda) every consumer calls; `logbook.go` holds the LOGBOOK regexes and `QueryOrEmbedRe`; `heading.go` is the one heading definition (`Headings`, `HeadingKey`) and `ResolveLink` in `resolve.go` the one heading-link rule. `tree.go` (`PageTree`) groups non-journal pages by folder and namespace for the tree view. `resolve.go` and `names.go` also hold name resolution (exact, case-folded, path), the clash winner, and each page's `Key`.
+- `internal/graph/` — recursive filesystem walk, page parsing (wiki links and tags; `tag.go` is the one tag definition every consumer uses), name resolution, index. `task.go`/`taskdate.go`/`agenda.go` are the one task grammar (markers, priorities, stamps, ownership, agenda) every consumer calls; `logbook.go` holds the LOGBOOK regexes and `QueryOrEmbedRe`; `heading.go` is the one heading definition (`Headings`, `HeadingKey`) and `ResolveLink` in `resolve.go` the one heading-link rule. `tree.go` (`PageTree`) groups non-journal pages by folder and namespace for the tree view. `signature.go` (`Signature`, `ScanSignature`) is the stat-only fingerprint of the index walk (`walkGraph`, the one walk definition) that live reload compares. `resolve.go` and `names.go` also hold name resolution (exact, case-folded, path), the clash winner, and each page's `Key`.
 - `internal/render/` — Glamour-based page rendering (wiki-link styling, hanging-indent,
   workflow-marker colouring, `:LOGBOOK:` stripping). Has a `Warmup()` paid before the
   TUI takes the screen to avoid chroma init flicker. `theme.go` is the shared
@@ -89,7 +91,7 @@ an intentional UI change, run with `-update` and visually diff the golden before
   is dirty or ahead of upstream, driving the status-bar `●` indicator. Never
   edits a conflicted tree — conflicts bail to the shell.
 - `internal/views/` — Bubble Tea models: `app` (root), `page`, `picker`, `search`,
-  `backlinks`, `todos`, `agenda`, `calendar`, `onthisday`, `tree`, `capture`, `help`, `editor` (in-app markdown editor). The backlinks
+  `backlinks`, `todos`, `agenda`, `calendar`, `onthisday`, `tree`, `capture`, `help`, `editor` (in-app markdown editor). `reload.go` is live reload: the 2 s poll tick (`App.pollTick`, injected in tests), change detection against `diskSig`, and the editor refresh. The backlinks
   view (`b`) shows two sections: linked references (`[[…]]` links and tags) then unlinked
   references (bare-text mentions not yet wiki-linked); read-only, `enter` jumps to the
   mention's page and lands on the reference: linked backlinks focus the back-reference
