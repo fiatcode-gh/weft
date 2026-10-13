@@ -11,8 +11,8 @@ stores no tag list and writes nothing into the file.
 
 Out of scope: a `tags::` property, a separate tag list or tag colour, `#`
 inside `[[…]]` (still part of the page name, unless no such page exists and
-it names a heading: see `folding-heading-links.md`), tag rename (unit 10), editing
-aids beyond completion. A tag's page is an ordinary page and can hold notes.
+it names a heading: see `folding-heading-links.md`), editing aids beyond
+completion. A tag's page is an ordinary page and can hold notes.
 
 ## Decisions
 
@@ -41,6 +41,7 @@ aids beyond completion. A tag's page is an ordinary page and can hold notes.
   the line is one the read view substitutes. Accepting inserts `#name`, or
   `#[[Name]]` when the name is not a simple tag name. The create row writes
   nothing to disk, as for `[[`.
+- **Page rename rewrites tags.** Renaming a page rewrites `#tag` and `#[[tag]]` to it with the other links; see `page-rename.md`.
 - **Rejected: a separate tag kind.** It would need its own cursor stop, its own
   backlink section and its own sentinel id range for no reader-visible gain.
 

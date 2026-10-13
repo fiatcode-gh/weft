@@ -58,7 +58,7 @@ an intentional UI change, run with `-update` and visually diff the golden before
   `quietStdout`, which drops the terminal probes and keyboard-protocol switches Bubble
   Tea v2 sends on its own, so weft sends no queries and keeps the terminal's normal key
   encoding.
-- `internal/layout/` — the one layout definition: config load and validation (`.weft/config.toml`), the journal filename pattern, and new-page placement. Used by `graph`, `views`, `doctor` and `cmd/weft`. `Layout`'s zero value is invalid; use `layout.Default()` or `layout.Load`.
+- `internal/layout/` — the one layout definition: config load and validation (`.weft/config.toml`), the journal filename pattern, and page placement (new pages and `RenameRel` for rename). Used by `graph`, `views`, `doctor` and `cmd/weft`. `Layout`'s zero value is invalid; use `layout.Default()` or `layout.Load`.
 - `internal/graph/` — recursive filesystem walk, page parsing (wiki links and tags; `tag.go` is the one tag definition every consumer uses), name resolution, index. `task.go`/`taskdate.go`/`agenda.go` are the one task grammar (markers, priorities, stamps, ownership, agenda) every consumer calls; `logbook.go` holds the LOGBOOK regexes and `QueryOrEmbedRe`; `heading.go` is the one heading definition (`Headings`, `HeadingKey`) and `ResolveLink` in `resolve.go` the one heading-link rule. `tree.go` (`PageTree`) groups non-journal pages by folder and namespace for the tree view. `signature.go` (`Signature`, `ScanSignature`) is the stat-only fingerprint of the index walk (`walkGraph`, the one walk definition) that live reload compares. `resolve.go` and `names.go` also hold name resolution (exact, case-folded, path), the clash winner, and each page's `Key`.
 - `internal/render/` — Glamour-based page rendering (wiki-link styling, hanging-indent,
   workflow-marker colouring, `:LOGBOOK:` stripping). Has a `Warmup()` paid before the
@@ -77,9 +77,9 @@ an intentional UI change, run with `-update` and visually diff the golden before
 - `internal/edit/` — one of two deliberate disk-mutating surfaces (with
   `internal/sync/`). Resolves
   `$VISUAL` / `$EDITOR` / `vi`, snapshots file mtime, and exposes
-  `Resolve` / `EnsureFile` / `ReadSnapshot` / `WriteFileIfUnchanged` / `SnapshotMtime`.
+  `Resolve` / `EnsureFile` / `ReadSnapshot` / `WriteFileIfUnchanged` / `CheckRenameDest` / `RenameIfUnchanged` / `SnapshotMtime`.
   Every replacing write is content-guarded: `writeFile` is unexported. Invoked by the in-app editor (`e`,
-  saves on `Ctrl+S`), by task done/undo in the todos and agenda overlays, by linkify in the backlinks panel, by capture (`c`, one guarded append to today's journal), by template journal creation (`.`, `E`, capture), and by `App.editCurrent` for `$EDITOR` handoff (`E`).
+  saves on `Ctrl+S`), by task done/undo in the todos and agenda overlays, by linkify in the backlinks panel, by capture (`c`, one guarded append to today's journal), by template journal creation (`.`, `E`, capture), by page rename (`F2`, guarded rewrites of linking files then one guarded rename), and by `App.editCurrent` for `$EDITOR` handoff (`E`).
 - `internal/merge/` — pure git-style three-way line merge (adjacent changes
   conflict; both sides inserting at the same spot keeps mine then theirs) used by
   the editor save. No disk access.
@@ -96,7 +96,7 @@ an intentional UI change, run with `-update` and visually diff the golden before
   references (bare-text mentions not yet wiki-linked); read-only, `enter` jumps to the
   mention's page and lands on the reference: linked backlinks focus the back-reference
   link (cursor + scroll), unlinked references highlight the mention and scroll it into view.
-  `page.go` owns the row cursor and draws only the window rows; `fold.go` holds the session fold store (`foldStore` on `App`, keyed by page path, never written to disk) and the `Tab`/`z` handlers. `tree.go` is the page tree (`F`); its expanded groups live in `treeOpen` on `App`, session-only like `foldStore`.
+  `page.go` owns the row cursor and draws only the window rows; `fold.go` holds the session fold store (`foldStore` on `App`, keyed by page path, never written to disk) and the `Tab`/`z` handlers. `rename.go` is the page rename engine (plan, ordered guarded writes, history and fold remap) and `rename_view.go` its prompt and preview/stopped panel (`F2`). `tree.go` is the page tree (`F`); its expanded groups live in `treeOpen` on `App`, session-only like `foldStore`.
 
 ## External deps
 
