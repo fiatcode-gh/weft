@@ -92,6 +92,10 @@ type App struct {
 	// owns every key.
 	capture *CapturePrompt
 
+	// rename is the rename prompt drawn over the screen. While non-nil it
+	// owns every key, like capture.
+	rename *RenamePrompt
+
 	width  int
 	height int
 
@@ -801,8 +805,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if a.editor != nil {
 			a.editor.SetSize(m.Width, m.Height)
 		}
-		if a.capture != nil {
-			a.capture.SetSize(m.Width, m.Height)
+		if p := a.bottomPrompt(); p != nil {
+			p.SetSize(m.Width, m.Height)
 		}
 		return a, nil
 	case tea.PasteMsg:
@@ -891,6 +895,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return a, nil
 		}
+		if a.rename != nil {
+			if key == "ctrl+c" {
+				return a, tea.Quit
+			}
+			switch a.rename.Update(m) {
+			case captureCancel:
+				a.rename = nil
+			case captureSubmit:
+				return a, a.submitRename()
+			}
+			return a, nil
+		}
 		// An open overlay swallows all keys until it accepts or cancels —
 		// except ctrl+c, which must always quit (Bubble Tea convention; it
 		// works in every other mode).
@@ -937,6 +953,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.active = nil
 			case overlayResultCapture:
 				a.openCapture()
+			case overlayResultRename:
+				return a, a.confirmRename()
 			}
 			return a, nil
 		}
@@ -968,6 +986,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.historyForward()
 		case "c":
 			a.openCapture()
+		case "f2":
+			return a, a.openRename()
 		case ".":
 			if cmd, blocked := a.blockIfSyncing(); blocked {
 				return a, cmd
@@ -1067,8 +1087,8 @@ func (a *App) View() tea.View {
 	v.AltScreen = true
 	if a.editor != nil {
 		v.Cursor = a.editor.Cursor()
-	} else if a.capture != nil {
-		block, x, y := a.capture.View()
+	} else if p := a.bottomPrompt(); p != nil {
+		block, x, y := p.View()
 		rows := strings.Count(block, "\n") + 1
 		y += max(0, a.height-rows)
 		if a.height > 0 {
@@ -1104,11 +1124,25 @@ func (a *App) frame() string {
 	} else {
 		base = a.page.View() + "\n" + a.statusBar()
 	}
-	if a.capture != nil {
-		block, _, _ := a.capture.View()
+	if p := a.bottomPrompt(); p != nil {
+		block, _, _ := p.View()
 		return spliceBottom(base, block, a.height)
 	}
 	return base
+}
+
+// bottomPrompt is the prompt drawn over the bottom of the screen, or nil.
+func (a *App) bottomPrompt() interface {
+	View() (block string, cursorX, cursorY int)
+	SetSize(w, h int)
+} {
+	switch {
+	case a.capture != nil:
+		return a.capture
+	case a.rename != nil:
+		return a.rename
+	}
+	return nil
 }
 
 // centerOverlay places content in the middle of the terminal. Falls back to
@@ -1189,6 +1223,9 @@ func (a *App) blockIfSyncing() (cmd tea.Cmd, blocked bool) {
 		o.SetError(syncBusyMsg)
 		return nil, true
 	case taskPanel:
+		o.SetError(syncBusyMsg)
+		return nil, true
+	case *RenamePreview:
 		o.SetError(syncBusyMsg)
 		return nil, true
 	default:
