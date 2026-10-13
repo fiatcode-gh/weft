@@ -157,6 +157,20 @@ type App struct {
 	// finish out of order. The indexLoadedMsg handler drops any result
 	// whose gen doesn't match the current indexGen.
 	indexGen int
+
+	// loadedGen is the gen of the last accepted indexLoadedMsg; it differs
+	// from indexGen exactly while a build is in flight.
+	loadedGen int
+
+	// pollTick returns the command that delivers the next pollTickMsg.
+	// Injected so tests drive polls without a clock.
+	pollTick func() tea.Cmd
+	// pollArmed is set once the first successful index load has started the
+	// tick chain.
+	pollArmed bool
+	// diskSig is the graph's signature as of the last disk state weft acted
+	// on (an accepted build, a synchronous reindex, or a poll-started build).
+	diskSig graph.Signature
 }
 
 // readSpot is the read view at the moment e opened the editor: the anchor e
@@ -200,6 +214,7 @@ func New(graphPath string, lay layout.Layout, version string) *App {
 	}
 	a.statusProbe = syncpkg.Status
 	a.readSnapshot = edit.ReadSnapshot
+	a.pollTick = defaultPollTick
 	return a
 }
 
@@ -397,6 +412,7 @@ func (a *App) reindex() error {
 		return err
 	}
 	a.idx = idx
+	a.diskSig = idx.Signature()
 	if a.page != nil {
 		// Same-page rebuild: keep the reader's place, exactly like the
 		// async indexLoadedMsg path. Restore clamps if the page shrank.
@@ -657,6 +673,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.gen != a.indexGen {
 			return a, nil // a newer reindex is in flight; drop the stale walk
 		}
+		a.loadedGen = m.gen
 		if m.err != nil {
 			if a.page != nil {
 				// Mid-session reindex failed — keep the old index and
@@ -670,6 +687,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		a.idx = m.idx
+		a.diskSig = m.idx.Signature()
 		a.loadErr = nil
 		if a.page != nil {
 			// Refresh path (R, sync-pull, editor save-exit): rebuild PageView
@@ -684,7 +702,16 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Every reindex (boot, R, post-edit, post-$EDITOR) is a natural
 		// moment to refresh the sync indicator.
-		return a, tea.Batch(a.statusProbeCmd(), a.indexWarningsHint(m.idx.Warnings))
+		cmds := []tea.Cmd{a.statusProbeCmd(), a.indexWarningsHint(m.idx.Warnings)}
+		if !a.pollArmed {
+			a.pollArmed = true
+			cmds = append(cmds, a.pollTick())
+		}
+		return a, tea.Batch(cmds...)
+	case pollTickMsg:
+		return a, a.onPollTick()
+	case pollDoneMsg:
+		return a, a.onPollDone(m)
 	case syncDoneMsg:
 		a.syncing = false
 		if m.res.Err != nil {
