@@ -129,6 +129,7 @@ var helpGroups = []helpGroup{
 	}},
 	{"Maintain", []helpRow{
 		{"R", "rebuild index"},
+		{"F2", "rename page and its links"},
 	}},
 	{"Help / quit", []helpRow{
 		{"?", "toggle this help"},

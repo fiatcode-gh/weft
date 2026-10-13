@@ -158,6 +158,33 @@ func (l Layout) SkipDir(rel string) bool {
 
 // NewPageRel returns the graph-relative path, with ".md", for a new page.
 func (l Layout) NewPageRel(name string) (string, error) {
+	return l.placeIn(l.pagesDir, name)
+}
+
+// RenameRel returns the graph-relative path, with ".md", that a page at
+// oldRel gets when renamed to name: the same folder, name placed by
+// namespace_files as for a new page.
+func (l Layout) RenameRel(oldRel, name string) (string, error) {
+	dir := path.Dir(oldRel)
+	if dir == "." {
+		dir = ""
+	}
+	rel, err := l.placeIn(dir, name)
+	if err != nil {
+		return "", err
+	}
+	got := path.Dir(rel)
+	if got == "." {
+		got = ""
+	}
+	if path.Clean(rel) != rel || path.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, "../") || !contains(dir, got) {
+		return "", fmt.Errorf("cannot place page %q: outside its folder", name)
+	}
+	return rel, nil
+}
+
+// placeIn is the path, with ".md", of a page called name under dir.
+func (l Layout) placeIn(dir, name string) (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("cannot place page %q: empty name", name)
 	}
@@ -174,7 +201,7 @@ func (l Layout) NewPageRel(name string) (string, error) {
 		}
 		file = name
 	}
-	return joinRel(l.pagesDir, file+".md"), nil
+	return joinRel(dir, file+".md"), nil
 }
 
 func joinRel(dir, rest string) string {

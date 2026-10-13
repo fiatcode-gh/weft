@@ -18,8 +18,8 @@ plain markdown. weft is a navigator, not an outliner: no block IDs, no saved
 fold state, no zoom, no embeds.
 
 Out of scope: folding in the editor or live preview, persisted folds, same-page
-`[[#Heading]]`, slugs or anchors, a table of contents, rename rewriting, and a
-faster row map.
+`[[#Heading]]`, slugs or anchors, a table of contents, and a faster row map. Page rename keeps the
+`#Heading` fragment of every link it rewrites (`page-rename.md`).
 
 ## Decisions
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -188,4 +189,57 @@ func SnapshotMtime(path string) (time.Time, error) {
 		return time.Time{}, err
 	}
 	return info.ModTime(), nil
+}
+
+// ErrExists reports that a rename's destination is already taken by another
+// file, so nothing was renamed.
+var ErrExists = errors.New("file already exists")
+
+// CheckRenameDest reports whether to is free for renaming from: nil when no
+// file is there, or when to is from itself under a different case on a
+// case-insensitive filesystem (same folder, names equal ignoring case,
+// os.SameFile); ErrExists for any other existing file; other stat errors as is.
+// Read-only.
+func CheckRenameDest(from, to string) error {
+	ti, err := os.Lstat(to)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	fi, err := os.Lstat(from)
+	if err != nil {
+		return err
+	}
+	if filepath.Dir(from) == filepath.Dir(to) &&
+		strings.EqualFold(filepath.Base(from), filepath.Base(to)) &&
+		filepath.Base(from) != filepath.Base(to) &&
+		os.SameFile(fi, ti) {
+		return nil
+	}
+	return ErrExists
+}
+
+// RenameIfUnchanged renames from to to only if from still equals seen, by
+// content, and to is free (CheckRenameDest). It creates to's missing parent
+// folders and does not remove them if a later step fails. Otherwise it returns
+// ErrChanged or ErrExists and renames nothing. A file created at to between the
+// check and the rename is not detected: the same accepted window as
+// WriteFileIfUnchanged.
+func RenameIfUnchanged(from, to string, seen Snapshot) error {
+	now, err := ReadSnapshot(from)
+	if err != nil {
+		return err
+	}
+	if !now.Exists || now != seen {
+		return ErrChanged
+	}
+	if err := CheckRenameDest(from, to); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
+		return err
+	}
+	return os.Rename(from, to)
 }

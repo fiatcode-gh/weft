@@ -108,7 +108,7 @@ func linkedSpans(line string) []search.Span {
 
 // InlineCodeSpans returns the byte ranges of inline code spans on line —
 // the odd segments of a backtick split, mirroring how parse.go
-// (appendLinks) and render.replaceLinksOutsideInlineCode treat
+// (appendLineLinks) and render.replaceLinksOutsideInlineCode treat
 // backticks: split the line on "`", even-indexed segments are literal text,
 // odd-indexed segments are inline code. Each returned span includes its
 // leading backtick (and trailing backtick, when the code run is closed).

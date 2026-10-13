@@ -256,3 +256,19 @@ func (p *PageView) revealLine(line int, lines []int) {
 		}
 	}
 }
+
+// rename moves the fold entry of a renamed page. When body (the page's text
+// after the rename) differs from the entry's, it replaces it; a link rewrite
+// changes no line breaks, so the fold lines stay valid and only the memos go.
+func (s foldStore) rename(from, to, body string) {
+	e := s[from]
+	if e == nil || from == to {
+		return
+	}
+	delete(s, from)
+	if body != "" && body != e.body {
+		e.body = body
+		e.outline, e.width, e.rows, e.own = nil, 0, nil, nil
+	}
+	s[to] = e
+}

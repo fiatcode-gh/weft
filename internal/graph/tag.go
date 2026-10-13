@@ -81,7 +81,7 @@ func newTagContext(line string) tagContext {
 		ctx.code = InlineCodeSpans(line)
 	}
 	if strings.Contains(line, "[[") {
-		// Same per-even-segment matching as appendLinks, in line coordinates.
+		// Same per-even-segment matching as appendLineLinks, in line coordinates.
 		off := 0
 		for seg, part := range strings.Split(line, "`") {
 			if seg%2 == 0 {

@@ -145,6 +145,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | `g` / `G`  | cursor to top / bottom of page      |
 | `Tab`      | fold / unfold the heading or bullet under the cursor |
 | `z`        | fold the page: top-level bullets → outline of headings → all shown |
+| `F2`       | rename the page: preview, then rewrite every link and tag to it (`y`) |
 | `R`        | rebuild the index                   |
 | `S`        | sync the graph with git (commit → pull → push) |
 | `e`        | edit current page in-app at the cursor row |
@@ -201,6 +202,18 @@ A task is a bullet that starts with a marker (`TODO`, `LATER`, `DOING`, `WAITING
 - **State.** It opens on the page you are reading. Expanded groups last for the session and are never saved.
 - **Journals** are left out: use the calendar, `<`/`>` and `O`.
 
+### Renaming a page
+
+`F2` renames the page on screen and rewrites every link and tag that points to it. It asks for the new name in a prompt on the bottom line, filled with the current name (`enter` previews, `esc` cancels). A preview lists the new name, the new file and how many links change in which files. `y` writes, `n` or `Esc` cancels.
+
+- **Rewritten.** `[[Page]]` links in any case, `[[Page|alias]]` (the alias stays), `[[Page#Heading]]` (the heading stays), path links such as `[[pages/Note]]`, `#tag` and `#[[tag]]`, in every file of the graph, including the page's own links to itself. Every link gets the page's new name. A simple tag stays `#name` when the new name allows it, else it becomes `#[[New Name]]`; a `#[[tag]]` stays in bracket form.
+- **Not rewritten.** Code spans and fences, bare mentions of the name, and the page's own title and plain text.
+- **Where the file goes.** Into the same folder under the new name. A `/` in the name follows `namespace_files`: `A___B.md` beside the old file with `triple-lowbar`, a subfolder of the current folder with `folders`.
+- **Refused.** Journals (`journals cannot be renamed`), a page with no file yet (`no file to rename yet`), a rename while a sync runs (`sync in progress — retry when it finishes`), an empty name, the same name (`name unchanged`), a name that is already a page in any case (`"X" is already a page: Key`), a name that would be a journal, a name weft cannot place in the page's folder, a name no link could open, and a name with `]`, `|`, a backtick or a control character. Changing only the case (`alpha` to `Alpha`) is allowed. A refusal shows in the prompt and nothing is written.
+- **Order of writes.** weft rewrites the linking files one by one, then renames the page's file last. Each write checks the file has not changed since the preview, and a rename never overwrites an existing file. `y` is refused while the index is updating.
+- **A file changed on disk.** The rename stops at the first file that changed, overwrites nothing, and shows what was rewritten and what was not. Links already rewritten point to the new name and stay unresolved until the page is renamed, so press `F2` and type the same new name again to finish.
+- **Undo.** There is none. Git is the undo: sync with `S` or commit first, then restore with git. Back/forward history and folds follow the renamed page.
+
 ## What gets rendered
 
 - `[[wiki-links]]` are styled inline, navigable with `n`/`N`, and follow with `Enter`. Aliased links (`[[Target|alias]]`) show the alias.
@@ -223,7 +236,7 @@ A task is a bullet that starts with a marker (`TODO`, `LATER`, `DOING`, `WAITING
 
 ## Scope
 
-Writes graph files only via the in-app editor (`e`, saves on `Ctrl+S`) and the `$EDITOR` handoff (`E`); the `.` key creates today's journal (from the `Journal Template` page) if it doesn't exist, `c` appends one line to today's journal (creating it the same way when missing), and the picker can create a new page by name. Linkifying a mention in the backlinks panel also writes the mentioning file. The editor and linkify never overwrite outside changes unseen. Press `S` to sync the whole graph with git (commit → `pull --rebase` → push); it runs against the graph directory and degrades to a status-bar hint if that directory isn't a git repository. Folding is view-only and lasts for the session; nothing is saved. weft checks the graph's folders every 2 seconds (file names, sizes and modification times; nothing is read) and rebuilds the index when a page or journal changed outside weft. The page on screen updates in place, open panels keep their rows until reopened, and an open editor is never changed: it shows that the file changed, and `Ctrl+S` merges or asks.
+Writes graph files only via the in-app editor (`e`, saves on `Ctrl+S`) and the `$EDITOR` handoff (`E`); the `.` key creates today's journal (from the `Journal Template` page) if it doesn't exist, `c` appends one line to today's journal (creating it the same way when missing), and the picker can create a new page by name. Linkifying a mention in the backlinks panel also writes the mentioning file. Renaming a page (`F2`) rewrites the files that link to it and then renames its file. The editor, linkify and rename never overwrite outside changes unseen. Press `S` to sync the whole graph with git (commit → `pull --rebase` → push); it runs against the graph directory and degrades to a status-bar hint if that directory isn't a git repository. Folding is view-only and lasts for the session; nothing is saved. weft checks the graph's folders every 2 seconds (file names, sizes and modification times; nothing is read) and rebuilds the index when a page or journal changed outside weft. The page on screen updates in place, open panels keep their rows until reopened, and an open editor is never changed: it shows that the file changed, and `Ctrl+S` merges or asks.
 
 ### What is not supported
 

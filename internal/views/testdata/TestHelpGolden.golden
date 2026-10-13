@@ -12,12 +12,12 @@
 │  Links                                                                                                                  │
 │    n / N           next / previous link or tag                           Maintain                                       │
 │    enter           follow link ([[Page#Heading]] opens at the heading)     R               rebuild index                │
-│                                                                                                                         │
-│  History                                                                 Help / quit                                    │
-│    [               back                                                    ?               toggle this help             │
-│    ]               forward                                                 esc             close overlay                │
-│                                                                            q               quit                         │
-│  Open                                                                                                                   │
+│                                                                            F2              rename page and its links    │
+│  History                                                                                                                │
+│    [               back                                                  Help / quit                                    │
+│    ]               forward                                                 ?               toggle this help             │
+│                                                                            esc             close overlay                │
+│  Open                                                                      q               quit                         │
 │    .               today's journal (new: from Journal Template)                                                         │
 │    <               previous journal                                                                                     │
 │    >               next journal                                                                                         │
