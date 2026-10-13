@@ -53,8 +53,8 @@ numbers, a configurable `O` offset list, and a template watcher.
   routes keys in this order: editor, capture prompt, open overlay, read-view
   keys. The prompt takes every key but `ctrl+c`, which still quits. Because it
   sits above overlays, closing it returns to the overlay beneath it.
-- **D6 `overlayCapture` emitters.** Todos, agenda, backlinks, calendar and
-  on-this-day return `overlayCapture()` for `c`, and `App` calls `openCapture`.
+- **D6 `overlayCapture` emitters.** Todos, agenda, backlinks, calendar,
+  on-this-day and the page tree return `overlayCapture()` for `c`, and `App` calls `openCapture`.
   The picker and search keep `c` as typed text, and help has no use for it.
 - **D7 In-panel feedback.** A status-bar hint is hidden behind an overlay, so
   `submitCapture` also calls `SetError` on the active overlay when it

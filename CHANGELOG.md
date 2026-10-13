@@ -25,6 +25,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A page tree (`F`): pages grouped by folder and namespace, opened on the current page; `Enter` opens a page, groups expand for the session.
 - A row cursor in the read view, drawn as a highlighted row.
 - Folding: `Tab` folds a heading's section or a bullet's children, `z` cycles top-level bullets → an outline of headings (each heading stays visible, its text folded) → all. Folds last for the session, are dropped when the page's text changes, and are never saved.
 - `[[Page#Heading]]` (and `#[[Page#Heading]]`) opens the page at that heading, counts as a backlink of the page and is not unresolved in `weft doctor`. A page literally named `Page#Heading` still wins.
