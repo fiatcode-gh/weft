@@ -129,7 +129,7 @@ func BuildIndex(graphPath string, lay layout.Layout) (*Index, error) {
 			idx.headingKeys[p.Path] = keys
 		}
 		for _, lh := range links {
-			pending = append(pending, pendingLink{p.Key, lh.Target, lh.Line, lineContext(lines, lh.Line)})
+			pending = append(pending, pendingLink{p.Key, lh.target, lh.line, lineContext(lines, lh.line)})
 		}
 		for k, th := range todos {
 			idx.Todos = append(idx.Todos, TodoBullet{

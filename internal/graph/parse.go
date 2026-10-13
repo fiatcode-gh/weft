@@ -45,7 +45,7 @@ func IsOpenTask(line string) bool {
 //
 // An unterminated fence causes following lines to be skipped — that matches how
 // a markdown renderer would treat the rest of the page as code.
-func parseBody(body string) (lines []string, links []LinkHit, todos []TodoHit) {
+func parseBody(body string) (lines []string, links []linkSpan, todos []TodoHit) {
 	lines = strings.Split(body, "\n")
 	var w lineWalker
 	cur := -1 // index in todos of the open task owning the current lines
@@ -57,7 +57,7 @@ func parseBody(body string) (lines []string, links []LinkHit, todos []TodoHit) {
 		if fenced {
 			continue
 		}
-		links = appendLinks(links, line, i+1)
+		links = appendLineLinks(links, line, i+1)
 		if m := openTaskMatch(line); m != nil {
 			todos = append(todos, TodoHit{
 				Marker:   m[1],
@@ -84,21 +84,35 @@ func parseBody(body string) (lines []string, links []LinkHit, todos []TodoHit) {
 	return lines, links, todos
 }
 
-// appendLinks appends every [[link]] and simple #tag on line (1-based lineNo)
-// to out, in byte order. Targets like [[A|alias]] are recorded as "A"; a
-// bracket tag #[[X]] is its wiki link and is counted once.
-func appendLinks(out []LinkHit, line string, lineNo int) []LinkHit {
+// linkKind is the written form of a counted link.
+type linkKind uint8
+
+const (
+	linkWiki       linkKind = iota // [[Target]] / [[Target|alias]]
+	linkTag                        // #name
+	linkBracketTag                 // #[[Target]] / #[[Target|alias]]
+)
+
+// linkSpan is one link the index counts, located on its line.
+type linkSpan struct {
+	target                 string // as indexed: trimmed text before '|', or the tag name
+	line                   int    // 1-based
+	start, end             int    // line bytes of the whole occurrence: "[[…]]", "#name", "#[[…]]"
+	targetStart, targetEnd int    // line bytes of the target as written (untrimmed): between "[[" and '|' or "]]"; the name after '#'
+	kind                   linkKind
+}
+
+// appendLineLinks appends every [[link]], #tag and #[[tag]] on line (1-based
+// lineNo) to out, in byte order. Targets like [[A|alias]] are recorded as "A";
+// a bracket tag #[[X]] is its wiki link and is counted once.
+func appendLineLinks(out []linkSpan, line string, lineNo int) []linkSpan {
 	// Fast path: a line with neither "[[" nor "#" holds no link or tag, so
 	// skip the backtick split + regex scan that every other line would pay for.
 	hasWiki := strings.Contains(line, "[[")
 	if !hasWiki && strings.IndexByte(line, '#') < 0 {
 		return out
 	}
-	type hit struct {
-		at     int
-		target string
-	}
-	var hits []hit
+	first := len(out)
 	if hasWiki {
 		// Scan only OUTSIDE inline-backtick code spans, matching the renderer
 		// (render.replaceLinksOutsideInlineCode): split on backticks, where
@@ -113,7 +127,12 @@ func appendLinks(out []LinkHit, line string, lineNo int) []LinkHit {
 					if raw == "" {
 						continue
 					}
-					hits = append(hits, hit{off + m[0], raw})
+					out = append(out, linkSpan{
+						target: raw, line: lineNo,
+						start: off + m[0], end: off + m[1],
+						targetStart: off + m[2], targetEnd: off + m[3],
+						kind: linkWiki,
+					})
 				}
 			}
 			off += len(part) + 1
@@ -121,20 +140,38 @@ func appendLinks(out []LinkHit, line string, lineNo int) []LinkHit {
 	}
 	for _, t := range FindTags(line) {
 		if !t.Bracket {
-			hits = append(hits, hit{t.Start, t.Name})
+			out = append(out, linkSpan{
+				target: t.Name, line: lineNo,
+				start: t.Start, end: t.End,
+				targetStart: t.Start + 1, targetEnd: t.End,
+				kind: linkTag,
+			})
+			continue
+		}
+		for k := first; k < len(out); k++ {
+			if out[k].kind == linkWiki && out[k].start == t.Start+1 {
+				out[k].kind = linkBracketTag
+				out[k].start = t.Start
+				break
+			}
 		}
 	}
-	sort.SliceStable(hits, func(i, j int) bool { return hits[i].at < hits[j].at })
-	for _, h := range hits {
-		out = append(out, LinkHit{Target: h.target, Line: lineNo})
-	}
+	added := out[first:]
+	sort.SliceStable(added, func(i, j int) bool { return added[i].start < added[j].start })
 	return out
 }
 
 // ExtractLinks returns every [[link]] and #tag in body, skipping fenced code.
 // Targets like [[A|alias]] are recorded as "A"; #name is recorded as "name".
 func ExtractLinks(body string) []LinkHit {
-	_, links, _ := parseBody(body)
+	_, spans, _ := parseBody(body)
+	if len(spans) == 0 {
+		return nil
+	}
+	links := make([]LinkHit, len(spans))
+	for i, s := range spans {
+		links[i] = LinkHit{Target: s.target, Line: s.line}
+	}
 	return links
 }
 
