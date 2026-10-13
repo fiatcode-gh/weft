@@ -132,7 +132,7 @@ func (a *App) markTask(m taskMark) tea.Cmd {
 		}
 		return nil
 	}
-	meta, ok := a.idx.ByName[m.page]
+	meta, ok := a.idx.Resolve(m.page)
 	if !ok {
 		return fail(m.page + " is no longer in the index")
 	}

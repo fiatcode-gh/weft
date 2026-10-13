@@ -15,7 +15,7 @@ var ctrlS = tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl}
 
 const (
 	journalPath = "journals/2026_05_24.md"
-	journalPage = "2026-05-24"
+	journalPage = "2026_05_24"
 	journalBody = "- one\n- two\n- three\n"
 )
 

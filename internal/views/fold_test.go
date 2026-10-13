@@ -374,7 +374,7 @@ func TestFoldsClearedOnTextChange(t *testing.T) {
 			now:   capNow,
 			files: map[string]string{capJournal: body, "pages/Anchor.md": "anchor\n"},
 		})
-		if a.page.Page() != "2026-05-25" {
+		if a.page.Page() != "2026_05_25" {
 			t.Fatalf("boot page = %q", a.page.Page())
 		}
 		tab(a)

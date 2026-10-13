@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/fiatcode-gh/weft/v2/internal/buffer"
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 )
 
 // key builds the key press Bubble Tea v2 reports for typing s (one rune).
@@ -35,12 +36,18 @@ func quietTerm(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 }
 
-// cloneFixtureGraph copies testdata/fixture-graph into a fresh temp dir
-// so tests can create journals and edit pages without dirtying the repo
-// checkout (and can run in parallel).
+// cloneFixtureGraph copies testdata/fixture-graph; see cloneGraph.
 func cloneFixtureGraph(t *testing.T) string {
 	t.Helper()
-	src, err := filepath.Abs("../../testdata/fixture-graph")
+	return cloneGraph(t, "fixture-graph")
+}
+
+// cloneGraph copies testdata/<name> into a fresh temp dir so tests can
+// create journals and edit pages without dirtying the repo checkout (and can
+// run in parallel).
+func cloneGraph(t *testing.T, name string) string {
+	t.Helper()
+	src, err := filepath.Abs(filepath.Join("../../testdata", name))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +99,11 @@ func writeGraph(t *testing.T, files map[string]string) (string, *graph.Index) {
 			t.Fatal(err)
 		}
 	}
-	idx, err := graph.BuildIndex(dir)
+	lay, err := layout.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx, err := graph.BuildIndex(dir, lay)
 	if err != nil {
 		t.Fatal(err)
 	}

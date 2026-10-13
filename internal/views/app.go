@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 
 	"github.com/fiatcode-gh/weft/v2/internal/edit"
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 	"github.com/fiatcode-gh/weft/v2/internal/merge"
 	"github.com/fiatcode-gh/weft/v2/internal/search"
 	syncpkg "github.com/fiatcode-gh/weft/v2/internal/sync"
@@ -68,6 +68,7 @@ var editorStartsInSource bool
 
 type App struct {
 	graphPath string
+	lay       layout.Layout
 
 	idx     *graph.Index
 	loadErr error
@@ -180,9 +181,10 @@ type historyEntry struct {
 // New returns an App that has not yet built its index. The index is built
 // asynchronously in Init so the first frame can render a "loading" splash
 // instead of freezing the terminal while a large graph is walked.
-func New(graphPath, version string) *App {
+func New(graphPath string, lay layout.Layout, version string) *App {
 	a := &App{
 		graphPath:    graphPath,
+		lay:          lay,
 		histIdx:      -1,
 		version:      version,
 		nowFunc:      time.Now,
@@ -197,7 +199,13 @@ func New(graphPath, version string) *App {
 	return a
 }
 
-func (a *App) todayJournalName() string { return a.nowFunc().Format("2006-01-02") }
+// today is the civil date of the clock (UTC midnight, like every journal date).
+func (a *App) today() time.Time {
+	y, m, d := a.nowFunc().Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}
+
+func (a *App) todayJournalName() string { return a.lay.JournalName(a.today()) }
 
 // setHint stores s as the active status-bar hint, bumps hintGen, and returns
 // a tea.Cmd that delivers a hintExpireMsg after hintTTL. The handler clears
@@ -218,9 +226,9 @@ func (a *App) buildIndexCmd() tea.Cmd {
 	// which of their disk walks finishes first.
 	a.indexGen++
 	gen := a.indexGen
-	path := a.graphPath
+	path, lay := a.graphPath, a.lay
 	return func() tea.Msg {
-		idx, err := graph.BuildIndex(path)
+		idx, err := graph.BuildIndex(path, lay)
 		return indexLoadedMsg{idx: idx, err: err, gen: gen}
 	}
 }
@@ -257,13 +265,13 @@ func (a *App) navigate(name string) {
 	a.navigateToTask(name, -1)
 }
 
-// canonicalName maps a raw wiki-link target to the indexed page's exact
-// (filename-derived) name, so downstream exact-match lookups agree with
-// the case-insensitive Resolve the read view uses. Unindexed names pass
-// through unchanged — they name pages that don't exist yet.
+// canonicalName maps a raw wiki-link target to the indexed page's key, so
+// downstream exact-match lookups agree with the Resolve the read view uses
+// (case-insensitive, path-qualified). Unindexed names pass through
+// unchanged — they name pages that don't exist yet.
 func (a *App) canonicalName(name string) string {
 	if meta, ok := a.idx.Resolve(name); ok {
-		return meta.Name
+		return meta.Key
 	}
 	return name
 }
@@ -304,7 +312,7 @@ func (a *App) navigateToTask(name string, ordinal int) {
 // target names.
 func (a *App) followLink(target string) tea.Cmd {
 	if d, ok := a.idx.ResolveLink(target); ok && d.Heading != "" {
-		return a.navigateToHeading(d.Page.Name, d.Heading)
+		return a.navigateToHeading(d.Page.Key, d.Heading)
 	}
 	a.navigate(target)
 	return nil
@@ -380,7 +388,7 @@ func (a *App) historyForward() {
 // and the linkify path, both of which mutate the graph while a view is open and
 // need the refresh before returning (no indexLoadedMsg round-trip).
 func (a *App) reindex() error {
-	idx, err := graph.BuildIndex(a.graphPath)
+	idx, err := graph.BuildIndex(a.graphPath, a.lay)
 	if err != nil {
 		return err
 	}
@@ -422,10 +430,11 @@ func (a *App) editCurrent() tea.Cmd {
 		// normal navigation (picker / wiki-links only point to
 		// indexed pages) and a missing journal is the only one
 		// worth handling automatically.
-		if !graph.IsJournalPageName(page) {
+		day, ok := a.idx.JournalDateOf(page)
+		if !ok {
 			return a.setHint("page not in index: " + page)
 		}
-		if err := a.createJournalAndReindex(page); err != nil {
+		if err := a.createJournalAndReindex(day); err != nil {
 			return a.setHint(err.Error())
 		}
 		newMeta, ok := a.idx.Resolve(page)
@@ -467,25 +476,30 @@ func (a *App) editCurrent() tea.Cmd {
 
 // enterEditor opens the in-app editor on the current page. The target file
 // path is computed but NOT created — a brand-new page is written to disk
-// only on save (Ctrl+S). Journals route to journals/, every other name to
-// pages/ (flat, "/" mangled to "___" by FilenameFromPageName). The cursor
-// opens on the read view's anchor line.
+// only on save (Ctrl+S). Journals route to the journals folder, every other
+// name to where the layout places a new page (Index.NewPagePath); a name the
+// layout cannot place shows its error as a hint and opens nothing. The
+// cursor opens on the read view's anchor line.
 func (a *App) enterEditor() tea.Cmd {
 	name := a.page.Page()
 	var path string
 	if meta, ok := a.idx.Resolve(name); ok {
 		path = meta.Path
-	} else if graph.IsJournalPageName(name) {
-		path = a.journalPath(name)
+	} else if day, ok := a.idx.JournalDateOf(name); ok {
+		path = a.idx.JournalPath(day)
 	} else {
-		path = filepath.Join(a.graphPath, "pages", graph.FilenameFromPageName(name))
+		p, err := a.idx.NewPagePath(name)
+		if err != nil {
+			return a.setHint(err.Error())
+		}
+		path = p
 	}
 	snap, err := a.readSnapshot(path)
 	if err != nil {
 		return a.setHint("cannot read: " + err.Error())
 	}
 	content, isNew := snap.Content, !snap.Exists
-	if isNew && graph.IsJournalPageName(name) {
+	if _, isJournal := a.idx.JournalDateOf(name); isNew && isJournal {
 		// A new journal opens on the journal template; nothing is written
 		// until save.
 		tmpl, err := a.journalTemplate()
@@ -564,20 +578,24 @@ func (a *App) placeFromEditor(at Anchor) {
 	a.page.PlaceAnchor(at)
 }
 
-// unlinkedRefs finds bare-text mentions of `name` elsewhere in the graph that
-// aren't already links. Best-effort: a ripgrep failure yields no unlinked refs
+// unlinkedRefs finds bare-text mentions of the page key opens elsewhere in the
+// graph that aren't already links. A clash loser has none (a bare mention
+// names the winner); an unresolved key is scanned as written. Best-effort: a ripgrep failure yields no unlinked refs
 // rather than breaking the backlinks panel — and an error hint would be
 // invisible behind the overlay anyway (cf. the slice-1 hidden-hint lesson).
-func (a *App) unlinkedRefs(name string) []graph.UnlinkedRef {
-	hits, err := search.Mentions(a.graphPath, name)
+func (a *App) unlinkedRefs(key string) []graph.UnlinkedRef {
+	name, targetPath := key, ""
+	if meta, ok := a.idx.Resolve(key); ok {
+		if meta.Key != meta.Name {
+			return nil
+		}
+		name, targetPath = meta.Name, meta.Path
+	}
+	hits, err := search.Mentions(a.idx.Files(), name)
 	if err != nil {
 		return nil
 	}
-	targetPath := ""
-	if meta, ok := a.idx.ByName[name]; ok {
-		targetPath = meta.Path
-	}
-	return graph.FilterUnlinked(hits, targetPath, func(p string) (string, error) {
+	return a.idx.FilterUnlinked(hits, targetPath, func(p string) (string, error) {
 		b, err := os.ReadFile(p)
 		return string(b), err
 	})
@@ -887,7 +905,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "A":
 			a.active = NewAgenda(a.idx, a.nowFunc(), a.width, a.height)
 		case "C":
-			a.active = NewCalendar(a.idx.Journals(), a.page.Page(), a.nowFunc(), a.width, a.height)
+			a.active = NewCalendar(a.idx, a.page.Page(), a.nowFunc(), a.width, a.height)
 		case "O":
 			a.active = NewOnThisDay(a.idx, a.nowFunc(), a.readSnapshot, a.width, a.height)
 		case "?":
@@ -902,10 +920,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if cmd, blocked := a.blockIfSyncing(); blocked {
 				return a, cmd
 			}
-			today := a.todayJournalName()
+			day := a.today()
+			today := a.lay.JournalName(day)
 			var probe tea.Cmd
-			if _, ok := a.idx.ByName[today]; !ok {
-				if err := a.createJournalAndReindex(today); err != nil {
+			if _, ok := a.idx.JournalOn(day); !ok {
+				if err := a.createJournalAndReindex(day); err != nil {
 					return a, a.setHint(err.Error())
 				}
 				// Creating the journal wrote a new file (from the journal
@@ -920,14 +939,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			page := a.page.Page()
 			if name, ok := a.idx.JournalNeighbor(page, -1); ok {
 				a.navigate(name)
-			} else if graph.IsJournalPageName(page) {
+			} else if _, ok := a.idx.JournalDateOf(page); ok {
 				return a, a.setHint("no earlier journal")
 			}
 		case ">":
 			page := a.page.Page()
 			if name, ok := a.idx.JournalNeighbor(page, +1); ok {
 				a.navigate(name)
-			} else if graph.IsJournalPageName(page) {
+			} else if _, ok := a.idx.JournalDateOf(page); ok {
 				return a, a.setHint("no later journal")
 			}
 		case "g":

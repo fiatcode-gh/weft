@@ -3,7 +3,7 @@ package views
 import (
 	"errors"
 	"fmt"
-	"path/filepath"
+	"time"
 
 	"github.com/fiatcode-gh/weft/v2/internal/edit"
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
@@ -27,15 +27,11 @@ func (a *App) journalTemplate() (string, error) {
 	return snap.Content, nil
 }
 
-// journalPath is where journal name's file lives: journals/<YYYY_MM_DD>.md.
-func (a *App) journalPath(name string) string {
-	return filepath.Join(a.graphPath, "journals", graph.FilenameFromPageName(name))
-}
-
-// createJournal creates journal name's file from the journal template, or
-// empty when there is none, and never touches an existing file.
-func (a *App) createJournal(name string) (created bool, err error) {
-	path := a.journalPath(name)
+// createJournal creates the file of the journal dated day (and any missing
+// folders) from the journal template, or empty when there is none, and never
+// touches an existing file.
+func (a *App) createJournal(day time.Time) (created bool, err error) {
+	path := a.idx.JournalPath(day)
 	tmpl, err := a.journalTemplate()
 	if err != nil {
 		return false, err
@@ -57,17 +53,24 @@ func (a *App) createJournal(name string) (created bool, err error) {
 	return created, nil
 }
 
-// createJournalAndReindex creates the on-disk file for journal page `name`
+// createJournalAndReindex creates the on-disk file for the journal dated day
 // (from the journal template, or empty without one), rebuilds the index
 // synchronously, and rebinds the current PageView to it. Shared by the `.`
 // and `E` handlers when they land on a today's-journal page whose file
 // doesn't exist yet. Returns an error whose message is ready for setHint.
-func (a *App) createJournalAndReindex(name string) error {
-	if _, err := a.createJournal(name); err != nil {
+func (a *App) createJournalAndReindex(day time.Time) error {
+	if _, err := a.createJournal(day); err != nil {
 		return err
 	}
 	if err := a.reindex(); err != nil {
 		return fmt.Errorf("reindex failed: %w", err)
 	}
 	return nil
+}
+
+// isJournalName reports whether name is shaped like a journal under idx's
+// layout.
+func isJournalName(idx *graph.Index, name string) bool {
+	_, ok := idx.Layout.ParseJournalName(name)
+	return ok
 }

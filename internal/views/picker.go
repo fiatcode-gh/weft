@@ -14,8 +14,10 @@ import (
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
 )
 
+// pickerChoice is one page row. key is both what the row shows (and fuzzy
+// matching runs on) and the link target that opens exactly that page.
 type pickerChoice struct {
-	name  string
+	key   string
 	mtime time.Time
 }
 
@@ -24,7 +26,7 @@ type Picker struct {
 	idx        *graph.Index
 	input      textinput.Model
 	choices    []pickerChoice
-	names      []string // derived from choices, kept in lockstep for fuzzy.Find
+	labels     []string // choice labels, kept in lockstep with choices for fuzzy.Find
 	matches    []fuzzy.Match
 	now        time.Time // captured at construction for stable relative-time hints
 	createName string    // non-empty when a "＋ Create" row should be offered
@@ -46,33 +48,29 @@ func NewPicker(idx *graph.Index, width, height int) *Picker {
 	ti.CharLimit = 200
 	p := &Picker{listBox: listBox{width: width, height: height}, idx: idx, input: ti, now: time.Now()}
 	p.choices = pickerChoices(idx)
-	p.names = make([]string, len(p.choices))
+	p.labels = make([]string, len(p.choices))
 	for i, c := range p.choices {
-		p.names[i] = c.name
+		p.labels[i] = c.key
 	}
 	p.search("")
 	return p
 }
 
-// pickerChoices returns the picker candidate list sorted with the most
-// recently modified files first. Only real on-disk pages and journals
-// appear here; the synthetic "＋ Create" row for a not-yet-existent page is
-// handled separately (see refreshCreate / createName).
+// pickerChoices returns every page and journal, most recently modified first.
+// A page's label is its Key: its name, or for a page that loses a name clash
+// its shortest path that opens it. Only real on-disk pages appear here; the
+// synthetic "＋ Create" row for a not-yet-existent page is handled separately
+// (see refreshCreate / createName).
 func pickerChoices(idx *graph.Index) []pickerChoice {
-	seen := make(map[string]struct{}, len(idx.Pages))
 	entries := make([]pickerChoice, 0, len(idx.Pages))
 	for _, p := range idx.Pages {
-		if _, ok := seen[p.Name]; ok {
-			continue
-		}
-		seen[p.Name] = struct{}{}
-		entries = append(entries, pickerChoice{name: p.Name, mtime: p.ModTime})
+		entries = append(entries, pickerChoice{key: p.Key, mtime: p.ModTime})
 	}
 	sort.SliceStable(entries, func(i, j int) bool {
 		if !entries[i].mtime.Equal(entries[j].mtime) {
 			return entries[i].mtime.After(entries[j].mtime)
 		}
-		return entries[i].name < entries[j].name
+		return entries[i].key < entries[j].key
 	})
 	return entries
 }
@@ -88,12 +86,13 @@ func normalizeQuery(q string) string {
 }
 
 // refreshCreate decides whether to offer a "＋ Create" row for the current
-// query: a non-empty, non-date-shaped name that does not resolve to an
-// existing page. Fuzzy matches are irrelevant — the user may want a new page
+// query: a non-empty name that is not a journal name under the layout (a
+// journal is made by `.` or the calendar, not here) and does not resolve to
+// an existing page. Fuzzy matches are irrelevant — the user may want a new page
 // whose name is a subsequence of an existing one.
 func (p *Picker) refreshCreate(q string) {
 	name := normalizeQuery(q)
-	if name == "" || graph.IsJournalPageName(name) {
+	if name == "" || isJournalName(p.idx, name) {
 		p.createName = ""
 		return
 	}
@@ -122,13 +121,13 @@ func (p *Picker) search(q string) {
 		// scroll to.
 		p.matches = p.matches[:0]
 		for i, c := range p.choices {
-			p.matches = append(p.matches, fuzzy.Match{Str: c.name, Index: i})
+			p.matches = append(p.matches, fuzzy.Match{Str: c.key, Index: i})
 		}
 		p.sel = 0
 		p.refreshCreate(q)
 		return
 	}
-	p.matches = fuzzy.Find(q, p.names)
+	p.matches = fuzzy.Find(q, p.labels)
 	p.sel = 0
 	p.refreshCreate(q)
 }
@@ -144,7 +143,7 @@ func (p *Picker) Update(key string) OverlayResult {
 			return overlayCreate(p.createName)
 		}
 		if p.sel >= 0 && p.sel < len(p.matches) {
-			return overlayOpen(p.matches[p.sel].Str)
+			return overlayOpen(p.choices[p.matches[p.sel].Index].key)
 		}
 		return OverlayResult{}
 	case keyUp, keyCtrlK:

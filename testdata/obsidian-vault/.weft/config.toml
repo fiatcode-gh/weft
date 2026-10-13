@@ -1,0 +1,4 @@
+pages_dir = ""
+journals_dir = "Daily"
+journal_file_pattern = "YYYY-MM-DD"
+namespace_files = "folders"

@@ -14,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/doctor"
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 	"github.com/fiatcode-gh/weft/v2/internal/render"
 	"github.com/fiatcode-gh/weft/v2/internal/views"
 )
@@ -114,7 +115,12 @@ func main() {
 	}
 
 	if flag.Arg(0) == "doctor" {
-		os.Exit(runDoctor(flag.Args()[1:], graphPath, os.Stdout))
+		os.Exit(runDoctor(flag.Args()[1:], graphPath, os.Stdout, os.Stderr))
+	}
+
+	lay, ok := loadLayout(graphPath, os.Stderr)
+	if !ok {
+		os.Exit(2)
 	}
 
 	debugLog, err := initDebugLog(os.Getenv("WEFT_DEBUG"))
@@ -130,7 +136,7 @@ func main() {
 	// init cost is paid before the TUI takes over the screen.
 	render.Warmup()
 
-	app := views.New(graphPath, resolvedVersion())
+	app := views.New(graphPath, lay, resolvedVersion())
 
 	if _, err := tea.NewProgram(app, programOptions(os.Stdout)...).Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "weft: %v\n", err)
@@ -159,11 +165,23 @@ func validateGraphPath(graphPath string) error {
 
 const doctorUsage = "usage: weft doctor [--graph PATH]"
 
+// loadLayout reads the graph's layout config. A config error is printed to
+// stderr as "weft: <err>" and reported as false; the caller exits 2.
+func loadLayout(graphPath string, stderr io.Writer) (layout.Layout, bool) {
+	lay, err := layout.Load(graphPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "weft: %v\n", err)
+		return layout.Layout{}, false
+	}
+	return lay, true
+}
+
 // runDoctor executes the headless doctor subcommand and returns its exit
-// code: 0 clean, 1 findings, 2 operational error. doctorFlagArgs are the
-// args after the "doctor" word; globalGraph is the already-validated graph
-// path resolved from the global --graph flag / $WEFT_GRAPH.
-func runDoctor(doctorFlagArgs []string, globalGraph string, stdout io.Writer) int {
+// code: 0 clean, 1 findings, 2 operational error (including a bad layout
+// config). doctorFlagArgs are the args after the "doctor" word; globalGraph
+// is the already-validated graph path resolved from the global --graph flag
+// / $WEFT_GRAPH.
+func runDoctor(doctorFlagArgs []string, globalGraph string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	fs.SetOutput(io.Discard) // usage printing is owned by this function
 	graphFlag := fs.String("graph", "", "path to Logseq graph (overrides the global --graph and $WEFT_GRAPH)")
@@ -173,20 +191,24 @@ func runDoctor(doctorFlagArgs []string, globalGraph string, stdout io.Writer) in
 		fmt.Fprintln(stdout, doctorUsage)
 		return 0
 	case err != nil, fs.NArg() > 0:
-		fmt.Fprintln(os.Stderr, doctorUsage)
+		fmt.Fprintln(stderr, doctorUsage)
 		return 2
 	}
 	graphPath := globalGraph
 	if *graphFlag != "" {
 		graphPath = *graphFlag
 		if err := validateGraphPath(graphPath); err != nil {
-			fmt.Fprintf(os.Stderr, "weft: %v\n", err)
+			fmt.Fprintf(stderr, "weft: %v\n", err)
 			return 2
 		}
 	}
-	report, err := doctor.Run(graphPath)
+	lay, ok := loadLayout(graphPath, stderr)
+	if !ok {
+		return 2
+	}
+	report, err := doctor.Run(graphPath, lay)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "weft: doctor: %v\n", err)
+		fmt.Fprintf(stderr, "weft: doctor: %v\n", err)
 		return 2
 	}
 	report.WriteText(stdout)

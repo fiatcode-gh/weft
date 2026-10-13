@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 	"github.com/fiatcode-gh/weft/v2/internal/search"
 	syncpkg "github.com/fiatcode-gh/weft/v2/internal/sync"
 )
@@ -168,7 +169,7 @@ func TestLinkifyBlockedWhileSyncing(t *testing.T) {
 		"pages/Hub.md":  "# Hub\n",
 		"pages/Beta.md": "intro\na bare Hub mention\n",
 	})
-	a := New(dir, "test")
+	a := New(dir, layout.Default(), "test")
 	cmd := a.Init()
 	if cmd == nil {
 		t.Fatal("Init returned nil cmd")

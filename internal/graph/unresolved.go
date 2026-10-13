@@ -13,18 +13,14 @@ type UnresolvedLink struct {
 	Refs   []Ref
 }
 
-// UnresolvedLinks returns every link target that Resolve cannot find —
-// exact and case-folded lookup, matching how the TUI resolves links —
+// UnresolvedLinks returns every link target that ResolveLink cannot find,
 // each with a cloned snapshot of its references in index walk order.
 // Targets are sorted case-insensitively; case-sensitive byte order
 // breaks ties (defensive: folded keys are unique, so ties do not arise
-// from the backlinks map).
+// from the unresolved map).
 func (idx *Index) UnresolvedLinks() []UnresolvedLink {
 	var out []UnresolvedLink
-	for key, refs := range idx.backlinks {
-		if _, ok := idx.Resolve(idx.targetSpell[key]); ok {
-			continue
-		}
+	for key, refs := range idx.unresolved {
 		out = append(out, UnresolvedLink{
 			Target: idx.targetSpell[key],
 			Refs:   slices.Clone(refs),

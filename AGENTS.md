@@ -1,7 +1,8 @@
 # weft
 
 Bubble Tea TUI for a daily-journal-driven markdown knowledge base — browse,
-search, and edit a local graph of flat `.md` pages and journals linked by
+search, and edit a local graph of `.md` pages and journals, laid out by
+`.weft/config.toml` (default: the Logseq layout), linked by
 `[[wiki-links]]`. Recency-sorted
 picker (with page-creation), ripgrep-backed search, backlinks, TODO dashboard.
 Within weft, graph files are written only through `internal/edit/`: the in-app
@@ -55,7 +56,8 @@ an intentional UI change, run with `-update` and visually diff the golden before
   `quietStdout`, which drops the terminal probes and keyboard-protocol switches Bubble
   Tea v2 sends on its own, so weft sends no queries and keeps the terminal's normal key
   encoding.
-- `internal/graph/` — filesystem walk, page parsing (wiki links and tags; `tag.go` is the one tag definition every consumer uses), name resolution, index. `task.go`/`taskdate.go`/`agenda.go` are the one task grammar (markers, priorities, stamps, ownership, agenda) every consumer calls; `logbook.go` holds the LOGBOOK regexes and `QueryOrEmbedRe`; `heading.go` is the one heading definition (`Headings`, `HeadingKey`) and `ResolveLink` in `resolve.go` the one heading-link rule.
+- `internal/layout/` — the one layout definition: config load and validation (`.weft/config.toml`), the journal filename pattern, and new-page placement. Used by `graph`, `views`, `doctor` and `cmd/weft`. `Layout`'s zero value is invalid; use `layout.Default()` or `layout.Load`.
+- `internal/graph/` — recursive filesystem walk, page parsing (wiki links and tags; `tag.go` is the one tag definition every consumer uses), name resolution, index. `task.go`/`taskdate.go`/`agenda.go` are the one task grammar (markers, priorities, stamps, ownership, agenda) every consumer calls; `logbook.go` holds the LOGBOOK regexes and `QueryOrEmbedRe`; `heading.go` is the one heading definition (`Headings`, `HeadingKey`) and `ResolveLink` in `resolve.go` the one heading-link rule. `resolve.go` and `names.go` also hold name resolution (exact, case-folded, path), the clash winner, and each page's `Key`.
 - `internal/render/` — Glamour-based page rendering (wiki-link styling, hanging-indent,
   workflow-marker colouring, `:LOGBOOK:` stripping). Has a `Warmup()` paid before the
   TUI takes the screen to avoid chroma init flicker. `theme.go` is the shared
@@ -101,7 +103,7 @@ an intentional UI change, run with `-update` and visually diff the golden before
 
 ## Testing
 
-- Tests use the checked-in `testdata/fixture-graph/`. **Never point tests at the
+- Tests use the checked-in `testdata/fixture-graph/` (default layout) and `testdata/obsidian-vault/` (its own `.weft/config.toml`). **Never point tests at the
   real graph** (`~/Documents/fiat-codex`) — it's mutable and will make tests flaky.
 - View tests use `teatest` (`github.com/charmbracelet/x/exp/teatest/v2`) for golden-ish frame
   assertions; golden files live under `internal/views/testdata/`.

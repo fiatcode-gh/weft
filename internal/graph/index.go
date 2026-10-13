@@ -1,30 +1,41 @@
 package graph
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
+	"time"
+
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 )
 
 // Index is the read-only in-memory view of a Logseq graph.
 type Index struct {
+	Layout     layout.Layout
 	GraphPath  string
 	Pages      []PageMeta
-	ByName     map[string]*PageMeta // case-preserving (filename-derived)
-	ByNameFold map[string]*PageMeta // case-folded (lowercase key) — for [[ALPHA]] → Alpha
+	ByName     map[string]*PageMeta // exact name → clash winner
+	ByNameFold map[string]*PageMeta // lower-cased name → clash winner — for [[ALPHA]] → Alpha
 	Todos      []TodoBullet
 
-	backlinks   map[string][]Ref  // keyed by strings.ToLower(target) — resolution is case-insensitive
-	targetSpell map[string]string // folded target → first-seen original spelling (walk order)
-	journals    []string          // journal page names, sorted ascending
+	byPath map[string]*PageMeta // exact Path → page, pointers into Pages
+	files  []string             // every PageMeta.Path in walk order
+
+	linksTo     map[string][]Ref       // resolved links, keyed by the target page's Path
+	unresolved  map[string][]Ref       // links no page opens, keyed by strings.ToLower(target)
+	targetSpell map[string]string      // folded unresolved target → first-seen spelling (walk order)
+	stems       map[string][]*PageMeta // lower-cased filename stem → pages, for path resolution
+	journals    []PageMeta             // journal pages (copies), sorted ascending by Date
 
 	// headingKeys holds each page's HeadingKey set, keyed by PageMeta.Path.
 	headingKeys map[string]map[string]struct{}
 
-	// Warnings collects non-fatal problems found during the walk (skipped
+	// Warnings collects non-fatal problems found during the walk (unreadable
 	// subdirectories, case-fold collisions, unreadable pages, stat
 	// failures). The TUI logs and hints them; BuildIndex never writes to
 	// stderr — under the alt-screen nobody would see it.
@@ -37,82 +48,44 @@ func (idx *Index) warnf(format string, args ...any) {
 	idx.Warnings = append(idx.Warnings, fmt.Sprintf(format, args...))
 }
 
-// BuildIndex walks <graphPath>/pages and <graphPath>/journals once and returns
-// the populated Index. Unreadable files are skipped and recorded in
+// BuildIndex walks the layout's page and journal folders (recursively, in
+// lay.Roots() order) once and returns the populated Index. Only .md files
+// are indexed; folders lay.SkipDir names are not entered. A missing root is
+// skipped; unreadable files and subdirectories are skipped and recorded in
 // Index.Warnings.
-func BuildIndex(graphPath string) (*Index, error) {
+func BuildIndex(graphPath string, lay layout.Layout) (*Index, error) {
 	idx := &Index{
+		Layout:      lay,
 		GraphPath:   graphPath,
 		ByName:      make(map[string]*PageMeta),
 		ByNameFold:  make(map[string]*PageMeta),
-		backlinks:   make(map[string][]Ref),
+		linksTo:     make(map[string][]Ref),
+		unresolved:  make(map[string][]Ref),
 		targetSpell: make(map[string]string),
 		headingKeys: make(map[string]map[string]struct{}),
+		byPath:      make(map[string]*PageMeta),
 	}
 
-	for _, sub := range []string{"pages", "journals"} {
-		dir := filepath.Join(graphPath, sub)
-		entries, err := os.ReadDir(dir)
-		if os.IsNotExist(err) {
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("read %s: %w", dir, err)
-		}
-		for _, e := range entries {
-			if e.IsDir() {
-				idx.warnf("skipping subdirectory %s (weft does not recurse — use the ___ namespace convention instead)", filepath.Join(dir, e.Name()))
-				continue
-			}
-			if filepath.Ext(e.Name()) != ".md" {
-				continue
-			}
-			path := filepath.Join(dir, e.Name())
-			meta := PageMeta{
-				Name:      PageNameFromFilename(e.Name()),
-				Path:      path,
-				IsJournal: sub == "journals",
-			}
-			if info, err := e.Info(); err == nil {
-				meta.ModTime = info.ModTime()
-			} else {
-				idx.warnf("cannot stat %s: %v — page will sort last in the picker", path, err)
-			}
-			idx.Pages = append(idx.Pages, meta)
+	for _, root := range lay.Roots() {
+		if err := idx.walkRoot(root); err != nil {
+			return nil, err
 		}
 	}
 
-	// ByName / ByNameFold must be built after Pages is final (so pointers are
-	// stable). Keep the first page walked for each (folded) key so resolution is
-	// deterministic — os.ReadDir returns entries sorted by filename — and warn on
-	// a genuine case-fold collision rather than silently letting the last win.
+	// Names, clashes and keys need Pages final (so pointers are stable).
 	for i := range idx.Pages {
-		name := idx.Pages[i].Name
-		fold := strings.ToLower(name)
-		if existing, ok := idx.ByNameFold[fold]; ok {
-			if existing.Name != name {
-				idx.warnf("ambiguous page name %q vs %q (case-insensitive); [[%s]] resolves to %q",
-					name, existing.Name, fold, existing.Name)
-				// The folded key stays first-wins, but an exact-name lookup
-				// has no ambiguity — it must still find this page.
-				if _, dup := idx.ByName[name]; !dup {
-					idx.ByName[name] = &idx.Pages[i]
-				}
-			}
-			continue
-		}
-		idx.ByNameFold[fold] = &idx.Pages[i]
-		idx.ByName[name] = &idx.Pages[i]
+		idx.byPath[idx.Pages[i].Path] = &idx.Pages[i]
+		idx.files = append(idx.files, idx.Pages[i].Path)
 	}
+	idx.buildNames()
 
-	// Collect journal page names sorted ascending. Names are YYYY-MM-DD so
-	// lexical order matches chronological order.
+	// Journals are copied after the keys are set.
 	for _, p := range idx.Pages {
 		if p.IsJournal {
-			idx.journals = append(idx.journals, p.Name)
+			idx.journals = append(idx.journals, p)
 		}
 	}
-	sort.Strings(idx.journals)
+	slices.SortStableFunc(idx.journals, func(a, b PageMeta) int { return a.Date.Compare(b.Date) })
 
 	// Second pass, phase A: parse every body for headings, links and todos.
 	// Links stay pending until every page's headings are known.
@@ -138,11 +111,11 @@ func BuildIndex(graphPath string) (*Index, error) {
 			idx.headingKeys[p.Path] = keys
 		}
 		for _, lh := range links {
-			pending = append(pending, pendingLink{p.Name, lh.Target, lh.Line, lineContext(lines, lh.Line)})
+			pending = append(pending, pendingLink{p.Key, lh.Target, lh.Line, lineContext(lines, lh.Line)})
 		}
 		for k, th := range todos {
 			idx.Todos = append(idx.Todos, TodoBullet{
-				Page:       p.Name,
+				Page:       p.Key,
 				LineNumber: th.Line,
 				Marker:     th.Marker,
 				Priority:   th.Priority,
@@ -154,45 +127,161 @@ func BuildIndex(graphPath string) (*Index, error) {
 		}
 	}
 
-	// Phase B, in walk order: key each link. A link that resolves only as a
-	// heading link is keyed under its page.
+	// Phase B, in walk order: a link that resolves is filed under its page's
+	// Path; one that does not under its lower-cased target.
 	for _, pl := range pending {
-		spelling := pl.target
-		if _, ok := idx.Resolve(pl.target); !ok {
-			if dest, ok := idx.ResolveLink(pl.target); ok {
-				spelling = dest.Page.Name
-			}
+		ref := Ref{FromPage: pl.page, LineNumber: pl.line, Context: pl.context}
+		if dest, ok := idx.ResolveLink(pl.target); ok {
+			idx.linksTo[dest.Page.Path] = append(idx.linksTo[dest.Page.Path], ref)
+			continue
 		}
-		key := strings.ToLower(spelling)
+		key := strings.ToLower(pl.target)
 		if _, seen := idx.targetSpell[key]; !seen {
-			idx.targetSpell[key] = spelling
+			idx.targetSpell[key] = pl.target
 		}
-		idx.backlinks[key] = append(idx.backlinks[key], Ref{
-			FromPage:   pl.page,
-			LineNumber: pl.line,
-			Context:    pl.context,
-		})
+		idx.unresolved[key] = append(idx.unresolved[key], ref)
 	}
 	return idx, nil
 }
 
-// BacklinksTo returns a snapshot of references to name using the index's case-insensitive key.
-func (idx *Index) BacklinksTo(name string) []Ref {
-	return slices.Clone(idx.backlinks[strings.ToLower(name)])
+// walkRoot appends every .md file under the graph-relative folder root to
+// idx.Pages, depth-first in lexical order. A root that is missing is skipped;
+// one that cannot be read is an error; a subdirectory that cannot be read is
+// skipped with a warning.
+func (idx *Index) walkRoot(root string) error {
+	dir := filepath.Join(idx.GraphPath, filepath.FromSlash(root))
+	info, err := os.Stat(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err == nil && !info.IsDir() {
+		err = errors.New("not a directory")
+	}
+	if err != nil {
+		return fmt.Errorf("read %s: %w", dir, err)
+	}
+	// WalkDir does not follow a symlinked start directory.
+	start, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", dir, err)
+	}
+
+	return filepath.WalkDir(start, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if p == start {
+				return fmt.Errorf("read %s: %w", dir, err)
+			}
+			idx.warnf("skipping %s: %v", filepath.Join(dir, mustRel(start, p)), err)
+			return nil
+		}
+		rel := root
+		if sub := mustRel(start, p); sub != "." {
+			rel = path.Join(root, filepath.ToSlash(sub))
+		}
+		if d.IsDir() {
+			if p != start && idx.Layout.SkipDir(rel) {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(d.Name()) != ".md" {
+			return nil
+		}
+		filePath := filepath.Join(idx.GraphPath, filepath.FromSlash(rel))
+		stem := strings.TrimSuffix(d.Name(), ".md")
+		meta := PageMeta{Name: strings.ReplaceAll(stem, "___", "/"), Path: filePath, Rel: rel}
+		if day, ok := idx.Layout.Journal(rel); ok {
+			meta.Name, meta.IsJournal, meta.Date = stem, true, day
+		}
+		if info, err := d.Info(); err == nil {
+			meta.ModTime = info.ModTime()
+		} else {
+			idx.warnf("cannot stat %s: %v — page will sort last in the picker", filePath, err)
+		}
+		idx.Pages = append(idx.Pages, meta)
+		return nil
+	})
 }
 
-// Journals returns the indexed journal page names, sorted ascending (a copy).
-func (idx *Index) Journals() []string { return slices.Clone(idx.journals) }
+// mustRel is filepath.Rel for a path WalkDir produced under base, where it
+// cannot fail.
+func mustRel(base, p string) string {
+	r, err := filepath.Rel(base, p)
+	if err != nil {
+		return p
+	}
+	return r
+}
 
-// JournalNeighbor returns the nearest indexed journal in dir (-1 or +1).
-// Phantom journal-shaped dates use their insertion point in the sorted index.
-func (idx *Index) JournalNeighbor(current string, dir int) (string, bool) {
-	if !IsJournalPageName(current) {
+// BacklinksTo returns a snapshot of references to the page key opens, or —
+// when key opens no page — to that (case-insensitive) unresolved target.
+func (idx *Index) BacklinksTo(key string) []Ref {
+	if p, ok := idx.Resolve(key); ok {
+		return slices.Clone(idx.linksTo[p.Path])
+	}
+	return slices.Clone(idx.unresolved[strings.ToLower(key)])
+}
+
+// NewPagePath returns the file path a new page called name is created at,
+// per the layout, or the layout's "cannot place page" error.
+func (idx *Index) NewPagePath(name string) (string, error) {
+	rel, err := idx.Layout.NewPageRel(name)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(idx.GraphPath, filepath.FromSlash(rel)), nil
+}
+
+// PageAt returns the page whose file is exactly path.
+func (idx *Index) PageAt(path string) (*PageMeta, bool) {
+	p, ok := idx.byPath[path]
+	return p, ok
+}
+
+// Files returns a copy of every indexed page's path, in walk order — exactly
+// the set of files search and mention scans cover.
+func (idx *Index) Files() []string { return slices.Clone(idx.files) }
+
+// Journals returns the indexed journals, ascending by Date (a copy).
+func (idx *Index) Journals() []PageMeta { return slices.Clone(idx.journals) }
+
+// JournalOn returns the journal dated day.
+func (idx *Index) JournalOn(day time.Time) (*PageMeta, bool) {
+	i, ok := journalSearch(idx.journals, civilDay(day))
+	if !ok {
+		return nil, false
+	}
+	return &idx.journals[i], true
+}
+
+// JournalDateOf reports the date key names as a journal: a resolved page's
+// own date when it is a journal (false for any other page); an unresolved
+// key that parses as a journal name under the layout's pattern gives that
+// date, so a not-yet-created journal still has one.
+func (idx *Index) JournalDateOf(key string) (time.Time, bool) {
+	if p, ok := idx.Resolve(key); ok {
+		return p.Date, p.IsJournal
+	}
+	return idx.Layout.ParseJournalName(key)
+}
+
+// JournalPath is the file path a journal dated day lives at (or would be
+// created at), per the layout.
+func (idx *Index) JournalPath(day time.Time) string {
+	return filepath.Join(idx.GraphPath, filepath.FromSlash(idx.Layout.JournalRel(day)))
+}
+
+// JournalNeighbor returns the name of the nearest indexed journal in dir (-1
+// or +1) from the journal key names. A key that is not a journal has no
+// neighbours; a journal-shaped date with no file uses its insertion point.
+func (idx *Index) JournalNeighbor(key string, dir int) (string, bool) {
+	day, ok := idx.JournalDateOf(key)
+	if !ok {
 		return "", false
 	}
-	i := sort.SearchStrings(idx.journals, current)
+	i, found := journalSearch(idx.journals, day)
 	j := i
-	if i < len(idx.journals) && idx.journals[i] == current {
+	if found {
 		j = i + dir
 	} else if dir < 0 {
 		j = i - 1
@@ -200,7 +289,7 @@ func (idx *Index) JournalNeighbor(current string, dir int) (string, bool) {
 	if j < 0 || j >= len(idx.journals) {
 		return "", false
 	}
-	return idx.journals[j], true
+	return idx.journals[j].Key, true
 }
 
 // lineContext returns the n-th 1-based line from a pre-split body with any

@@ -2,7 +2,6 @@ package views
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -28,14 +27,12 @@ type OnThisDay struct {
 	errMsg  string
 }
 
-// NewOnThisDay reads each entry's file under journals/ through read; it does
-// not resolve names via idx.ByName, which prefers a same-named pages/ file.
+// NewOnThisDay reads each entry's journal file through read.
 func NewOnThisDay(idx *graph.Index, today time.Time, read func(string) (edit.Snapshot, error), width, height int) *OnThisDay {
 	o := &OnThisDay{listBox: listBox{width: width, height: height}, today: today}
 	for _, e := range graph.OnThisDay(today, idx.Journals()) {
 		row := onThisDayRow{OnThisDayEntry: e}
-		path := filepath.Join(idx.GraphPath, "journals", graph.FilenameFromPageName(e.Name))
-		if snap, err := read(path); err != nil {
+		if snap, err := read(e.Journal.Path); err != nil {
 			row.readErr = "cannot read: " + err.Error()
 		} else if snap.Exists {
 			row.preview = previewLines(snap.Content, onThisDayPreviewLines)
@@ -77,7 +74,7 @@ func (o *OnThisDay) Update(key string) OverlayResult {
 		o.moveDown(len(o.entries))
 	case keyEnter:
 		if o.sel >= 0 && o.sel < len(o.entries) {
-			return overlayOpen(o.entries[o.sel].Name)
+			return overlayOpen(o.entries[o.sel].Journal.Name)
 		}
 	}
 	return OverlayResult{}
@@ -123,8 +120,7 @@ func (o *OnThisDay) View() string {
 
 func (o *OnThisDay) writeEntry(sb *strings.Builder, i, inner int) {
 	e := o.entries[i]
-	date, _ := graph.JournalDate(e.Name)
-	head := clamp(e.Label+" · "+date.Format("2006-01-02 Mon"), inner-3)
+	head := clamp(e.Label+" · "+e.Journal.Date.Format("2006-01-02 Mon"), inner-3)
 	if i == o.sel {
 		sb.WriteString(styleSel.Render(" ▶ ") + styleSel.Render(head))
 	} else {

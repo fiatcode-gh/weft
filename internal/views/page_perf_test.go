@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 	"github.com/fiatcode-gh/weft/v2/internal/render"
 )
 
@@ -91,7 +92,7 @@ func benchPage(b *testing.B) *graph.Index {
 	if err := os.WriteFile(filepath.Join(dir, "pages", "P.md"), []byte(perfContent(10000)), 0o644); err != nil {
 		b.Fatal(err)
 	}
-	idx, err := graph.BuildIndex(dir)
+	idx, err := graph.BuildIndex(dir, layout.Default())
 	if err != nil {
 		b.Fatal(err)
 	}

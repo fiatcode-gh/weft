@@ -139,7 +139,7 @@ func TestAppOnThisDayOpens(t *testing.T) {
 	}
 	a.Update(key("j"))
 	a.Update(keyEnt)
-	if got := a.page.Page(); got != "2026-04-26" || a.active != nil {
+	if got := a.page.Page(); got != "2026_04_26" || a.active != nil {
 		t.Errorf("page %q active %v", got, a.active)
 	}
 }

@@ -9,6 +9,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/colorprofile"
 	uv "github.com/charmbracelet/ultraviolet"
+
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 )
 
 // newApp boots an App on a throwaway graph without touching the environment,
@@ -16,7 +18,7 @@ import (
 func newApp(t *testing.T, files map[string]string, width, height int) *App {
 	t.Helper()
 	dir, _ := writeGraph(t, files)
-	a := New(dir, "test")
+	a := New(dir, layout.Default(), "test")
 	a.Update(a.Init()())
 	a.Update(tea.WindowSizeMsg{Width: width, Height: height})
 	if a.page == nil {

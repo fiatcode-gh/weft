@@ -11,11 +11,12 @@ import (
 	"strings"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 	"github.com/fiatcode-gh/weft/v2/internal/search"
 )
 
 // MentionScanner returns the unlinked (bare-text) references to one page.
-type MentionScanner func(graphPath, name string) ([]graph.UnlinkedRef, error)
+type MentionScanner func(name string) ([]graph.UnlinkedRef, error)
 
 // PageMentions collects one page's bare-text mentions elsewhere in the graph.
 type PageMentions struct {
@@ -42,13 +43,14 @@ func (r *Report) HasFindings() bool {
 // Run computes the report using the ripgrep-backed mention scanner — the
 // exact pipeline the backlinks panel uses (search.Mentions +
 // graph.FilterUnlinked, target's own file excluded).
-func Run(graphPath string) (*Report, error) {
-	idx, err := graph.BuildIndex(graphPath)
+func Run(graphPath string, lay layout.Layout) (*Report, error) {
+	idx, err := graph.BuildIndex(graphPath, lay)
 	if err != nil {
 		return nil, err
 	}
-	return run(idx, graphPath, func(gp, name string) ([]graph.UnlinkedRef, error) {
-		hits, err := search.Mentions(gp, name)
+	files := idx.Files()
+	return run(idx, graphPath, func(name string) ([]graph.UnlinkedRef, error) {
+		hits, err := search.Mentions(files, name)
 		if err != nil {
 			return nil, err
 		}
@@ -56,13 +58,13 @@ func Run(graphPath string) (*Report, error) {
 		if meta, ok := idx.Resolve(name); ok {
 			targetPath = meta.Path
 		}
-		return graph.FilterUnlinked(hits, targetPath, readFile), nil
+		return idx.FilterUnlinked(hits, targetPath, readFile), nil
 	})
 }
 
 // RunWith computes the report with a caller-supplied mention scanner.
-func RunWith(graphPath string, mentions MentionScanner) (*Report, error) {
-	idx, err := graph.BuildIndex(graphPath)
+func RunWith(graphPath string, lay layout.Layout, mentions MentionScanner) (*Report, error) {
+	idx, err := graph.BuildIndex(graphPath, lay)
 	if err != nil {
 		return nil, err
 	}
@@ -70,8 +72,9 @@ func RunWith(graphPath string, mentions MentionScanner) (*Report, error) {
 }
 
 // run assembles the report from a built index. Orphans and mention targets
-// are non-journal pages only; journals stay in scope as mention sources
-// because the scanner greps pages/ and journals/ alike.
+// are non-journal pages only (orphans listed by key; a mention names the
+// winner of a name, so a clash loser has none); journals stay in scope as mention sources
+// because the scanner covers every indexed file.
 func run(idx *graph.Index, graphPath string, mentions MentionScanner) (*Report, error) {
 	rep := &Report{
 		GraphPath:  graphPath,
@@ -85,15 +88,17 @@ func run(idx *graph.Index, graphPath string, mentions MentionScanner) (*Report, 
 			continue
 		}
 		rep.Pages++
-		names = append(names, p.Name)
-		if !hasOtherBacklink(idx, p.Name) {
-			rep.Orphans = append(rep.Orphans, p.Name)
+		if p.Key == p.Name {
+			names = append(names, p.Name)
+		}
+		if !hasOtherBacklink(idx, p.Key) {
+			rep.Orphans = append(rep.Orphans, p.Key)
 		}
 	}
 	sort.Strings(rep.Orphans)
 	sort.Strings(names)
 	for _, name := range names {
-		refs, err := mentions(graphPath, name)
+		refs, err := mentions(name)
 		if err != nil {
 			return nil, fmt.Errorf("scan unlinked mentions for %q: %w", name, err)
 		}
@@ -104,11 +109,11 @@ func run(idx *graph.Index, graphPath string, mentions MentionScanner) (*Report, 
 	return rep, nil
 }
 
-// hasOtherBacklink reports whether any page other than name links to it —
+// hasOtherBacklink reports whether any page other than key links to it —
 // the same self-ref exclusion the backlinks panel applies.
-func hasOtherBacklink(idx *graph.Index, name string) bool {
-	for _, r := range idx.BacklinksTo(name) {
-		if r.FromPage != name {
+func hasOtherBacklink(idx *graph.Index, key string) bool {
+	for _, r := range idx.BacklinksTo(key) {
+		if r.FromPage != key {
 			return true
 		}
 	}

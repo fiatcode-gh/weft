@@ -11,22 +11,23 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/edit"
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 )
 
 const (
 	tplText   = "## Morning\n\n## Evening\n"
-	tplToday  = "2026-06-05"
+	tplToday  = "2026_06_05"
 	tplJFile  = "journals/2026_06_05.md"
 	tplAnchor = "pages/Anchor.md"
 )
 
-// bootTemplateApp boots an App on a temp graph at 2026-06-05 with the given
+// bootTemplateApp boots an App on a temp graph at 2026_06_05 with the given
 // files, the way the cold-start journal tests do.
 func bootTemplateApp(t *testing.T, files map[string]string) (*App, string) {
 	t.Helper()
 	quietTerm(t)
 	dir, _ := writeGraph(t, files)
-	a := New(dir, "test")
+	a := New(dir, layout.Default(), "test")
 	a.nowFunc = func() time.Time { return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC) }
 	if cmd := a.Init(); cmd != nil {
 		a.Update(cmd())

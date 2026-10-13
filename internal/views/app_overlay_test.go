@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 	"github.com/fiatcode-gh/weft/v2/internal/search"
 )
 
@@ -176,7 +177,7 @@ func TestAppViewWithOverlay(t *testing.T) {
 
 func TestAppCenterOverlayFallback(t *testing.T) {
 	quietTerm(t)
-	a := New("/no/such/path", "test")
+	a := New("/no/such/path", layout.Default(), "test")
 	if got := a.centerOverlay("hello"); got != "hello" {
 		t.Errorf("zero-size fallback: want raw content, got %q", got)
 	}

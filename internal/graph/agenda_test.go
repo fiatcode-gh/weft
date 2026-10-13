@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 )
 
 type agendaRow struct {
@@ -12,7 +14,7 @@ type agendaRow struct {
 }
 
 func TestBuildAgendaFixture(t *testing.T) {
-	idx, err := BuildIndex("../../testdata/fixture-graph")
+	idx, err := BuildIndex("../../testdata/fixture-graph", layout.Default())
 	if err != nil {
 		t.Fatal(err)
 	}

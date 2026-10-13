@@ -15,13 +15,14 @@ import (
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 	"github.com/fiatcode-gh/weft/v2/internal/render"
 )
 
 func loadFixture(t *testing.T) *graph.Index {
 	t.Helper()
 	abs := cloneFixtureGraph(t)
-	idx, err := graph.BuildIndex(abs)
+	idx, err := graph.BuildIndex(abs, layout.Default())
 	if err != nil {
 		t.Fatal(err)
 	}

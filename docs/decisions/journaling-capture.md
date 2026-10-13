@@ -63,7 +63,7 @@ numbers, a configurable `O` offset list, and a template watcher.
 - **D8 Calendar grid.** `monthGrid` lays weeks out Monday first. Each day is a
   5-cell group: `[` `]` around the cursor day (selection style), a `•` after days
   that exist in `idx.Journals()`, bold underline for today. `PgUp`/`PgDn` use
-  `graph.AddMonthsClamped`. `Enter` opens `YYYY-MM-DD` and creates nothing; a
+  `graph.AddMonthsClamped`. `Enter` opens that day's journal (its name comes from the layout pattern) and creates nothing; a
   day without a journal opens as the empty page.
 - **D9 On-this-day offsets.** `graph.OnThisDay` yields one week back
   (`AddDate(0, 0, -7)`), one month back (`AddMonthsClamped`, so Mar 31 gives
@@ -84,7 +84,8 @@ numbers, a configurable `O` offset list, and a template watcher.
   but an open todos or agenda panel keeps its rows until it is reopened.
 - `App.editCurrent`'s branch for a file that vanished after indexing stays
   template-free (`edit.EnsureFile`); it is a narrow race, not a creation path.
-- `idx.ByName` prefers `pages/` for a date-named page, so `NewOnThisDay` reads
-  `journals/<file>` directly instead of resolving the name.
-- The calendar's `journals` slice is a snapshot taken when it opens; a capture
-  made from it shows its new mark only after reopening.
+- A journal wins its name over a same-named page (`graph-layout-config.md`), and
+  `NewOnThisDay` reads each entry's `PageMeta.Path` from `Index.Journals()`
+  instead of resolving the name.
+- The calendar keeps the index it was opened with; a capture made from it shows
+  its new mark only after reopening.

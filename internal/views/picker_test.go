@@ -291,6 +291,7 @@ func TestPickerNoSilentCap(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		meta := graph.PageMeta{
 			Name: fmt.Sprintf("synthetic-%03d", i),
+			Key:  fmt.Sprintf("synthetic-%03d", i),
 			Path: fmt.Sprintf("/synthetic/%03d.md", i),
 		}
 		idx.Pages = append(idx.Pages, meta)
@@ -397,7 +398,7 @@ func TestPickerCreate_SuppressedForExistingPage(t *testing.T) {
 func TestPickerCreate_SuppressedForDateShaped(t *testing.T) {
 	quietTerm(t)
 	p := NewPicker(loadFixture(t), 80, 30)
-	typeQuery(p, "2026-06-15")
+	typeQuery(p, "2026_06_15")
 	if p.createName != "" {
 		t.Errorf("createName should be empty for a date-shaped query; got %q", p.createName)
 	}

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"unsafe"
+
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 )
 
 func TestBuildIndex(t *testing.T) {
@@ -21,18 +23,18 @@ func TestBuildIndex(t *testing.T) {
 	}
 	sort.Strings(names)
 	want := []string{
-		"2026-01-10", "2026-03-15", "2026-04-20", "2026-05-01",
-		"2026-05-15", "2026-05-22", "2026-05-23", "2026-05-24", "2026-05-25",
+		"2026_01_10", "2026_03_15", "2026_04_20", "2026_05_01",
+		"2026_05_15", "2026_05_22", "2026_05_23", "2026_05_24", "2026_05_25",
 		"Alpha", "Beta", "Book Club", "Corpus", "Hub", "Kitchen", "Orphan", "Workbench", "kb/notes", "proj/nested",
 	}
 	if !equalSlices(names, want) {
 		t.Errorf("page names: want %v, got %v", want, names)
 	}
 
-	// Backlinks: Alpha is linked from Beta, Hub, 2026-05-15, and 2026-05-24
+	// Backlinks: Alpha is linked from Beta, Hub, 2026_05_15, and 2026_05_24
 	gotAlpha := pageNamesOfRefs(idx.BacklinksTo("Alpha"))
 	sort.Strings(gotAlpha)
-	wantAlpha := []string{"2026-05-15", "2026-05-24", "Beta", "Hub"}
+	wantAlpha := []string{"2026_05_15", "2026_05_24", "Beta", "Hub"}
 	if !equalSlices(gotAlpha, wantAlpha) {
 		t.Errorf("Alpha backlinks: want %v, got %v", wantAlpha, gotAlpha)
 	}
@@ -134,23 +136,18 @@ func TestBuildIndexJournalsSorted(t *testing.T) {
 	idx := buildFixtureIndex(t)
 
 	want := []string{
-		"2026-01-10", "2026-03-15", "2026-04-20", "2026-05-01",
-		"2026-05-15", "2026-05-22", "2026-05-23", "2026-05-24", "2026-05-25",
+		"2026_01_10", "2026_03_15", "2026_04_20", "2026_05_01",
+		"2026_05_15", "2026_05_22", "2026_05_23", "2026_05_24", "2026_05_25",
 	}
-	if !equalSlices(idx.journals, want) {
-		t.Errorf("journals: want %v, got %v", want, idx.journals)
+	var got []string
+	for _, j := range idx.Journals() {
+		got = append(got, j.Name)
+		if meta, ok := idx.ByName[j.Name]; !ok || !meta.IsJournal {
+			t.Errorf("Journals entry %q is not an indexed journal page", j.Name)
+		}
 	}
-
-	// Every entry must correspond to a PageMeta with IsJournal == true.
-	for _, name := range idx.journals {
-		meta, ok := idx.ByName[name]
-		if !ok {
-			t.Errorf("Journals contains %q but ByName doesn't", name)
-			continue
-		}
-		if !meta.IsJournal {
-			t.Errorf("Journals entry %q has IsJournal=false", name)
-		}
+	if !equalSlices(got, want) {
+		t.Errorf("journals: want %v, got %v", want, got)
 	}
 }
 
@@ -158,13 +155,13 @@ func TestIndexJournals(t *testing.T) {
 	idx := buildFixtureIndex(t)
 
 	got := idx.Journals()
-	if len(got) != 9 || got[0] != "2026-01-10" || got[8] != "2026-05-25" {
-		t.Fatalf("Journals() = %v, want 9 ascending names 2026-01-10 … 2026-05-25", got)
+	if len(got) != 9 || got[0].Name != "2026_01_10" || got[8].Name != "2026_05_25" {
+		t.Fatalf("Journals() = %v, want 9 ascending names 2026_01_10 … 2026_05_25", got)
 	}
 
-	got[0] = "x"
-	if name, ok := idx.JournalNeighbor("2026-03-15", -1); !ok || name != "2026-01-10" {
-		t.Errorf("JournalNeighbor after mutating the copy = (%q, %v), want (2026-01-10, true)", name, ok)
+	got[0].Name = "x"
+	if name, ok := idx.JournalNeighbor("2026_03_15", -1); !ok || name != "2026_01_10" {
+		t.Errorf("JournalNeighbor after mutating the copy = (%q, %v), want (2026_01_10, true)", name, ok)
 	}
 }
 
@@ -194,7 +191,7 @@ func TestBuildIndexResolvesCaseInsensitively(t *testing.T) {
 	}
 
 	// Numeric journal names are unaffected by case-folding.
-	journalPage := "2026-05-24"
+	journalPage := "2026_05_24"
 	got, ok := idx.Resolve(journalPage)
 	if !ok {
 		t.Errorf("Resolve(%q) = (_, false), want (_, true)", journalPage)
@@ -208,43 +205,8 @@ func TestBuildIndexJournalsEmptyWhenNoJournals(t *testing.T) {
 	idx := buildTempIndex(t, map[string]string{"Lonely.md": "- hi\n"})
 
 	// assert
-	if got, ok := idx.JournalNeighbor("2026-01-10", 1); ok || got != "" {
+	if got, ok := idx.JournalNeighbor("2026_01_10", 1); ok || got != "" {
 		t.Errorf("JournalNeighbor on empty index = (%q, %v), want (\"\", false)", got, ok)
-	}
-}
-
-func TestBuildIndexWarnsOnSubdirectory(t *testing.T) {
-	// arrange — a page plus a nested file under pages/sub/ that must be skipped.
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "pages", "sub"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "pages", "Alpha.md"), []byte("# Alpha\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "pages", "sub", "nested.md"), []byte("# nested\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// act
-	idx, err := BuildIndex(dir)
-
-	// assert
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(idx.Pages) != 1 {
-		t.Errorf("want 1 page (the subdir file is skipped), got %d", len(idx.Pages))
-	}
-	// assert — in TestBuildIndexWarnsOnSubdirectory
-	found := false
-	for _, w := range idx.Warnings {
-		if strings.Contains(w, "skipping subdirectory") {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("expected subdirectory warning in idx.Warnings, got %v", idx.Warnings)
 	}
 }
 
@@ -271,7 +233,7 @@ func TestBuildIndexCollectsUnreadablePageWarning(t *testing.T) {
 	t.Cleanup(func() { os.Chmod(bad, 0o644) }) // so TempDir removal works
 
 	// act
-	idx, err := BuildIndex(dir)
+	idx, err := BuildIndex(dir, layout.Default())
 
 	// assert
 	if err != nil {
@@ -416,7 +378,7 @@ func TestBacklinksAreCaseInsensitive(t *testing.T) {
 	write("Note.md", "- see [[ALPHA]] here\n")
 
 	// act
-	idx, err := BuildIndex(dir)
+	idx, err := BuildIndex(dir, layout.Default())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -440,12 +402,12 @@ func TestJournalNeighbor(t *testing.T) {
 		want    string
 		ok      bool
 	}{
-		{name: "previous existing", current: "2026-05-24", dir: -1, want: "2026-05-23", ok: true},
-		{name: "next existing", current: "2026-05-24", dir: 1, want: "2026-05-25", ok: true},
-		{name: "previous phantom", current: "2026-05-26", dir: -1, want: "2026-05-25", ok: true},
-		{name: "next phantom gap", current: "2026-05-02", dir: 1, want: "2026-05-15", ok: true},
-		{name: "before oldest", current: "2026-01-10", dir: -1, ok: false},
-		{name: "after newest", current: "2026-05-25", dir: 1, ok: false},
+		{name: "previous existing", current: "2026_05_24", dir: -1, want: "2026_05_23", ok: true},
+		{name: "next existing", current: "2026_05_24", dir: 1, want: "2026_05_25", ok: true},
+		{name: "previous phantom", current: "2026_05_26", dir: -1, want: "2026_05_25", ok: true},
+		{name: "next phantom gap", current: "2026_05_02", dir: 1, want: "2026_05_15", ok: true},
+		{name: "before oldest", current: "2026_01_10", dir: -1, ok: false},
+		{name: "after newest", current: "2026_05_25", dir: 1, ok: false},
 		{name: "not a journal", current: "Alpha", dir: -1, ok: false},
 	}
 
@@ -477,7 +439,7 @@ func TestBuildIndexFoldCollisionIsDeterministicAndWarns(t *testing.T) {
 	}
 
 	// act
-	idx, err := BuildIndex(dir)
+	idx, err := BuildIndex(dir, layout.Default())
 
 	// assert
 	if err != nil {
@@ -520,7 +482,7 @@ func TestFoldCollisionKeepsExactNameResolution(t *testing.T) {
 	}
 
 	// act
-	idx, err := BuildIndex(dir)
+	idx, err := BuildIndex(dir, layout.Default())
 	if err != nil {
 		t.Fatal(err)
 	}

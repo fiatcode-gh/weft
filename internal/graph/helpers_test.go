@@ -1,10 +1,11 @@
 package graph
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 )
 
 // fixturePath returns the absolute path to the shared testdata graph fixture.
@@ -20,7 +21,7 @@ func fixturePath(t *testing.T) string {
 // buildFixtureIndex builds an Index over the shared testdata graph fixture.
 func buildFixtureIndex(t *testing.T) *Index {
 	t.Helper()
-	idx, err := BuildIndex(fixturePath(t))
+	idx, err := BuildIndex(fixturePath(t), layout.Default())
 	if err != nil {
 		t.Fatalf("BuildIndex: %v", err)
 	}
@@ -42,21 +43,9 @@ func buildTempIndex(t *testing.T, files map[string]string) *Index {
 			t.Fatal(err)
 		}
 	}
-	idx, err := BuildIndex(dir)
+	idx, err := BuildIndex(dir, layout.Default())
 	if err != nil {
 		t.Fatalf("BuildIndex: %v", err)
 	}
 	return idx
-}
-
-// mapReader returns a reader closure over a fixed map of file bodies, the shape
-// FilterUnlinked expects. A missing path yields an error.
-func mapReader(bodies map[string]string) func(string) (string, error) {
-	return func(p string) (string, error) {
-		b, ok := bodies[p]
-		if !ok {
-			return "", fmt.Errorf("no file %s", p)
-		}
-		return b, nil
-	}
 }

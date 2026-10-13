@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 	"github.com/fiatcode-gh/weft/v2/internal/search"
 )
 
@@ -20,7 +21,7 @@ func skipIfNoRipgrep(t *testing.T) {
 	}
 }
 
-func TestNewSearchViewIndexesPathToName(t *testing.T) {
+func TestNewSearchViewLabelsHitsByIndexedPath(t *testing.T) {
 	quietTerm(t)
 	idx := loadFixture(t)
 	s := NewSearchView(idx, 100, 30)
@@ -29,9 +30,18 @@ func TestNewSearchViewIndexesPathToName(t *testing.T) {
 	}
 	// Every indexed page maps its absolute path to its logical name.
 	for _, p := range idx.Pages {
-		if got := s.pathToName[p.Path]; got != p.Name {
-			t.Errorf("pathToName[%q] = %q, want %q", p.Path, got, p.Name)
+		if got := s.pageName(p.Path); got != p.Name {
+			t.Errorf("pageName(%q) = %q, want %q", p.Path, got, p.Name)
 		}
+		if got := s.hitLabel(p.Path); got != p.Name {
+			t.Errorf("hitLabel(%q) = %q, want %q", p.Path, got, p.Name)
+		}
+	}
+	if got := s.hitLabel("/not/indexed.md"); got != "/not/indexed.md" {
+		t.Errorf("unindexed hitLabel = %q, want the path itself", got)
+	}
+	if got := s.pageName("/not/indexed.md"); got != "" {
+		t.Errorf("unindexed pageName = %q, want empty", got)
 	}
 }
 
@@ -252,7 +262,7 @@ func TestApplyDropsResultsForEditedQuery(t *testing.T) {
 	// arrange — search "foo" in flight, then the query is edited
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.SetQuery("foo")
-	cmd := s.SearchCmd("/nonexistent-graph")
+	cmd := s.SearchCmd()
 	s.running = true
 	s.Update("x") // query is now "foox"; gen bumped
 
@@ -298,7 +308,7 @@ func TestHitLabelKnownVsUnknown(t *testing.T) {
 	if got := s.hitLabel(p.Path); got != p.Name {
 		t.Errorf("known path %q: want %q, got %q", p.Path, p.Name, got)
 	}
-	if got, want := s.hitLabel("/totally/elsewhere/file.md"), "elsewhere/file.md"; got != want {
+	if got, want := s.hitLabel("/totally/elsewhere/file.md"), "/totally/elsewhere/file.md"; got != want {
 		t.Errorf("unknown path label: want %q, got %q", want, got)
 	}
 }
@@ -438,9 +448,9 @@ func TestSearchViewWithHits(t *testing.T) {
 	s := NewSearchView(loadFixture(t), 80, 24)
 	s.SetQuery("Beta")
 	s.hits = []search.Hit{
-		{FilePath: "/abs/pages/Alpha.md", Line: 3, Context: "links to Beta",
+		{FilePath: "pages/Alpha.md", Line: 3, Context: "links to Beta",
 			Matches: []search.Span{{Start: 9, End: 13}}},
-		{FilePath: "/abs/pages/Hub.md", Line: 2, Context: "the hub mentions Beta in passing",
+		{FilePath: "pages/Hub.md", Line: 2, Context: "the hub mentions Beta in passing",
 			Matches: []search.Span{{Start: 17, End: 21}}},
 	}
 	teatest.RequireEqualOutput(t, []byte(plain(s.View())))
@@ -467,31 +477,17 @@ func TestSearchUpdateBackspaceRuneAware(t *testing.T) {
 	}
 }
 
-func TestShortPath(t *testing.T) {
-	cases := []struct{ in, want string }{
-		{"/a/b/c/file.md", "c/file.md"},
-		{"a/b.md", "a/b.md"},
-		{"singlename", "singlename"},
-		{"", ""},
-	}
-	for _, c := range cases {
-		if got := shortPath(c.in); got != c.want {
-			t.Errorf("shortPath(%q): want %q, got %q", c.in, c.want, got)
-		}
-	}
-}
-
 func TestSearchCmdRoundtrip(t *testing.T) {
 	skipIfNoRipgrep(t)
 	abs := cloneFixtureGraph(t)
-	idx, err := graph.BuildIndex(abs)
+	idx, err := graph.BuildIndex(abs, layout.Default())
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	s := NewSearchView(idx, 80, 24)
 	s.SetQuery("Beta")
-	cmd := s.SearchCmd(abs)
+	cmd := s.SearchCmd()
 	if cmd == nil {
 		t.Fatal("SearchCmd returned nil")
 	}

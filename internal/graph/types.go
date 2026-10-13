@@ -4,9 +4,12 @@ import "time"
 
 // PageMeta is the indexed metadata for one .md file in the graph.
 type PageMeta struct {
-	Name      string    // logical page name (e.g., "proj/nested" or "2026-05-24")
+	Name      string    // filename stem; for pages "___" reads as "/" (e.g. "proj/nested"); for journals the stem as is ("2026_05_24")
+	Key       string    // link target that opens exactly this page: Name, or a clash loser's shortest resolving path suffix
 	Path      string    // filesystem path; absolute only when the supplied graph path is absolute
-	IsJournal bool      // true when the page lives under journals/
+	Rel       string    // graph-relative path, slash-separated, with ".md"
+	IsJournal bool      // matches journal_file_pattern under journals_dir
+	Date      time.Time // journal date (civil, UTC); zero for pages
 	ModTime   time.Time // file modification time; zero if stat failed
 }
 

@@ -12,7 +12,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v2/internal/layout"
 	syncpkg "github.com/fiatcode-gh/weft/v2/internal/sync"
 )
 
@@ -133,7 +133,7 @@ func TestShiftE_ColdStartCreatesTodayJournal(t *testing.T) {
 	quietTerm(t)
 	// An anchor page, but no journal file — today's journal is missing on disk.
 	dir, _ := writeGraph(t, map[string]string{"pages/Anchor.md": "anchor\n"})
-	a := New(dir, "test")
+	a := New(dir, layout.Default(), "test")
 	a.nowFunc = func() time.Time { return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC) }
 	cmd := a.Init()
 	if cmd != nil {
@@ -141,14 +141,14 @@ func TestShiftE_ColdStartCreatesTodayJournal(t *testing.T) {
 	}
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
-	today := "2026-06-05"
+	today := "2026_06_05"
 	if a.page.Page() != today {
 		t.Fatalf("precondition: boot page should be %q, got %q", today, a.page.Page())
 	}
 	if _, ok := a.idx.ByName[today]; ok {
 		t.Fatalf("precondition: today's journal should NOT be in index; file doesn't exist")
 	}
-	journalPath := filepath.Join(dir, "journals", graph.FilenameFromPageName(today))
+	journalPath := filepath.Join(dir, "journals", today+".md")
 	if _, err := os.Stat(journalPath); !os.IsNotExist(err) {
 		t.Fatalf("precondition: journal file should not exist; stat err=%v", err)
 	}
@@ -180,15 +180,15 @@ func TestShiftE_ColdStartCreatesTodayJournal(t *testing.T) {
 func TestE_ColdStart_DefersCreation(t *testing.T) {
 	quietTerm(t)
 	dir, _ := writeGraph(t, map[string]string{"pages/Anchor.md": "anchor\n"})
-	a := New(dir, "test")
+	a := New(dir, layout.Default(), "test")
 	a.nowFunc = func() time.Time { return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC) }
 	if cmd := a.Init(); cmd != nil {
 		a.Update(cmd())
 	}
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
-	today := "2026-06-05"
-	journalPath := filepath.Join(dir, "journals", graph.FilenameFromPageName(today))
+	today := "2026_06_05"
+	journalPath := filepath.Join(dir, "journals", today+".md")
 
 	pressE(t, a)
 	if a.editor == nil {
@@ -214,7 +214,7 @@ func TestDotKey_CreatesMissingTodayJournal_ThenEditReachable(t *testing.T) {
 	quietTerm(t)
 	// An anchor page, but no journal file — today's journal is missing on disk.
 	dir, _ := writeGraph(t, map[string]string{"pages/Anchor.md": "anchor\n"})
-	a := New(dir, "test")
+	a := New(dir, layout.Default(), "test")
 	a.nowFunc = func() time.Time { return time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC) }
 	cmd := a.Init()
 	if cmd != nil {
@@ -222,8 +222,8 @@ func TestDotKey_CreatesMissingTodayJournal_ThenEditReachable(t *testing.T) {
 	}
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
-	today := "2026-06-05"
-	journalPath := filepath.Join(dir, "journals", graph.FilenameFromPageName(today))
+	today := "2026_06_05"
+	journalPath := filepath.Join(dir, "journals", today+".md")
 	if _, err := os.Stat(journalPath); !os.IsNotExist(err) {
 		t.Fatalf("precondition: journal file should not exist; stat err=%v", err)
 	}
@@ -266,7 +266,7 @@ func TestDotKey_CreatesMissingTodayJournal_ThenEditReachable(t *testing.T) {
 func TestShiftE_EnsureFileStillUsed(t *testing.T) {
 	quietTerm(t)
 	dir, _ := writeGraph(t, map[string]string{"pages/Alpha.md": "content\n"})
-	a := New(dir, "test")
+	a := New(dir, layout.Default(), "test")
 	cmd := a.Init()
 	if cmd != nil {
 		a.Update(cmd())
@@ -305,7 +305,7 @@ func assertEditorOnCursorRow(t *testing.T, raw string) {
 	t.Helper()
 	quietTerm(t)
 	dir, _ := writeGraph(t, map[string]string{"pages/Long.md": raw})
-	a := New(dir, "test")
+	a := New(dir, layout.Default(), "test")
 	a.Update(a.Init()())
 	a.Update(tea.WindowSizeMsg{Width: 80, Height: 12})
 	a.navigate("Long")
@@ -388,7 +388,7 @@ func bootPage(t *testing.T, files map[string]string, page string, width, height 
 	t.Helper()
 	quietTerm(t)
 	dir, _ := writeGraph(t, files)
-	a := New(dir, "test")
+	a := New(dir, layout.Default(), "test")
 	a.Update(a.Init()())
 	a.Update(tea.WindowSizeMsg{Width: width, Height: height})
 	a.navigate(page)

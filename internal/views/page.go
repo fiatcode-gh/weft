@@ -496,7 +496,7 @@ func (p *PageView) FollowCursor() string {
 // to name and scrolls it into view. No-op when the page has no such link.
 func (p *PageView) FocusLinkTo(name string) {
 	for i, l := range p.result.Links {
-		if d, ok := p.idx.ResolveLink(l.Target); ok && d.Page.Name == name {
+		if d, ok := p.idx.ResolveLink(l.Target); ok && d.Page.Key == name {
 			if l.Start >= 0 && l.Start <= len(p.result.Styled) && len(p.full) > 0 {
 				p.revealFull(p.fullRowOf(l.Start))
 			}
@@ -860,7 +860,7 @@ func (p *PageView) loadResult() {
 	// emphasis term is set the render is transient — never read or write the
 	// cache, so a later plain navigation can't be served a highlighted version.
 	if p.emphasis == "" {
-		if c, hit := p.cache[meta.Name]; hit && c.modTime.Equal(meta.ModTime) && c.width == p.width {
+		if c, hit := p.cache[meta.Path]; hit && c.modTime.Equal(meta.ModTime) && c.width == p.width {
 			p.result = c.result
 			p.body = c.body
 			p.dropStaleFolds()
@@ -888,7 +888,7 @@ func (p *PageView) loadResult() {
 	p.body = body
 	p.dropStaleFolds()
 	if p.emphasis == "" && res.FallbackErr == nil {
-		p.cache[meta.Name] = cachedPage{result: res, body: body, modTime: meta.ModTime, width: p.width}
+		p.cache[meta.Path] = cachedPage{result: res, body: body, modTime: meta.ModTime, width: p.width}
 	}
 }
 

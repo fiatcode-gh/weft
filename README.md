@@ -2,13 +2,13 @@
 
 Journals are the warp — the continuous daily timeline you lay down. `[[wiki-links]]` are the weft — the cross-threads you weave across into pages. The fabric is your knowledge base, and weft is the terminal tool for keeping it: a recency-sorted page picker (with page-creation), ripgrep-backed full-text search, backlinks (linked and unlinked), and a cross-graph dashboard of your open tasks (`TODO/DOING/LATER/WAITING`) — because a journal tool that can't surface your open loops is incomplete.
 
-Two kinds of link, both pointing at a page — `[[wiki-links]]` and `#tag` / `#[[Multi Word]]`. Pages are flat markdown under `pages/` and `journals/`, with `___` for namespaces and no nested directories to manage. weft is a navigator, not an outliner: it renders your bullets, workflow markers, and links, but it never makes you tend the tree — no saved folds, no block refs, no zoom. Folding a heading or bullet is a view-only convenience, and `[[Page#Heading]]` links open a page at a heading.
+Two kinds of link, both pointing at a page — `[[wiki-links]]` and `#tag` / `#[[Multi Word]]`. Pages are markdown files, flat or in folders, and journals are named by a filename pattern you can set. A Logseq graph opens with no config; an Obsidian vault opens with a short one (see Configuration). weft is a navigator, not an outliner: it renders your bullets, workflow markers, and links, but it never makes you tend the tree — no saved folds, no block refs, no zoom. Folding a heading or bullet is a view-only convenience, and `[[Page#Heading]]` links open a page at a heading.
 
 Press `e` to edit the current page in a full-screen in-app editor (`Ctrl+S` saves, `Esc` exits with an unsaved-changes prompt). It opens on the cursor row's line, at the same screen row, and `Esc` brings you back the same way. The editor is a live preview: the page is drawn exactly as the read view draws it, and only the line or block under the cursor (a table, a fence, a quote, a joined paragraph, a `:LOGBOOK:` block) turns back into source while you edit it, then renders again when you move away. `Ctrl+R` switches to the plain source look and back; the choice lasts until weft quits and is never saved. The editor is coloured like the read view (same styles, `WEFT_STYLE` and `NO_COLOR` apply) and shows your terminal's own cursor. Any markdown file opens — CRLF, tabs, any length — and saves byte-for-byte, with the file's own line endings and final-newline state kept. If the file changed on disk since you opened or last saved it, a save merges changes on separate lines (lines both sides added at the same spot are all kept, yours first), and otherwise asks whether to overwrite, reload or keep editing; `E` hands the file to your `$EDITOR`. The editor has undo/redo, selection, copy/cut/paste (copies also go to the system clipboard through OSC 52), find and replace, and bullet-aware editing: `Enter` continues a bullet, `Tab`/`Shift+Tab` indent a bullet with its children, `Alt+↑/↓` move it, `Ctrl+T` cycles its workflow marker. Typing `[[` opens a live, fuzzy-filtered page-name completion list — `↑`/`↓` to choose, `Enter` or `Tab` to insert `[[Page Name]]`, `Esc` to dismiss; an unmatched name shows a `＋ Create` row to insert a link to the not-yet-created page in one keystroke. Press `.` to jump to today's journal.
 
 Press `S` to sync the graph with git without leaving weft — it commits any changes, `pull --rebase`s, then pushes, reporting progress in the status bar (`⟳ syncing…` → `✓ synced`). A `●` shows in the status bar whenever the graph has local changes that aren't committed or pushed yet, so you always know when a sync is due. Conflicts are left for you to resolve in a shell — weft never touches a conflicted tree.
 
-*Already keep a Logseq graph? weft reads it as-is — the on-disk format (flat `.md`, `YYYY_MM_DD` journals, `[[wiki-links]]`, `TODO`-style bullets) is adapted from Logseq's. But weft is its own tool, not a Logseq client.*
+*Already keep a Logseq graph? weft reads it as-is — the on-disk format (`.md` pages under `pages/`, `YYYY_MM_DD` journals, `[[wiki-links]]`, `TODO`-style bullets) is adapted from Logseq's. But weft is its own tool, not a Logseq client.*
 
 ## Install
 
@@ -49,6 +49,58 @@ weft -version                  # print version and exit
 
 A graph path is required — either pass `--graph` or set `$WEFT_GRAPH`. The flag wins when both are set. Drop the env var into your shell config for the zero-arg invocation.
 
+## Configuration
+
+weft needs no config for a Logseq-style graph. To change where pages and journals live, add `<graph>/.weft/config.toml`. weft reads it at start and in `weft doctor`, never writes it, and it travels with the graph when you sync with git. With no file, every key has its default.
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `pages_dir` | `"pages"` | Folder holding pages, relative to the graph. `""` is the graph root. |
+| `journals_dir` | `"journals"` | Folder holding journals. It may be `""` or inside `pages_dir`. |
+| `journal_file_pattern` | `"YYYY_MM_DD"` | Journal path inside `journals_dir`, without `.md`. |
+| `namespace_files` | `"triple-lowbar"` | Where a new page named `A/B` goes: `triple-lowbar` gives `A___B.md`, `folders` gives `A/B.md`. |
+
+Folder values are relative to the graph and cannot leave it (no absolute path, no `..`). A folder that does not exist indexes nothing.
+
+With `journals_dir = ""` and a non-empty `pages_dir`, the whole graph is walked, so every `.md` outside dot-folders is indexed.
+
+The pattern uses three tokens: `YYYY` (four digits), `MM` and `DD` (two digits, zero-padded). Every other character is literal, and `/` makes subfolders, as in `YYYY/MM/YYYY-MM-DD`. The last segment must contain all three tokens, so each date has one name. A segment cannot be empty, `.` or `..`, or start with `.`. A file counts as a journal only when its path matches the pattern and the date is a real calendar date. Any other `.md` file under `journals_dir` is a page.
+
+A config problem stops weft and `weft doctor` with exit status 2. The message names the file and the problem, for example `weft: <graph>/.weft/config.toml: unknown key "bogus"`. The problems are: the file cannot be read, a TOML syntax error, a wrong type or repeated key, an unknown key, a folder outside the graph, a `namespace_files` value other than the two above, and an invalid pattern. weft never falls back to the defaults.
+
+### Recipes
+
+A Logseq graph needs no file. The explicit equivalent of the defaults is:
+
+```toml
+pages_dir = "pages"
+journals_dir = "journals"
+journal_file_pattern = "YYYY_MM_DD"
+namespace_files = "triple-lowbar"
+```
+
+An Obsidian vault with the daily notes in a `Daily` folder (use your own daily-notes folder name):
+
+```toml
+pages_dir = ""
+journals_dir = "Daily"
+journal_file_pattern = "YYYY-MM-DD"
+namespace_files = "folders"
+```
+
+If your daily notes sit in year and month folders, use `journal_file_pattern = "YYYY/MM/YYYY-MM-DD"`. weft does not read `.obsidian/` or `logseq/config.edn`.
+
+### Names and links
+
+- A page's name is its filename stem. `___` reads as `/`, so `A___B.md` is `A/B`. Folders are not part of the name. A journal's name is its filename stem as it is: `2026_10_12` with the default layout, `2026-10-12` in the Obsidian recipe.
+- `[[a/Note]]` picks a page by its path, relative to the graph, without `.md`. It matches whole folders and ignores case, so `[[pages/2026_05_24]]` reaches a page that a journal of the same name hides.
+- A link resolves in this order: an exact name, a name that differs only in case, then a path.
+- When several pages share a name, the bare name opens a journal first, then the page with the shallowest path, then the one whose path comes first alphabetically.
+- The picker and every other list (backlinks, tasks, agenda, search) show a page that loses a name clash by its shortest path that opens it, such as `b/Note`, which is also what `[[b/Note]]` opens.
+- `weft doctor` warns about each clash.
+- Dot-folders (`.obsidian`, `.git`, `.trash`, `.weft`) are skipped. Only `.md` files are indexed, and search and unlinked mentions read only those files.
+- A new page goes to `pages_dir`. A new journal goes to `journals_dir` through the pattern. weft creates a missing folder when the file is first saved.
+
 ## Doctor
 
 ```bash
@@ -61,9 +113,11 @@ weft doctor --graph PATH     # explicit path
 - **unresolved links** — `[[wiki-links]]` and tags whose target page does not exist (a `[[Page#Heading]]` link to a page and heading that exist is not unresolved)
 - **orphan pages** — pages no other page links to (journals excluded)
 - **unlinked mentions** — bare-text mentions that could become links
-- **index warnings** — problems the index walk noticed (unreadable files, name collisions, subdirectories)
+- **index warnings** — problems the index walk noticed (unreadable files, name clashes, pages no link can open)
 
-Exit codes: `0` graph is clean, `1` findings exist, `2` operational error (bad graph path, missing ripgrep, failed scan).
+Two warnings come from page names. A name clash: several pages share a name, and the warning lists the files and says which one `[[name]]` opens. An unreachable page: every path link to it opens another page, so no link can reach it (rare). See Names and links under Configuration.
+
+Exit codes: `0` graph is clean, `1` findings exist, `2` operational error (bad graph path, bad config file, missing ripgrep, failed scan).
 
 ## Keys
 
@@ -133,7 +187,7 @@ A task is a bullet that starts with a marker (`TODO`, `LATER`, `DOING`, `WAITING
 
 ### Journals
 
-- **Template.** If a page named `Journal Template` exists (`pages/Journal Template.md`), its file is copied as-is into every journal weft creates: with `.`, `E`, capture (`c`), or the first save in the in-app editor. A journal that already exists is never changed. The page is read each time it is used, so edits apply to the next new journal. A template created outside weft needs `R` before weft finds it. Without the page, a new journal starts empty.
+- **Template.** If a page named `Journal Template` exists (in any folder), its file is copied as-is into every journal weft creates: with `.`, `E`, capture (`c`), or the first save in the in-app editor. A journal that already exists is never changed. The page is read each time it is used, so edits apply to the next new journal. A template created outside weft needs `R` before weft finds it. Without the page, a new journal starts empty.
 - **Capture.** `c` opens a one-line prompt over the current screen (also over the dashboard, agenda, backlinks, calendar and on-this-day overlays). `Enter` appends `- <text>` as the last line of today's journal, creating the file from the template when missing. `Tab` writes `- TODO <text>` instead; `[[` and `#` complete page names; `Esc` cancels. The write is append-only and guarded: if the file changes between read and write, weft re-reads and tries once more, then writes nothing and keeps your text in the prompt. It is refused while a sync runs. The day is fixed when the prompt opens.
 - **Calendar.** `C` shows a month grid, Monday first, a `•` after each day that has a journal, `[ ]` around the cursor day. `←`/`→` move a day, `↑`/`↓` a week, `PgUp`/`PgDn` a month (the day clamps to the month's end), `t` goes to today, `Enter` opens that day's journal; a day without one opens as an empty page and nothing is written until you save.
 - **On this day.** `O` lists the journals from one week ago, one month ago (the day clamps to the month's end) and the same month and day in earlier years, newest year first, each with its first lines. Dates without a journal are left out; a February 29 has no entry in years without one.
@@ -176,11 +230,15 @@ crash weft — they degrade to plain text or a silent no-op.
 - **`alias::` / `title::` / `tags::` properties** are not extracted — they
   appear as plain text in the page body; `tags::` is not a tag.
 - **Case-insensitive page-name uniqueness** is not enforced — `Alpha.md` and
-  `alpha.md` can coexist (weft records a warning — status bar points at
-  `weft.log` — and resolves links deterministically to the first). Link
-  resolution itself is case-insensitive: `[[alpha]]` finds `Alpha`.
-- **`pages/` or `journals/` subdirectories** are skipped with a warning
-  surfaced in-app. Namespace pages must use the `___` filename convention.
+  `alpha.md` can coexist (weft records a warning in `weft doctor` and resolves
+  links deterministically, see Names and links). Link resolution itself is
+  case-insensitive: `[[alpha]]` finds `Alpha`. Backlinks are kept per page,
+  so the two pages do not share them.
+- **Native Obsidian and Logseq config** is not read: set the layout in
+  `.weft/config.toml`.
+- **Frontmatter and aliases** are not read.
+- **Date tokens** other than `YYYY`, `MM` and `DD` are not supported in
+  `journal_file_pattern`.
 - **The TODO dashboard shows only open markers** (`TODO` / `LATER` /
   `DOING` / `WAITING`). `DONE` / `CANCELED` / `NOW` bullets are styled on
   the page but never appear in the dashboard. Rows marked done with `x` in
