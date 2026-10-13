@@ -40,6 +40,8 @@ type Index struct {
 	// failures). The TUI logs and hints them; BuildIndex never writes to
 	// stderr — under the alt-screen nobody would see it.
 	Warnings []string
+
+	signature Signature // of the walk that built this index
 }
 
 // warnf records a formatted, non-fatal problem found during the walk onto
@@ -48,11 +50,11 @@ func (idx *Index) warnf(format string, args ...any) {
 	idx.Warnings = append(idx.Warnings, fmt.Sprintf(format, args...))
 }
 
-// BuildIndex walks the layout's page and journal folders (recursively, in
-// lay.Roots() order) once and returns the populated Index. Only .md files
-// are indexed; folders lay.SkipDir names are not entered. A missing root is
-// skipped; unreadable files and subdirectories are skipped and recorded in
-// Index.Warnings.
+// BuildIndex walks the layout's page and journal folders once, with the
+// walkGraph rule set (recursively, in lay.Roots() order), and returns the
+// populated Index. Only .md files are indexed; folders lay.SkipDir names are
+// not entered. A missing root is skipped; unreadable files and
+// subdirectories are skipped and recorded in Index.Warnings.
 func BuildIndex(graphPath string, lay layout.Layout) (*Index, error) {
 	idx := &Index{
 		Layout:      lay,
@@ -66,11 +68,27 @@ func BuildIndex(graphPath string, lay layout.Layout) (*Index, error) {
 		byPath:      make(map[string]*PageMeta),
 	}
 
-	for _, root := range lay.Roots() {
-		if err := idx.walkRoot(root); err != nil {
-			return nil, err
+	var sb sigBuilder
+	err := walkGraph(graphPath, lay, idx.warnf, func(rel string, d fs.DirEntry) {
+		filePath := filepath.Join(graphPath, filepath.FromSlash(rel))
+		stem := strings.TrimSuffix(d.Name(), ".md")
+		meta := PageMeta{Name: strings.ReplaceAll(stem, "___", "/"), Path: filePath, Rel: rel}
+		if day, ok := lay.Journal(rel); ok {
+			meta.Name, meta.IsJournal, meta.Date = stem, true, day
 		}
+		info, err := d.Info()
+		sb.add(rel, info, err)
+		if err == nil {
+			meta.ModTime = info.ModTime()
+		} else {
+			idx.warnf("cannot stat %s: %v — page will sort last in the picker", filePath, err)
+		}
+		idx.Pages = append(idx.Pages, meta)
+	})
+	if err != nil {
+		return nil, err
 	}
+	idx.signature = sb.sum()
 
 	// Names, clashes and keys need Pages final (so pointers are stable).
 	for i := range idx.Pages {
@@ -144,12 +162,22 @@ func BuildIndex(graphPath string, lay layout.Layout) (*Index, error) {
 	return idx, nil
 }
 
-// walkRoot appends every .md file under the graph-relative folder root to
-// idx.Pages, depth-first in lexical order. A root that is missing is skipped;
-// one that cannot be read is an error; a subdirectory that cannot be read is
-// skipped with a warning.
-func (idx *Index) walkRoot(root string) error {
-	dir := filepath.Join(idx.GraphPath, filepath.FromSlash(root))
+// walkGraph is the one walk rule set shared by BuildIndex and ScanSignature.
+// For every lay.Roots() folder, in order, it calls visit for each .md file
+// under it, depth-first in lexical order, with the file's graph-relative
+// slash path. A root that is missing is skipped; one that cannot be read is
+// an error; a subdirectory that cannot be read is skipped with a warnf.
+func walkGraph(graphPath string, lay layout.Layout, warnf func(string, ...any), visit func(rel string, d fs.DirEntry)) error {
+	for _, root := range lay.Roots() {
+		if err := walkRoot(graphPath, root, lay, warnf, visit); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func walkRoot(graphPath, root string, lay layout.Layout, warnf func(string, ...any), visit func(rel string, d fs.DirEntry)) error {
+	dir := filepath.Join(graphPath, filepath.FromSlash(root))
 	info, err := os.Stat(dir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
@@ -171,7 +199,7 @@ func (idx *Index) walkRoot(root string) error {
 			if p == start {
 				return fmt.Errorf("read %s: %w", dir, err)
 			}
-			idx.warnf("skipping %s: %v", filepath.Join(dir, mustRel(start, p)), err)
+			warnf("skipping %s: %v", filepath.Join(dir, mustRel(start, p)), err)
 			return nil
 		}
 		rel := root
@@ -179,7 +207,7 @@ func (idx *Index) walkRoot(root string) error {
 			rel = path.Join(root, filepath.ToSlash(sub))
 		}
 		if d.IsDir() {
-			if p != start && idx.Layout.SkipDir(rel) {
+			if p != start && lay.SkipDir(rel) {
 				return fs.SkipDir
 			}
 			return nil
@@ -187,18 +215,7 @@ func (idx *Index) walkRoot(root string) error {
 		if filepath.Ext(d.Name()) != ".md" {
 			return nil
 		}
-		filePath := filepath.Join(idx.GraphPath, filepath.FromSlash(rel))
-		stem := strings.TrimSuffix(d.Name(), ".md")
-		meta := PageMeta{Name: strings.ReplaceAll(stem, "___", "/"), Path: filePath, Rel: rel}
-		if day, ok := idx.Layout.Journal(rel); ok {
-			meta.Name, meta.IsJournal, meta.Date = stem, true, day
-		}
-		if info, err := d.Info(); err == nil {
-			meta.ModTime = info.ModTime()
-		} else {
-			idx.warnf("cannot stat %s: %v — page will sort last in the picker", filePath, err)
-		}
-		idx.Pages = append(idx.Pages, meta)
+		visit(rel, d)
 		return nil
 	})
 }
