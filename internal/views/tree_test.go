@@ -323,3 +323,48 @@ func TestTreeEmpty(t *testing.T) {
 		t.Fatal("esc did not close empty tree")
 	}
 }
+
+func treeRowOf(t *testing.T, tr *Tree, label string) int {
+	t.Helper()
+	for i, r := range tr.rows {
+		if r.node.Label == label {
+			return i
+		}
+	}
+	t.Fatalf("no row %q in %v", label, rowLabels(tr))
+	return -1
+}
+
+func TestTreeRefreshKeepsSelectedNode(t *testing.T) {
+	quietTerm(t)
+	tr := NewTree(loadFixture(t), "", treeExpansion{}, 80, 24)
+	old := treeRowOf(t, tr, "Workbench")
+	tr.sel = old
+	path := tr.rows[old].node.Path
+
+	tr.refresh(fixtureIndexWith(t, map[string]string{"pages/Aaa.md": "- new\n"}))
+
+	if tr.sel == old {
+		t.Fatalf("row index stayed %d; the added page should shift Workbench", old)
+	}
+	if got := tr.rows[tr.sel].node.Path; got != path {
+		t.Errorf("selected node = %q, want %q", got, path)
+	}
+}
+
+func TestTreeRefreshMovesToNearestRowWhenGone(t *testing.T) {
+	quietTerm(t)
+	tr := NewTree(loadFixture(t), "", treeExpansion{}, 80, 24)
+	old := treeRowOf(t, tr, "Workbench")
+	tr.sel = old
+	path := tr.rows[old].node.Path
+
+	tr.refresh(fixtureIndexWith(t, map[string]string{"pages/Workbench.md": ""}))
+
+	if want := clampInt(old, 0, len(tr.rows)-1); tr.sel != want {
+		t.Errorf("sel = %d, want %d", tr.sel, want)
+	}
+	if got := tr.rows[tr.sel].node.Path; got == path {
+		t.Errorf("removed node %q still selected", got)
+	}
+}

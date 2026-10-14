@@ -30,10 +30,9 @@ type Calendar struct {
 // NewCalendar starts the cursor on page when it is a journal date, otherwise
 // on today. It keeps idx as it is now: journals created later do not show.
 func NewCalendar(idx *graph.Index, page string, today time.Time, width, height int) *Calendar {
-	y, m, d := today.Date()
 	c := &Calendar{
 		idx:    idx,
-		today:  time.Date(y, m, d, 0, 0, 0, 0, time.UTC),
+		today:  civilDay(today),
 		width:  width,
 		height: height,
 	}
@@ -42,6 +41,18 @@ func NewCalendar(idx *graph.Index, page string, today time.Time, width, height i
 		c.cursor = t
 	}
 	return c
+}
+
+// civilDay is UTC midnight of t's calendar date.
+func civilDay(t time.Time) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}
+
+// refresh points the calendar at idx and today, keeping the cursor.
+func (c *Calendar) refresh(idx *graph.Index, today time.Time) {
+	c.idx = idx
+	c.today = civilDay(today)
 }
 
 func (c *Calendar) SetSize(w, h int) { c.width, c.height = w, h }
