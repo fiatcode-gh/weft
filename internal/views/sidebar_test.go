@@ -3,8 +3,10 @@ package views
 import (
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -785,5 +787,268 @@ func TestSidebarCaptureFeedbackInPanel(t *testing.T) {
 	}
 	if !a.sidebarFocused() {
 		t.Error("focus left the sidebar")
+	}
+}
+
+// reindexKey presses R on the page (esc first when the sidebar has focus) and
+// finishes the reindex it starts.
+func reindexKey(t *testing.T, a *App) {
+	t.Helper()
+	if a.sidebarFocused() {
+		a.Update(keyEscK)
+	}
+	_, cmd := a.Update(key("R"))
+	a.Update(drainFor[indexLoadedMsg](t, cmd))
+}
+
+// pollApp is a sidebar app whose poll loop is driven by hand.
+func pollApp(t *testing.T, w, h int) *App {
+	t.Helper()
+	a := sidebarApp(t, w, h)
+	instantPolls(a)
+	if poll(t, a) {
+		t.Fatal("a freshly booted graph must not rebuild on the first poll")
+	}
+	return a
+}
+
+func todoTexts(t *Todos) []string {
+	out := make([]string, len(t.visible))
+	for i, b := range t.visible {
+		out[i] = b.Text
+	}
+	return out
+}
+
+func TestSidebarRefreshesOnLiveReload(t *testing.T) {
+	a := pollApp(t, 120, 30)
+	focusTodosOn(t, a, dustTask)
+	want, _ := a.side.todos.selectedKey()
+	outsideWrite(t, a, "pages/Zeta.md", "- TODO Zeta task\n")
+	expectOneRebuildKeeping(t, a, func() {
+		if !strings.Contains(strings.Join(todoTexts(a.side.todos), "\n"), "Zeta task") {
+			t.Error("sidebar todos lack the new task after the rebuild")
+		}
+		if got, _ := a.side.todos.selectedKey(); got != want {
+			t.Errorf("selection %v, want %v", got, want)
+		}
+		if row := strings.Split(plain(frameLines(a)[0]), "\n")[0]; !strings.Contains(row, "▶ 3 Todos") {
+			t.Errorf("row 0 is not the sidebar header: %q", row)
+		}
+	})
+}
+
+func TestSidebarRefreshNearestWhenSelectedGone(t *testing.T) {
+	a := pollApp(t, 120, 30)
+	focusSection(t, a, "3")
+	idx := -1
+	for i, b := range a.side.todos.visible {
+		if b.Page == "Hub" && b.Text == "Tidy up the hub" {
+			idx = i
+		}
+	}
+	if idx < 0 {
+		t.Fatal("no Hub task in the todos")
+	}
+	a.side.todos.sel = idx
+	outsideWrite(t, a, "pages/Hub.md", "title:: Hub\ntags:: fixture\n\n- The hub page. Linked from [[Alpha]].\n")
+	expectOneRebuild(t, a)
+	if strings.Contains(strings.Join(todoTexts(a.side.todos), "\n"), "Tidy up the hub") {
+		t.Error("the removed task is still listed")
+	}
+	n := len(a.side.todos.visible)
+	if want := min(idx, n-1); a.side.todos.sel != want {
+		t.Errorf("sel %d, want %d (old index %d of %d rows)", a.side.todos.sel, want, idx, n)
+	}
+}
+
+func TestSidebarTreeAndBacklinksKeepSelectionAcrossReindex(t *testing.T) {
+	t.Run("tree", func(t *testing.T) {
+		a := pollApp(t, 120, 30)
+		focusSection(t, a, "1")
+		path := ""
+		for i, r := range a.side.tree.rows {
+			if r.node.Page != nil && r.node.Page.Key == "Workbench" {
+				a.side.tree.sel, path = i, r.node.Path
+			}
+		}
+		if path == "" {
+			t.Fatal("no Workbench node")
+		}
+		outsideWrite(t, a, "pages/Aaa.md", "# Aaa\n")
+		expectOneRebuild(t, a)
+		tr := a.side.tree
+		if tr.sel < 0 || tr.sel >= len(tr.rows) || tr.rows[tr.sel].node.Path != path {
+			t.Errorf("tree selection moved off %q", path)
+		}
+	})
+	t.Run("backlinks", func(t *testing.T) {
+		a := pollApp(t, 120, 30)
+		a.navigate("Hub")
+		focusSection(t, a, "2")
+		b := a.side.backlinks
+		last := -1
+		for i, r := range b.rows {
+			if r.ref != nil {
+				last = i
+			}
+		}
+		if last < 1 {
+			t.Fatal("Hub needs at least two linked references")
+		}
+		b.sel = last
+		type id struct {
+			from string
+			line int
+		}
+		before := id{b.rows[last].ref.FromPage, b.rows[last].ref.LineNumber}
+		n := len(b.refs)
+		outsideWrite(t, a, "pages/Aaa.md", "- see [[Hub]]\n")
+		expectOneRebuild(t, a)
+		b = a.side.backlinks
+		if len(b.refs) != n+1 {
+			t.Fatalf("%d refs, want %d", len(b.refs), n+1)
+		}
+		if b.sel < 0 || b.rows[b.sel].ref == nil {
+			t.Fatal("no reference selected")
+		}
+		if got := (id{b.rows[b.sel].ref.FromPage, b.rows[b.sel].ref.LineNumber}); got != before {
+			t.Errorf("selection %v, want %v", got, before)
+		}
+	})
+}
+
+func TestSidebarAgendaUsesCurrentDateOnRefresh(t *testing.T) {
+	a := sidebarApp(t, 120, 30)
+	focusSection(t, a, "4")
+	next := paletteNow.AddDate(0, 0, 1)
+	a.nowFunc = func() time.Time { return next }
+	reindexKey(t, a)
+	if got := a.side.agenda.today.Format("2006-01-02"); got != "2026-05-25" {
+		t.Errorf("agenda today %s, want 2026-05-25", got)
+	}
+	if v := plain(a.side.agenda.View()); !strings.Contains(v, "today 2026-05-25") {
+		t.Errorf("agenda header lacks the new date:\n%s", v)
+	}
+}
+
+func TestSidebarCalendarKeepsCursorAcrossReindex(t *testing.T) {
+	a := pollApp(t, 120, 30)
+	focusSection(t, a, "5")
+	day := time.Date(2026, 5, 26, 0, 0, 0, 0, time.UTC)
+	a.side.calendar.cursor = day
+	if a.side.calendar.hasJournal(day) {
+		t.Fatal("setup: day already has a journal")
+	}
+	outsideWrite(t, a, "journals/2026_05_26.md", "- a day\n")
+	expectOneRebuild(t, a)
+	c := a.side.calendar
+	if !c.cursor.Equal(day) {
+		t.Errorf("cursor %v, want %v", c.cursor, day)
+	}
+	if !c.hasJournal(day) {
+		t.Error("the day shows no journal mark after the reindex")
+	}
+}
+
+func TestSidebarBacklinksFollowsPage(t *testing.T) {
+	a := sidebarApp(t, 120, 30)
+	a.navigate("Hub")
+	focusSection(t, a, "2")
+	check := func(step, wantPage string) {
+		t.Helper()
+		if got := a.page.Page(); wantPage != "" && got != wantPage {
+			t.Fatalf("%s: page %q, want %q", step, got, wantPage)
+		}
+		if got, want := a.side.backlinks.target, a.page.Page(); got != want {
+			t.Errorf("%s: backlinks target %q, page %q", step, got, want)
+		}
+	}
+	check("start", "Hub")
+	start := a.page.Page()
+
+	a.Update(keyEnterK)
+	if a.page.Page() == start || !a.sidebarFocused() {
+		t.Fatalf("enter: page %q focused %v", a.page.Page(), a.sidebarFocused())
+	}
+	check("enter in sidebar", "")
+	moved := a.page.Page()
+
+	a.Update(keyEscK)
+	a.Update(key("["))
+	check("history back", "Hub")
+	a.Update(key("]"))
+	check("history forward", moved)
+
+	a.Update(key("n"))
+	a.Update(keyEnterK)
+	if a.page.Page() == moved {
+		t.Fatal("n + enter did not follow a link")
+	}
+	check("link", "")
+
+	a.Update(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
+	typeText(a, "Beta")
+	a.Update(keyEnterK)
+	check("picker", "Beta")
+
+	a.Update(key("."))
+	check("today", "2026_05_24")
+	a.Update(key("<"))
+	check("previous journal", "2026_05_23")
+}
+
+func TestSidebarRefreshAfterOwnWrite(t *testing.T) {
+	a := sidebarApp(t, 120, 30)
+	focusTodosOn(t, a, dustTask)
+	a.Update(key("x"))
+	if !strings.Contains(plain(a.side.todos.View()), doneRow) {
+		t.Fatal("struck row lost right after x")
+	}
+	reindexKey(t, a)
+	if !strings.Contains(plain(a.side.todos.View()), doneRow) {
+		t.Error("struck row lost after a further reindex")
+	}
+	a.Update(key("c"))
+	a.Update(keyTabK)
+	typeText(a, "from capture")
+	a.Update(keyEnt)
+	if a.capture != nil {
+		t.Fatal("capture still open")
+	}
+	if !strings.Contains(strings.Join(todoTexts(a.side.todos), "\n"), "from capture") {
+		t.Errorf("captured task not listed: %v", todoTexts(a.side.todos))
+	}
+}
+
+func TestSidebarWritesNothing(t *testing.T) {
+	a := pollApp(t, 120, 30)
+	before := graphFiles(t, a.graphPath)
+	for _, d := range []string{"1", "2", "3", "4", "5"} {
+		a.Update(key(d))
+	}
+	a.Update(key("|"))
+	a.Update(key("|"))
+	outsideWrite(t, a, "pages/Zeta.md", "- TODO Zeta task\n")
+	expectOneRebuild(t, a)
+	after := graphFiles(t, a.graphPath)
+	delete(after, "pages/Zeta.md")
+	if !reflect.DeepEqual(before, after) {
+		t.Error("the sidebar changed a graph file")
+	}
+}
+
+func TestSidebarHiddenPanelsCatchUpOnShow(t *testing.T) {
+	a := pollApp(t, 120, 30)
+	a.Update(key("3"))
+	a.Update(key("|"))
+	outsideWrite(t, a, "pages/Zeta.md", "- TODO Zeta task\n")
+	expectOneRebuild(t, a)
+	if a.side.idx == a.idx {
+		t.Fatal("hidden sidebar refreshed")
+	}
+	a.Update(key("3"))
+	if !strings.Contains(strings.Join(todoTexts(a.side.todos), "\n"), "Zeta task") {
+		t.Error("todos lack the new task after showing")
 	}
 }

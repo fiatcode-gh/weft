@@ -704,7 +704,15 @@ func (a *App) linkify(ref *graph.UnlinkedRef, target string) tea.Cmd {
 	return a.statusProbeCmd()
 }
 
+// Update runs update, then brings the sidebar up to date with the index and
+// the page on screen: one funnel for every reindex and navigation path.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m, cmd := a.update(msg)
+	a.syncSidebar()
+	return m, cmd
+}
+
+func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m := msg.(type) {
 	case indexLoadedMsg:
 		if m.gen != a.indexGen {

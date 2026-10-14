@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/fiatcode-gh/weft/v2/internal/graph"
 )
 
 const (
@@ -47,6 +49,11 @@ type sidebar struct {
 	todos     *Todos
 	agenda    *Agenda
 	calendar  *Calendar
+
+	// idx is the index the built panels last refreshed with; page is the
+	// page backlinks was last built for.
+	idx  *graph.Index
+	page string
 
 	// treeOpen is the sidebar tree's own expanded groups, so it never shares
 	// a map with the F overlay.
@@ -252,6 +259,42 @@ func (a *App) sidebarKey(key string) tea.Cmd {
 		a.openResult(res)
 	}
 	return nil
+}
+
+// syncSidebar refreshes the built panels when the index changed and
+// retargets backlinks when the page changed. Hidden panels catch up on the
+// next show. It only reads the in-memory index.
+func (a *App) syncSidebar() {
+	if !a.side.shown || a.page == nil || a.idx == nil {
+		return
+	}
+	page := a.page.Page()
+	s := &a.side
+	switch {
+	case s.idx != a.idx:
+		now := a.nowFunc()
+		if s.tree != nil {
+			s.tree.refresh(a.idx)
+		}
+		if s.backlinks != nil {
+			s.backlinks.showLinked(a.idx, page)
+		}
+		if s.todos != nil {
+			s.todos.refresh(a.idx)
+		}
+		if s.agenda != nil {
+			s.agenda.refresh(a.idx, now)
+		}
+		if s.calendar != nil {
+			s.calendar.refresh(a.idx, now)
+		}
+		s.idx, s.page = a.idx, page
+	case s.page != page:
+		if s.backlinks != nil {
+			s.backlinks.showLinked(a.idx, page)
+		}
+		s.page = page
+	}
 }
 
 // leaveSection drops the struck rows of the todos or agenda panel, which
