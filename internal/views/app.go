@@ -955,6 +955,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.openCapture()
 			case overlayResultRename:
 				return a, a.confirmRename()
+			case overlayResultRun:
+				a.active = nil // close first: the action then behaves exactly as its key
+				return a, res.act.run(a)
 			}
 			return a, nil
 		}

@@ -16,9 +16,9 @@
 │  History                                                                                                                │
 │    [               back                                                  Help / quit                                    │
 │    ]               forward                                                 ?               toggle this help             │
-│                                                                            esc             close overlay                │
-│  Open                                                                      q               quit                         │
-│    .               today's journal (new: from Journal Template)                                                         │
+│                                                                            :               command palette              │
+│  Open                                                                      esc             close overlay                │
+│    .               today's journal (new: from Journal Template)            q               quit                         │
 │    <               previous journal                                                                                     │
 │    >               next journal                                                                                         │
 │    C               calendar — move between journals                                                                     │

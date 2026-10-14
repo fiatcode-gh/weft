@@ -21,6 +21,7 @@ const (
 	overlayResultMarkTask
 	overlayResultCapture
 	overlayResultRename
+	overlayResultRun
 )
 
 // OverlayResult is the tagged outcome that an overlay's Update reports to the
@@ -33,6 +34,7 @@ type OverlayResult struct {
 	ref         *graph.UnlinkedRef
 	cmd         tea.Cmd
 	mark        taskMark
+	act         *action
 }
 
 func overlayCancel() OverlayResult { return OverlayResult{kind: overlayResultCancel} }
@@ -42,6 +44,9 @@ func overlayCapture() OverlayResult { return OverlayResult{kind: overlayResultCa
 
 // overlayRename asks the App to carry out the previewed rename.
 func overlayRename() OverlayResult { return OverlayResult{kind: overlayResultRename} }
+
+// overlayRun asks the App to close the overlay and run a read-view action.
+func overlayRun(act *action) OverlayResult { return OverlayResult{kind: overlayResultRun, act: act} }
 
 func overlayCommand(cmd tea.Cmd) OverlayResult {
 	return OverlayResult{kind: overlayResultCommand, cmd: cmd}

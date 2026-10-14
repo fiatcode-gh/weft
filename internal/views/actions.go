@@ -39,6 +39,13 @@ var readActions []action
 // readKeys maps a key string to its action; App.Update dispatches through it.
 var readKeys map[string]*action
 
+// paletteActions are the actions the command palette lists, in help order;
+// paletteLabels holds their fuzzy-match labels in lockstep.
+var (
+	paletteActions []*action
+	paletteLabels  []string
+)
+
 // unlessSyncing refuses run with blockIfSyncing's feedback while a git sync
 // rewrites the worktree.
 func unlessSyncing(run func(*App) tea.Cmd) func(*App) tea.Cmd {
@@ -157,6 +164,8 @@ func init() {
 
 		{keys: []string{"?"}, key: "?", title: "toggle this help", group: groupHelp, palette: true,
 			run: func(a *App) tea.Cmd { a.active = NewHelp(a.version, a.width, a.height); return nil }},
+		{keys: []string{":"}, key: ":", title: "command palette", group: groupHelp,
+			run: func(a *App) tea.Cmd { a.active = NewPalette(a.width, a.height); return nil }},
 		{key: "esc", title: "close overlay", group: groupHelp},
 		{keys: []string{keyQ, "ctrl+c"}, key: "q", title: "quit", group: groupHelp, palette: true,
 			run: func(*App) tea.Cmd { return tea.Quit }},
@@ -170,4 +179,11 @@ func init() {
 	}
 
 	helpGroups = buildHelpGroups(readActions)
+
+	for i := range readActions {
+		if act := &readActions[i]; act.palette {
+			paletteActions = append(paletteActions, act)
+			paletteLabels = append(paletteLabels, act.key+" "+act.title)
+		}
+	}
 }
