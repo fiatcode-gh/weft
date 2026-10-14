@@ -608,6 +608,55 @@ func (p *PageView) Reposition(top, row int) {
 	p.follow()
 }
 
+// At maps the screen cell (x, y) of the page column to the row drawn there and
+// the link whose text covers the cell (-1 when none). ok is false when no row
+// is drawn at y: an error page, an empty page, a negative coordinate, or y
+// below the last row or the window. A link cut by a fold marker is not hit
+// where the marker covers it.
+func (p *PageView) At(x, y int) (row, link int, ok bool) {
+	if p.err != nil || x < 0 || y < 0 || y >= p.vp.Height() {
+		return 0, -1, false
+	}
+	row = p.top + y
+	if row >= p.rowCount() {
+		return 0, -1, false
+	}
+	fr := p.fullIdx(row)
+	cut := -1
+	if n, folded := p.marks[row]; folded {
+		cut = p.markerFit(ansi.Strip(p.full[fr]), foldMarker(n))
+		if x >= cut {
+			return row, -1, true
+		}
+	}
+	for i, l := range p.result.Links {
+		if r, found := p.linkRow(i); !found || r != row || p.linkHidden(i) {
+			continue
+		}
+		col := ansi.StringWidth(p.full[fr][:l.Start-p.rowStart[fr]])
+		if x >= col && x < col+ansi.StringWidth(l.Display) {
+			return row, i, true
+		}
+	}
+	return row, -1, true
+}
+
+// SelectLink makes link i the cursor link and scrolls it into view, as
+// CycleLink does on landing.
+func (p *PageView) SelectLink(i int) {
+	p.cursor = i
+	p.scrollToCursor()
+}
+
+// SelectRow moves the row cursor to row r as a j or k step would: blank rows
+// snap to a neighbour, the window and the link cursor stay.
+func (p *PageView) SelectRow(r int) { p.Reposition(p.top, r) }
+
+// Scroll moves the window by n rows (clamped to the page). The cursor row
+// stays while it is on screen, else it moves to the nearest visible
+// non-blank row.
+func (p *PageView) Scroll(n int) { p.Reposition(p.top+n, p.row) }
+
 // ScrollToTask centres the view on the open todo at the given 0-based
 // ordinal (its position among the page's open todos in document order, as
 // recorded in render.Result.Tasks) and puts the cursor on it. No-op when the

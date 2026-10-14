@@ -107,8 +107,9 @@ type App struct {
 
 	// hint is a transient right-side status replacement. Set via setHint
 	// (which schedules a hintTTL tick) and cleared either at the top of the
-	// next tea.KeyPressMsg or by a matching hintExpireMsg. hintGen is bumped each
-	// time a hint is set so stale ticks ignore themselves.
+	// next tea.KeyPressMsg or accepted mouse event, or by a matching
+	// hintExpireMsg. hintGen is bumped each time a hint is set so stale
+	// ticks ignore themselves.
 	hint    string
 	hintGen int
 
@@ -823,6 +824,10 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.hint = ""
 		}
 		return a, nil
+	case tea.MouseClickMsg:
+		return a, a.mouseClick(m.Mouse())
+	case tea.MouseWheelMsg:
+		return a, a.mouseWheel(m.Mouse())
 	case tea.WindowSizeMsg:
 		a.width, a.height = m.Width, m.Height
 		switch {
