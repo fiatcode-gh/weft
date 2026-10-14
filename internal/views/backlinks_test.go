@@ -441,3 +441,75 @@ func TestBacklinksTagReferences(t *testing.T) {
 		}
 	}
 }
+
+func linkedRowOf(t *testing.T, b *Backlinks, from string) int {
+	t.Helper()
+	for i, r := range b.rows {
+		if r.ref != nil && r.ref.FromPage == from {
+			return i
+		}
+	}
+	t.Fatalf("no linked row from %q", from)
+	return -1
+}
+
+func TestBacklinksShowLinkedKeepsSelectedRef(t *testing.T) {
+	quietTerm(t)
+	b := NewBacklinks(loadFixture(t), "Hub", nil, 80, 30)
+	old := linkedRowOf(t, b, "kb/notes")
+	b.sel = old
+	want := *b.rows[old].ref
+
+	b.showLinked(fixtureIndexWith(t, map[string]string{"pages/Aaa.md": "- see [[Hub]]\n"}), "Hub")
+
+	if b.sel == old {
+		t.Fatalf("row index stayed %d; the new linking page should shift it", old)
+	}
+	if got := b.rows[b.sel].ref; got == nil || got.FromPage != want.FromPage || got.LineNumber != want.LineNumber {
+		t.Errorf("selected = %+v, want %s:%d", got, want.FromPage, want.LineNumber)
+	}
+}
+
+func TestBacklinksShowLinkedNewTargetSelectsFirst(t *testing.T) {
+	quietTerm(t)
+	idx := loadFixture(t)
+	b := NewBacklinks(idx, "Hub", nil, 80, 30)
+	b.sel = len(b.rows) - 1
+
+	b.showLinked(idx, "Alpha")
+
+	if b.target != "Alpha" {
+		t.Errorf("target = %q, want Alpha", b.target)
+	}
+	if b.sel != b.firstSelectable() {
+		t.Errorf("sel = %d, want first selectable %d", b.sel, b.firstSelectable())
+	}
+	if len(b.unlinked) != 0 {
+		t.Errorf("unlinked refs = %d, want none", len(b.unlinked))
+	}
+	for _, r := range b.rows {
+		if r.header || r.unl != nil {
+			t.Errorf("unexpected non-linked row %+v", r)
+		}
+	}
+}
+
+func TestBacklinksShowLinkedNearestWhenGone(t *testing.T) {
+	quietTerm(t)
+	b := NewBacklinks(loadFixture(t), "Hub", nil, 80, 30)
+	old := linkedRowOf(t, b, "kb/notes")
+	b.sel = old
+	n := len(b.rows)
+
+	b.showLinked(fixtureIndexWith(t, map[string]string{"pages/kb___notes.md": ""}), "Hub")
+
+	if len(b.rows) != n-1 {
+		t.Fatalf("rows = %d, want %d", len(b.rows), n-1)
+	}
+	if want := clampInt(old, 0, len(b.rows)-1); b.sel != want {
+		t.Errorf("sel = %d, want %d", b.sel, want)
+	}
+	if got := b.rows[b.sel].ref; got == nil || got.FromPage == "kb/notes" {
+		t.Errorf("selected = %+v, want a remaining ref", got)
+	}
+}

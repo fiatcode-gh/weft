@@ -10,9 +10,8 @@ exist, with no way to browse them. weft stays a navigator: the tree writes
 nothing and saves no structure.
 
 Out of scope: filtering or searching in the tree (the picker does that),
-rename, move, create or delete from the tree, a sidebar or split pane, mouse,
-showing journals or non-`.md` files, saving expansion, refreshing an open tree
-when the index changes (unit 10b).
+rename, move, create or delete from the tree, mouse,
+showing journals or non-`.md` files, saving expansion.
 
 ## Decisions
 
@@ -48,6 +47,9 @@ when the index changes (unit 10b).
 - **Read-only.** `c` opens the capture prompt over the tree, and the result
   shows in the panel through `SetError`. That is the only write path, and it is
   capture's own.
+- **Also a sidebar section.** The tree is section `1` of the sidebar (see
+  `sidebar.md`), with its own expansion map, not `treeOpen`. There it refreshes
+  on every reindex and keeps the selected node by its tree path.
 
 ## Traps
 
@@ -55,5 +57,5 @@ when the index changes (unit 10b).
   `pages/a/b.md` in a folders graph) show as two rows with the same label. The
   page with the smaller `Rel` holds the group row. Nothing tells them apart yet.
 - A `Name` made only of `/` has no segment, so the filename stem is the label.
-- An open tree does not refresh on reindex or live reload; reopen it.
+- The `F` overlay does not refresh on reindex or live reload; reopen it. The sidebar tree does.
 - Paths left in `treeOpen` after a reindex are ignored: they are only looked up.

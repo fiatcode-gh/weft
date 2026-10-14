@@ -104,15 +104,37 @@ func (t *Todos) marked(m taskMark, line int, idx *graph.Index) {
 	}
 	t.idx = idx
 	t.recompute()
+	t.reselect(oldSel, selKey, hadSel)
+}
+
+// reselect puts the selection back on the row at key when hadSel and it is
+// still listed, else on the row nearest oldSel.
+func (t *Todos) reselect(oldSel int, key taskKey, hadSel bool) {
 	t.sel = min(oldSel, max(0, len(t.visible)-1))
 	if hadSel {
 		for i, b := range t.visible {
-			if (taskKey{b.Page, b.LineNumber}) == selKey {
+			if (taskKey{b.Page, b.LineNumber}) == key {
 				t.sel = i
 				break
 			}
 		}
 	}
+}
+
+// refresh rebuilds the list from idx, keeping the filter, the done rows and
+// the selected task.
+func (t *Todos) refresh(idx *graph.Index) {
+	old := t.sel
+	key, had := t.selectedKey()
+	t.idx = idx
+	t.recompute()
+	t.reselect(old, key, had)
+}
+
+// clearDone drops the struck done rows and rebuilds from the current index.
+func (t *Todos) clearDone() {
+	t.done = doneRows{}
+	t.refresh(t.idx)
 }
 
 func (t *Todos) Update(key string) OverlayResult {

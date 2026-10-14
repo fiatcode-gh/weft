@@ -117,6 +117,7 @@ func buildHelpGroups(acts []action) []helpGroup {
 		editorHelp,
 		findHelp,
 		fromTable(groupMaintain),
+		fromTable(groupSidebar),
 		fromTable(groupHelp),
 	}
 }

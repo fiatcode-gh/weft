@@ -10,7 +10,7 @@ Why: agents and other editors write this graph all day. Before this, weft
 showed stale pages, links and todos until a manual reindex.
 
 Out of scope: operating-system file-change events (`fsnotify`), a configurable
-interval, turning polling off, refreshing open panels, reloading the editor
+interval, turning polling off, refreshing open overlays, reloading the editor
 buffer, reloading the config, incremental indexing.
 
 ## Decisions
@@ -47,7 +47,9 @@ buffer, reloading the config, incremental indexing.
   history is kept. New or changed index warnings still show.
 - **Overlays are untouched.** Picker, search, backlinks, todos, agenda,
   calendar, on-this-day, tree and help keep their rows until reopened, as after
-  `R`.
+  `R`. The sidebar is not an overlay: it refreshes after every rebuild (see
+  `sidebar.md`), keeping its selection, moving to the nearest row when the
+  selected item is gone, and using the current date for the agenda.
 - **Editor.** On each index load the open editor gets the new index, so `[[`
   and `#` completion sees pages created meanwhile, and its file is read again:
   if it differs from what the editor last read or wrote, the status line shows

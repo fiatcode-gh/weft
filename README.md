@@ -131,6 +131,8 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | `T`        | open TODO dashboard (`x` marks done / undoes) |
 | `A`        | open the agenda (overdue, today, next 7 days) |
 | `b`        | open backlinks for the current page (linked + unlinked refs) |
+| `1`-`5`    | sidebar: page tree, backlinks, todos, agenda, calendar; focuses it |
+| `\|`       | show / hide the sidebar             |
 | `?`        | toggle the help overlay             |
 | `:`        | command palette: every action with its key; type to filter, `Enter` runs it |
 | `n` / `N`  | cycle the link cursor (wiki-links and tags) |
@@ -151,7 +153,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | `S`        | sync the graph with git (commit → pull → push) |
 | `e`        | edit current page in-app at the cursor row |
 | `E`        | edit current page in `$EDITOR`      |
-| `Esc`      | close an overlay / leave editor     |
+| `Esc`      | close an overlay / leave editor / sidebar: focus back to the page |
 | `q`        | quit (from page view)               |
 
 ### In the editor
@@ -202,6 +204,20 @@ A task is a bullet that starts with a marker (`TODO`, `LATER`, `DOING`, `WAITING
 - **Keys.** `↑`/`↓`/`j`/`k` move. `→`/`l` expands a group, or steps into it when open. `←`/`h` collapses it, or steps to the parent. `Enter` opens a page (on a group with no page it expands or collapses). `c` captures. `Esc`/`q`/`F` close.
 - **State.** It opens on the page you are reading. Expanded groups last for the session and are never saved.
 - **Journals** are left out: use the calendar, `<`/`>` and `O`.
+
+### Sidebar
+
+- **What it is.** A left column with one of five lists next to the page: page tree, backlinks, todos, agenda or calendar. It is hidden by default.
+- **Keys.** `1`-`5` open a section and focus it; with the sidebar open they switch section. `|` hides the sidebar, or shows the last section again (the tree the first time).
+- **Focus.** The first row of the column shows which side has focus: `▶ 1 Page tree · esc: page` when the sidebar has it, `1 Page tree · 1: focus` when the page has. `Esc` (or the panel's own close key: `q`, `F` in the tree, `b` in backlinks) moves focus back to the page; the sidebar stays.
+- **Keys in the sidebar.** `1`-`5`, `|` and `Ctrl-C` work as on the page. Every other key goes to the panel, so `R`, `?` and `:` do not reach the page: press `Esc` first. The panels keep their own footers.
+- **Opening pages.** `Enter` opens the page (the task, the reference, the journal) on the right and keeps focus in the sidebar. `c` captures, with the result shown in the panel.
+- **Backlinks.** Linked references of the page now shown (`[[links]]` and tags), following the page however you got there. Unlinked references and linkify stay in `b`.
+- **Tasks.** `x` marks done or undoes, as in `T` and `A`, with the same refusals. Struck rows clear when you switch section or hide the sidebar.
+- **Refresh.** The panels follow every reindex (live reload, `R`, a write by weft) and keep the selected tree node, task, reference or date; if it is gone the selection moves to the nearest row. The agenda uses today's date.
+- **Width.** It needs 111 columns. On a narrower terminal `1`-`5` and `|` show `sidebar needs 111+ columns` and do nothing. If the terminal gets narrower than that the sidebar hides, and widening does not bring it back.
+- **Where it shows.** Not in the editor (it comes back when you leave, with the page focused). Overlays and prompts cover the whole screen as before.
+- **State.** Nothing is saved: visibility, section, focus and selections last for the session. The sidebar tree has its own expanded groups, apart from `F`.
 
 ### Renaming a page
 

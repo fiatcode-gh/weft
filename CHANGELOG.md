@@ -27,7 +27,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `:` opens a command palette listing every read-view action with its key; type to filter, `Enter` runs it. Help and the palette come from the same action table as the keys.
 - `F2` renames the page on screen: it rewrites every link and tag to it in every file (alias and `#Heading` kept), then renames the file. A preview comes first; if a file changed on disk the rename stops without overwriting it and `F2` with the same name finishes. See the README.
-- Live reload: weft checks the graph every 2 seconds and rebuilds the index when pages or journals change outside it (an agent, another editor, `git pull`). The page on screen updates and keeps its place; open panels keep their rows until reopened; `R` still rebuilds at once.
+- Live reload: weft checks the graph every 2 seconds and rebuilds the index when pages or journals change outside it (an agent, another editor, `git pull`). The page on screen updates and keeps its place; open overlays keep their rows until reopened; `R` still rebuilds at once.
+- A left sidebar (hidden by default) shows the page tree, backlinks of the page, todos, the agenda or the calendar next to the page. `1`-`5` open a section and focus it, `|` shows or hides it, `Esc` returns focus to the page. `Enter` opens a page on the right and keeps focus in the sidebar. The lists refresh after every reindex and keep their selection. It needs 111 columns. See the README.
 - The in-app editor says when its file changed outside weft (`Ctrl+S` merges or asks, as before), and its `[[`/`#` completion sees pages created meanwhile.
 - A page tree (`F`): pages grouped by folder and namespace, opened on the current page; `Enter` opens a page, groups expand for the session.
 - A row cursor in the read view, drawn as a highlighted row.

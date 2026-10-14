@@ -50,16 +50,18 @@ numbers, a configurable `O` offset list, and a template watcher.
   Capture is refused while a sync runs (`syncBusyMsg`).
 - **D5 Prompt layering and key order.** `CapturePrompt` is not an `Overlay`;
   `App` draws it over whatever is on screen (`spliceBottom`). `App.Update`
-  routes keys in this order: editor, capture prompt, open overlay, read-view
-  keys. The prompt takes every key but `ctrl+c`, which still quits. Because it
-  sits above overlays, closing it returns to the overlay beneath it.
+  routes keys in this order: editor, capture prompt, open overlay, focused
+  sidebar, read-view keys. The prompt takes every key but `ctrl+c`, which still
+  quits. Because it sits above overlays, closing it returns to the overlay
+  beneath it.
 - **D6 `overlayCapture` emitters.** Todos, agenda, backlinks, calendar,
   on-this-day and the page tree return `overlayCapture()` for `c`, and `App` calls `openCapture`.
   The picker and search keep `c` as typed text, and help has no use for it.
 - **D7 In-panel feedback.** A status-bar hint is hidden behind an overlay, so
-  `submitCapture` also calls `SetError` on the active overlay when it
+  `submitCapture` also calls `SetError` on the panel that has the keys
+  (`keyPanel`: the open overlay, else the focused sidebar panel) when it
   implements `panelFeedback`, in addition to the hint. The message is cleared
-  on the overlay's next key.
+  on the panel's next key.
 - **D8 Calendar grid.** `monthGrid` lays weeks out Monday first. Each day is a
   5-cell group: `[` `]` around the cursor day (selection style), a `•` after days
   that exist in `idx.Journals()`, bold underline for today. `PgUp`/`PgDn` use
@@ -81,8 +83,9 @@ numbers, a configurable `O` offset list, and a template watcher.
 - A template created outside weft is found after the next live-reload poll
   (about two seconds), or at once with `R`; edits to its content are picked up
   without either.
-- Lists under the prompt are not refreshed after a capture: the reindex runs,
-  but an open todos or agenda panel keeps its rows until it is reopened.
+- Lists under the prompt are not refreshed after a capture by the overlay: the
+  reindex runs, but an open todos or agenda overlay keeps its rows until it is
+  reopened. The sidebar's lists are refreshed.
 - `App.editCurrent`'s branch for a file that vanished after indexing stays
   template-free (`edit.EnsureFile`); it is a narrow race, not a creation path.
 - A journal wins its name over a same-named page (`graph-layout-config.md`), and

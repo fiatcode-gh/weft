@@ -49,8 +49,9 @@ bullets, inline dates, and `SCHEDULED:` on the task's first line.
 - **D9 `x` write path.** `App.markTask` refuses during sync, reads a snapshot,
   relocates with `graph.MarkTask`, writes with `edit.WriteFileIfUnchanged`,
   reindexes and rebuilds the panel. Rows marked done stay struck in `doneRows`
-  until the overlay closes; `x` on one restores the earlier marker, `Enter`
-  opens the page.
+  until the overlay closes (in the sidebar: until you switch section or hide
+  the sidebar, by key or a narrowing resize); `x` on one restores the earlier
+  marker, `Enter` opens the page.
 - **D10 Editor keys.** `Alt+S`, `Alt+E`, `Alt+P`: unbound, and they use the same
   ESC-prefix encoding as the existing `Alt+b/f/c/l/u/d`. `Alt+D` is delete-word.
 - **D11 Date prompt.** A modal one-row bar in the find bar's slot. Accepts

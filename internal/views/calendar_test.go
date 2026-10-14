@@ -200,3 +200,26 @@ func TestAppCalendarCaptureAndClose(t *testing.T) {
 		t.Errorf("esc should close calendar, active = %T", a.active)
 	}
 }
+
+func TestCalendarRefreshKeepsCursor(t *testing.T) {
+	quietTerm(t)
+	c := NewCalendar(loadFixture(t), "", calNow, 80, 30)
+	c.Update("right")
+	cursor := c.cursor
+	if c.hasJournal(cursor) {
+		t.Fatalf("setup: %v already has a journal", cursor)
+	}
+
+	next := calNow.AddDate(0, 0, 1).Add(3*time.Hour + 30*time.Minute)
+	c.refresh(fixtureIndexWith(t, map[string]string{"journals/2026_05_27.md": "- new day\n"}), next)
+
+	if !c.cursor.Equal(cursor) {
+		t.Errorf("cursor = %v, want %v", c.cursor, cursor)
+	}
+	if !c.hasJournal(cursor) {
+		t.Errorf("journal on %v not shown after refresh", cursor)
+	}
+	if want := day(2026, time.May, 27); !c.today.Equal(want) {
+		t.Errorf("today = %v, want civil %v", c.today, want)
+	}
+}

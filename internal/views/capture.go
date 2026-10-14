@@ -178,8 +178,9 @@ func spliceBottom(base, block string, height int) string {
 	return strings.Join(lines, "\n")
 }
 
-// panelFeedback is an overlay with an in-panel message line: the status bar
-// is hidden behind an overlay, so a capture's result goes there too.
+// panelFeedback is a panel with an in-panel message line (the open overlay or
+// the focused sidebar panel): the status bar is hidden behind an overlay, so a
+// capture's result goes there too.
 type panelFeedback interface{ SetError(msg string) }
 
 func (a *App) openCapture() {
@@ -238,7 +239,7 @@ func (a *App) submitCapture() tea.Cmd {
 	if err := a.reindex(); err != nil {
 		msg += " — reindex failed: " + err.Error()
 	}
-	if o, ok := a.active.(panelFeedback); ok {
+	if o, ok := a.keyPanel().(panelFeedback); ok {
 		o.SetError(msg)
 	}
 	return tea.Batch(a.setHint(msg), a.statusProbeCmd())

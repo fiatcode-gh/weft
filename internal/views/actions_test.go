@@ -10,7 +10,14 @@ import (
 
 func TestActionTableShape(t *testing.T) {
 	seen := map[string]int{}
+	var sidebarKeys []string
 	for i, act := range readActions {
+		if act.sidebar {
+			if len(act.keys) == 0 {
+				t.Errorf("entry %d (%q) is sidebar-flagged without keys", i, act.key)
+			}
+			sidebarKeys = append(sidebarKeys, act.keys...)
+		}
 		for _, k := range act.keys {
 			if j, dup := seen[k]; dup {
 				t.Errorf("key %q is in entries %d and %d", k, j, i)
@@ -32,6 +39,9 @@ func TestActionTableShape(t *testing.T) {
 				t.Errorf("entry %d shares the help row above and must not be palette-listed", i)
 			}
 		}
+	}
+	if want := "[1 2 3 4 5 |]"; fmt.Sprint(sidebarKeys) != want {
+		t.Errorf("sidebar-flagged keys %v, want %s", sidebarKeys, want)
 	}
 }
 

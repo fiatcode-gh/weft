@@ -38,13 +38,8 @@ type Tree struct {
 // NewTree builds the tree for idx with the groups in open expanded, opens the
 // ancestors of the current page's node and puts the cursor on that node.
 func NewTree(idx *graph.Index, current string, open treeExpansion, width, height int) *Tree {
-	t := &Tree{listBox: listBox{width: width, height: height}, roots: idx.PageTree(), open: open}
-	for _, r := range t.roots {
-		t.total += r.Count
-		if r.Page != nil {
-			t.total++
-		}
-	}
+	t := &Tree{listBox: listBox{width: width, height: height}, open: open}
+	t.setRoots(idx.PageTree())
 	var target *graph.TreeNode
 	if p, ok := idx.Resolve(current); ok && !p.IsJournal {
 		var ancestors []*graph.TreeNode
@@ -65,6 +60,39 @@ func NewTree(idx *graph.Index, current string, open treeExpansion, width, height
 		}
 	}
 	return t
+}
+
+// setRoots installs roots and recounts the pages in the tree.
+func (t *Tree) setRoots(roots []*graph.TreeNode) {
+	t.roots = roots
+	t.total = 0
+	for _, r := range roots {
+		t.total += r.Count
+		if r.Page != nil {
+			t.total++
+		}
+	}
+}
+
+// refresh rebuilds the tree from idx, keeping the expanded groups and the
+// selected node (by Path); when it is gone the cursor stays on the nearest row.
+func (t *Tree) refresh(idx *graph.Index) {
+	old := t.sel
+	path, had := "", false
+	if t.sel >= 0 && t.sel < len(t.rows) {
+		path, had = t.rows[t.sel].node.Path, true
+	}
+	t.setRoots(idx.PageTree())
+	t.flatten()
+	t.sel = clampInt(old, 0, max(0, len(t.rows)-1))
+	if had {
+		for i, r := range t.rows {
+			if r.node.Path == path {
+				t.sel = i
+				break
+			}
+		}
+	}
 }
 
 // findTreeNode returns the node holding the page at file path pagePath; on a

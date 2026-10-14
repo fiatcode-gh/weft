@@ -42,11 +42,12 @@ ordering, custom key bindings, the sidebar (11b), mouse (11c).
   and `q`. It is the only help-only entry.
 - **Help layout.** `buildHelpGroups` builds the read-view groups from the table
   in the order Browse, Links, History, Open, Sync, Edit, Editor, Find, Maintain,
-  Help / quit. Editor and Find stay hand-written (`editorHelp`, `findHelp`)
+  Sidebar, Help / quit. Editor and Find stay hand-written (`editorHelp`, `findHelp`)
   because the editor owns those keys; they sit between Edit and Maintain. The
   help page gains one row, `:  command palette`, kept short so the help page
   stays two columns at 130 wide.
-- **Palette contents.** The 24 actions with `palette: true`, in table order.
+- **Palette contents.** The 30 actions with `palette: true`, in table order,
+  including the six sidebar entries (`1`-`5` and `|`).
   Left out: `j/k`, `ctrl-d`, `ctrl-u`, `g/G`, `n/N` (the palette closes onto the
   same screen, so movement does nothing visible), `:` itself, and the `esc`
   row. Actions on the cursor row (`enter`, `tab`) are listed.

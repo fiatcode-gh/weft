@@ -195,3 +195,45 @@ func inFreshProcess(t *testing.T, env map[string]string) bool {
 	}
 	return false
 }
+
+// fixtureIndexWith is the fixture graph after a change: each rel → body is
+// written (directories created), or removed when body is "", and the graph is
+// indexed again.
+func fixtureIndexWith(t *testing.T, files map[string]string) *graph.Index {
+	t.Helper()
+	dir := cloneFixtureGraph(t)
+	for rel, body := range files {
+		p := filepath.Join(dir, rel)
+		if body == "" {
+			if err := os.Remove(p); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	lay, err := layout.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx, err := graph.BuildIndex(dir, lay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return idx
+}
+
+// fixtureBody is the checked-in content of a fixture graph file.
+func fixtureBody(t *testing.T, rel string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("../../testdata/fixture-graph", rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}

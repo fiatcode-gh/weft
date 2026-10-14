@@ -36,6 +36,20 @@ type Backlinks struct {
 // backlinks with the supplied unlinked references (the App computes those via
 // ripgrep on panel-open). Self-references are filtered from the linked list.
 func NewBacklinks(idx *graph.Index, target string, unlinked []graph.UnlinkedRef, width, height int) *Backlinks {
+	b := &Backlinks{
+		listBox:  listBox{width: width, height: height},
+		idx:      idx,
+		target:   target,
+		refs:     linkedRefs(idx, target),
+		unlinked: unlinked,
+	}
+	b.rows = b.buildRows()
+	b.sel = b.firstSelectable()
+	return b
+}
+
+// linkedRefs is the linked backlinks of target without the page's own links.
+func linkedRefs(idx *graph.Index, target string) []graph.Ref {
 	src := idx.BacklinksTo(target)
 	refs := make([]graph.Ref, 0, len(src))
 	for _, r := range src {
@@ -44,16 +58,40 @@ func NewBacklinks(idx *graph.Index, target string, unlinked []graph.UnlinkedRef,
 		}
 		refs = append(refs, r)
 	}
-	b := &Backlinks{
-		listBox:  listBox{width: width, height: height},
-		idx:      idx,
-		target:   target,
-		refs:     refs,
-		unlinked: unlinked,
+	return refs
+}
+
+// showLinked rebuilds the panel as a linked-only list for target on idx. For
+// the same target the selected reference stays selected by (page, line), or
+// the nearest row when it is gone; a new target selects the first row.
+func (b *Backlinks) showLinked(idx *graph.Index, target string) {
+	old := b.sel
+	var from string
+	var line int
+	had := false
+	if b.sel >= 0 && b.sel < len(b.rows) && b.rows[b.sel].ref != nil {
+		r := b.rows[b.sel].ref
+		from, line, had = r.FromPage, r.LineNumber, true
 	}
+	same := target == b.target
+	b.idx, b.target = idx, target
+	b.refs = linkedRefs(idx, target)
+	b.unlinked = nil
+	b.confirming = false
 	b.rows = b.buildRows()
-	b.sel = b.firstSelectable()
-	return b
+	if !same || len(b.rows) == 0 {
+		b.sel = b.firstSelectable()
+		return
+	}
+	b.sel = clampInt(old, 0, len(b.rows)-1)
+	if had {
+		for i, r := range b.rows {
+			if r.ref != nil && r.ref.FromPage == from && r.ref.LineNumber == line {
+				b.sel = i
+				break
+			}
+		}
+	}
 }
 
 // buildRows flattens linked refs, then (when present) an "Unlinked references"

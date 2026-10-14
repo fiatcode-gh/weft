@@ -146,6 +146,9 @@ type App struct {
 	// tree overlay for the session; never written anywhere.
 	treeOpen treeExpansion
 
+	// side is the sidebar column's state and panels; session only.
+	side sidebar
+
 	// Browser-style page history. hist[histIdx] is the entry currently on
 	// screen. histIdx == -1 before the first page is shown.
 	hist    []historyEntry
@@ -274,7 +277,7 @@ func (a *App) statusProbeCmd() tea.Cmd {
 func (a *App) tryInitPage() {
 	if a.page == nil && a.idx != nil && a.loadErr == nil && a.width > 0 {
 		name := a.todayJournalName()
-		a.page = newPageView(a.idx, name, a.width, a.height, a.folds)
+		a.page = newPageView(a.idx, name, a.pageWidth(), a.height, a.folds)
 		a.hist = []historyEntry{{page: name, offset: 0, row: -1, cursor: -1, taskOrdinal: -1}}
 		a.histIdx = 0
 	}
@@ -364,6 +367,26 @@ func (a *App) navigateFocusingLink(name, backTarget string) {
 	a.hist[a.histIdx].cursor = a.page.Cursor()
 }
 
+// openResult navigates to what an overlay or sidebar panel asked to open and
+// reports whether res was one of those navigation results.
+func (a *App) openResult(res OverlayResult) bool {
+	switch res.kind {
+	case overlayResultOpen:
+		if res.page != "" {
+			a.navigate(res.page)
+		}
+	case overlayResultOpenTask:
+		a.navigateToTask(res.page, res.taskOrdinal)
+	case overlayResultFocusLink:
+		a.navigateFocusingLink(res.page, res.target)
+	case overlayResultHighlight:
+		a.navigateHighlighting(res.page, res.target)
+	default:
+		return false
+	}
+	return true
+}
+
 // navigateHighlighting navigates to name and highlights occurrences of term
 // (the page navigated from) on the destination, scrolling to the first — for
 // unlinked references, which have no link to focus a cursor on. One-shot: the
@@ -431,7 +454,7 @@ func (a *App) reindexTo(name string) error {
 		// Same-page rebuild: keep the reader's place, exactly like the
 		// async indexLoadedMsg path. Restore clamps if the page shrank.
 		off, row, cur := a.page.Offset(), a.page.CursorRow(), a.page.Cursor()
-		a.page = newPageView(a.idx, name, a.width, a.height, a.folds)
+		a.page = newPageView(a.idx, name, a.pageWidth(), a.height, a.folds)
 		a.page.Restore(off, row, cur)
 	}
 	if fresh := a.newIndexWarnings(idx.Warnings); fresh && len(idx.Warnings) > 0 {
@@ -681,7 +704,15 @@ func (a *App) linkify(ref *graph.UnlinkedRef, target string) tea.Cmd {
 	return a.statusProbeCmd()
 }
 
+// Update runs update, then brings the sidebar up to date with the index and
+// the page on screen: one funnel for every reindex and navigation path.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m, cmd := a.update(msg)
+	a.syncSidebar()
+	return m, cmd
+}
+
+func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m := msg.(type) {
 	case indexLoadedMsg:
 		if m.gen != a.indexGen {
@@ -713,7 +744,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// for the same page so it picks up new links/todos — but keep the
 			// user's place. Restore clamps if the page shrank.
 			off, row, cur := a.page.Offset(), a.page.CursorRow(), a.page.Cursor()
-			a.page = newPageView(a.idx, a.page.Page(), a.width, a.height, a.folds)
+			a.page = newPageView(a.idx, a.page.Page(), a.pageWidth(), a.height, a.folds)
 			a.page.Restore(off, row, cur)
 			if a.editor == nil {
 				// An open editor still owns readFrom for its own exit.
@@ -792,11 +823,15 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 	case tea.WindowSizeMsg:
 		a.width, a.height = m.Width, m.Height
-		if a.page != nil {
-			a.page.SetSize(m.Width, m.Height)
-		} else {
+		switch {
+		case a.side.shown && a.width < sidebarMinWidth:
+			a.hideSidebar()
+		case a.page != nil:
+			a.page.SetSize(a.pageWidth(), m.Height)
+		default:
 			a.tryInitPage()
 		}
+		a.side.setSize(a.height)
 		// Propagate the new size to any open overlay so its scroll-window
 		// budget and inner-width tracking stay correct on resize.
 		if a.active != nil {
@@ -867,7 +902,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.placeFromEditor(at)
 				default:
 					off, row, cur := a.page.Offset(), a.page.CursorRow(), a.page.Cursor()
-					a.page = newPageView(a.idx, a.page.Page(), a.width, a.height, a.folds)
+					a.page = newPageView(a.idx, a.page.Page(), a.pageWidth(), a.height, a.folds)
 					a.page.Restore(off, row, cur)
 					if place {
 						a.placeFromEditor(at)
@@ -937,20 +972,6 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.navigate(res.page)
 				a.active = nil
 				return a, a.enterEditor()
-			case overlayResultOpen:
-				if res.page != "" {
-					a.navigate(res.page)
-				}
-				a.active = nil
-			case overlayResultOpenTask:
-				a.navigateToTask(res.page, res.taskOrdinal)
-				a.active = nil
-			case overlayResultFocusLink:
-				a.navigateFocusingLink(res.page, res.target)
-				a.active = nil
-			case overlayResultHighlight:
-				a.navigateHighlighting(res.page, res.target)
-				a.active = nil
 			case overlayResultCapture:
 				a.openCapture()
 			case overlayResultRename:
@@ -958,8 +979,21 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case overlayResultRun:
 				a.active = nil // close first: the action then behaves exactly as its key
 				return a, res.act.run(a)
+			default:
+				if a.openResult(res) {
+					a.active = nil
+				}
 			}
 			return a, nil
+		}
+		if a.sidebarFocused() {
+			if key == "ctrl+c" {
+				return a, tea.Quit
+			}
+			if act := readKeys[key]; act != nil && act.sidebar {
+				return a, act.run(a)
+			}
+			return a, a.sidebarKey(key)
 		}
 		if act := readKeys[key]; act != nil {
 			return a, act.run(a)
@@ -1010,7 +1044,7 @@ func (a *App) frame() string {
 	if a.active != nil {
 		base = a.centerOverlay(a.active.View())
 	} else {
-		base = a.page.View() + "\n" + a.statusBar()
+		base = a.readView()
 	}
 	if p := a.bottomPrompt(); p != nil {
 		block, _, _ := p.View()
@@ -1096,14 +1130,14 @@ func ruleRow(width int) string {
 // sync goroutine is rewriting the worktree: a save landing mid
 // `pull --rebase` is overwritten by the rebase checkout and silently lost,
 // and `add -A` can stage editor temp files. Reports blocked=true while a
-// sync runs. Feedback goes into the open overlay when it has an in-panel
-// channel — the status bar is hidden behind an overlay — falling back to a
-// status-bar hint; cmd is non-nil only for that fallback.
+// sync runs. Feedback goes into the open overlay or the focused sidebar panel
+// when it has an in-panel channel — the status bar is hidden behind an
+// overlay — falling back to a status-bar hint; cmd is non-nil only for that fallback.
 func (a *App) blockIfSyncing() (cmd tea.Cmd, blocked bool) {
 	if !a.syncing {
 		return nil, false
 	}
-	switch o := a.active.(type) {
+	switch o := a.keyPanel().(type) {
 	case *Backlinks:
 		o.SetError(syncBusyMsg)
 		return nil, true

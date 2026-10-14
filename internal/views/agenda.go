@@ -61,6 +61,20 @@ func (a *Agenda) selectedKey() (taskKey, bool) {
 	return taskKey{b.Page, b.LineNumber}, true
 }
 
+// refresh rebuilds the sections from idx for today, keeping the done rows and
+// the selected task.
+func (a *Agenda) refresh(idx *graph.Index, today time.Time) {
+	key, had := a.selectedKey()
+	a.idx, a.today = idx, today
+	a.recompute(key, had)
+}
+
+// clearDone drops the struck done rows and rebuilds from the current index.
+func (a *Agenda) clearDone() {
+	a.done = doneRows{}
+	a.refresh(a.idx, a.today)
+}
+
 // marked folds a successful write of m (the task now sits on line) into the
 // panel, with the same semantics as Todos.marked.
 func (a *Agenda) marked(m taskMark, line int, idx *graph.Index) {

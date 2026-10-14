@@ -390,3 +390,102 @@ func TestTodosOpenTaskOnStaleDoneKeyStaysVisible(t *testing.T) {
 		t.Errorf("stale done row still listed; visible = %v", seen)
 	}
 }
+
+// todosMarkedDone marks the task whose text contains text on page as DONE the
+// way the App does: the file changes, then marked gets the new index.
+func todosMarkedDone(t *testing.T, td *Todos, page, rel, text string) {
+	t.Helper()
+	var row graph.TodoBullet
+	for _, b := range td.visible {
+		if b.Page == page && strings.Contains(b.Text, text) {
+			row = b
+		}
+	}
+	if row.Page == "" {
+		t.Fatalf("no task %q on %s", text, page)
+	}
+	body := strings.Replace(fixtureBody(t, rel), "- "+row.Marker+" ", "- DONE ", 1)
+	td.marked(taskMark{page: page, line: row.LineNumber, from: row.Marker, to: "DONE"}, row.LineNumber,
+		fixtureIndexWith(t, map[string]string{rel: body}))
+}
+
+func todosRowOf(t *testing.T, td *Todos, text string) int {
+	t.Helper()
+	for i, b := range td.visible {
+		if strings.Contains(b.Text, text) {
+			return i
+		}
+	}
+	t.Fatalf("no row %q", text)
+	return -1
+}
+
+func TestTodosRefreshKeepsSelectionAndDoneRows(t *testing.T) {
+	quietTerm(t)
+	td := NewTodos(loadFixture(t), 100, 30)
+	todosMarkedDone(t, td, "Alpha", "pages/Alpha.md", "Buy milk")
+	td.sel = todosRowOf(t, td, "Replace the bench grinder belt")
+	old := td.sel
+	key, _ := td.selectedKey()
+
+	idx := fixtureIndexWith(t, map[string]string{
+		"pages/Alpha.md": strings.Replace(fixtureBody(t, "pages/Alpha.md"), "- TODO Buy milk", "- DONE Buy milk", 1),
+		"pages/Aaa.md":   "- TODO Added elsewhere\n",
+	})
+	td.refresh(idx)
+
+	if td.sel == old {
+		t.Fatalf("row index stayed %d; the added task should shift it", old)
+	}
+	if got, _ := td.selectedKey(); got != key {
+		t.Errorf("selected = %+v, want %+v", got, key)
+	}
+	if len(td.done) != 1 {
+		t.Fatalf("done rows = %d, want 1", len(td.done))
+	}
+	for k := range td.done {
+		if !slices.ContainsFunc(td.visible, func(b graph.TodoBullet) bool { return (taskKey{b.Page, b.LineNumber}) == k }) {
+			t.Errorf("done row %+v no longer listed", k)
+		}
+	}
+}
+
+func TestTodosRefreshNearestWhenGone(t *testing.T) {
+	quietTerm(t)
+	td := NewTodos(loadFixture(t), 100, 30)
+	td.sel = todosRowOf(t, td, "Tidy up the hub")
+	old := td.sel
+	key, _ := td.selectedKey()
+
+	td.refresh(fixtureIndexWith(t, map[string]string{"pages/Hub.md": "title:: Hub\n"}))
+
+	if want := min(old, len(td.visible)-1); td.sel != want {
+		t.Errorf("sel = %d, want %d", td.sel, want)
+	}
+	if got, _ := td.selectedKey(); got == key {
+		t.Errorf("gone task %+v still selected", got)
+	}
+}
+
+func TestTodosClearDoneDropsStruckRows(t *testing.T) {
+	quietTerm(t)
+	td := NewTodos(loadFixture(t), 100, 30)
+	todosMarkedDone(t, td, "Alpha", "pages/Alpha.md", "Buy milk")
+	if len(td.done) != 1 {
+		t.Fatalf("setup: done rows = %d, want 1", len(td.done))
+	}
+	struck := td.done
+
+	td.clearDone()
+
+	if len(td.done) != 0 {
+		t.Errorf("done = %v, want empty", td.done)
+	}
+	for k := range struck {
+		for _, b := range td.visible {
+			if (taskKey{b.Page, b.LineNumber}) == k {
+				t.Errorf("struck row %+v still listed as %q", k, b.Marker)
+			}
+		}
+	}
+}
