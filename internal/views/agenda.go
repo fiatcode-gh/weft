@@ -168,7 +168,7 @@ func (a *Agenda) View() string {
 	}
 
 	section := func(i int) string { return a.items[i].Section.String() }
-	start, end := groupedWindow(len(a.items), a.sel, a.visibleRows(), section)
+	start, end := a.groupWindow(len(a.items), a.visibleRows(), section)
 	if start > 0 {
 		sb.WriteString(styleFaint.Render(fmt.Sprintf("   ↑ %d more above", start)))
 		sb.WriteString("\n")

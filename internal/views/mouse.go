@@ -62,7 +62,7 @@ func (a *App) mouseWheel(m tea.Mouse) tea.Cmd {
 	case a.capture != nil || a.rename != nil:
 		return nil
 	case a.active != nil:
-		return a.overlayResult(a.active.Update(wheelKey(dir)))
+		return a.overlayResult(sendKey(a.active, wheelKey(dir)))
 	}
 	return a.readWheel(m.X, m.Y, dir)
 }
@@ -120,6 +120,18 @@ type rowPanel interface {
 	Overlay
 	selected() int
 	drawnRows() *rowMap
+	anchor()
+	dropAnchor()
+}
+
+// sendKey is how a key or wheel step reaches a panel: a list panel's window
+// is released from a click's anchor first, so the next one after a click
+// centres the selection again.
+func sendKey(p Overlay, key string) OverlayResult {
+	if r, ok := p.(rowPanel); ok {
+		r.dropAnchor()
+	}
+	return p.Update(key)
 }
 
 // pickRow is a click on item: on the selected item it is the enter key, else
@@ -157,7 +169,9 @@ func clickPanel(p Overlay, x, y int) OverlayResult {
 	if !ok {
 		return OverlayResult{}
 	}
-	return pickRow(rp, item)
+	res := pickRow(rp, item)
+	rp.anchor()
+	return res
 }
 
 // boxOrigin is the top-left screen cell of a w by h box that centerOverlay

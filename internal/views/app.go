@@ -956,7 +956,7 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if key == "ctrl+c" {
 				return a, tea.Quit
 			}
-			return a, a.overlayResult(a.active.Update(key))
+			return a, a.overlayResult(sendKey(a.active, key))
 		}
 		if a.sidebarFocused() {
 			if key == "ctrl+c" {

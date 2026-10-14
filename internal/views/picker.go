@@ -221,7 +221,7 @@ func (p *Picker) View() string {
 		b.WriteString("\n")
 	}
 
-	start, end := scrollWindow(p.sel, len(p.matches), p.visibleRows())
+	start, end := p.window(len(p.matches), p.visibleRows())
 	if start > 0 {
 		b.WriteString(styleFaint.Render(fmt.Sprintf("  ↑ %d more above", start)))
 		b.WriteString("\n")

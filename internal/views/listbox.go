@@ -14,6 +14,57 @@ type listBox struct {
 	width, height int
 	sel           int
 	drawn         rowMap // body lines of the selectable items the last View drew
+	drawnTop      int    // first item of the window the last View drew
+
+	// anchored and anchorTop: a click sets them so the list keeps the clicked
+	// frame's window until the next key or wheel step reaches the panel (or
+	// the selection leaves that window). Keys never set them.
+	anchored  bool
+	anchorTop int
+}
+
+// anchor pins the window the last View drew.
+func (b *listBox) anchor() { b.anchored, b.anchorTop = true, b.drawnTop }
+
+// dropAnchor returns the list to centring its selection.
+func (b *listBox) dropAnchor() { b.anchored = false }
+
+// window is the [start, end) slice of count items to draw in rows rows:
+// scrollWindow's centred window, unless a click anchored the list and the
+// selection is still drawn in the anchored one (or is the picker's create
+// row, drawn after the window), which is then kept as is.
+func (b *listBox) window(count, rows int) (start, end int) {
+	if b.anchored {
+		s := b.anchorTop
+		e := min(count, s+rows)
+		if s < count && b.sel >= s && (b.sel < e || b.sel >= count) {
+			b.drawnTop = s
+			return s, e
+		}
+		b.anchored = false
+	}
+	start, end = scrollWindow(b.sel, count, rows)
+	b.drawnTop = start
+	return start, end
+}
+
+// groupWindow is window for a list whose rows carry group headers (see
+// groupedWindow): the anchored start is kept while the selection is inside
+// the window it yields.
+func (b *listBox) groupWindow(n, budget int, group func(int) string) (start, end int) {
+	if b.anchored {
+		s := b.anchorTop
+		if s < n {
+			if e := groupedEnd(n, s, budget, group); b.sel >= s && b.sel < e {
+				b.drawnTop = s
+				return s, e
+			}
+		}
+		b.anchored = false
+	}
+	start, end = groupedWindow(n, b.sel, budget, group)
+	b.drawnTop = start
+	return start, end
 }
 
 // selected is the selected item.
@@ -93,6 +144,21 @@ func groupedWindow(n, sel, budget int, group func(int) string) (start, end int) 
 		return 0, 0
 	}
 
+	// Centre the selection in the window. If sel ends up past the rendered end
+	// (because the chosen start left too little budget), nudge start forward
+	// until sel fits — guaranteed to terminate because start can rise to sel.
+	start = max(0, sel-budget/2)
+	end = groupedEnd(n, start, budget, group)
+	for end <= sel && start < sel {
+		start++
+		end = groupedEnd(n, start, budget, group)
+	}
+	return start, end
+}
+
+// groupedEnd is the end of the window of groupedWindow's row costs that
+// starts at start and fits in budget terminal rows.
+func groupedEnd(n, start, budget int, group func(int) string) int {
 	// Rows the i-th row adds when i follows prevGroup at i-1.
 	cost := func(i int, prevGroup string) int {
 		c := 1
@@ -105,30 +171,17 @@ func groupedWindow(n, sel, budget int, group func(int) string) (start, end int) 
 		return c
 	}
 
-	walkForward := func(s int) int {
-		used := 0
-		prev := ""
-		e := s
-		for i := s; i < n; i++ {
-			c := cost(i, prev)
-			if used+c > budget {
-				break
-			}
-			used += c
-			prev = group(i)
-			e = i + 1
+	used := 0
+	prev := ""
+	e := start
+	for i := start; i < n; i++ {
+		c := cost(i, prev)
+		if used+c > budget {
+			break
 		}
-		return e
+		used += c
+		prev = group(i)
+		e = i + 1
 	}
-
-	// Centre the selection in the window. If sel ends up past the rendered end
-	// (because the chosen start left too little budget), nudge start forward
-	// until sel fits — guaranteed to terminate because start can rise to sel.
-	start = max(0, sel-budget/2)
-	end = walkForward(start)
-	for end <= sel && start < sel {
-		start++
-		end = walkForward(start)
-	}
-	return start, end
+	return e
 }

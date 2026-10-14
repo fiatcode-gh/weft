@@ -231,7 +231,7 @@ func (s *SearchView) View() string {
 	if ctxBudget < 8 {
 		ctxBudget = 8
 	}
-	start, end := scrollWindow(s.sel, len(s.hits), s.visibleRows())
+	start, end := s.window(len(s.hits), s.visibleRows())
 	if start > 0 {
 		b.WriteString(styleFaint.Render(fmt.Sprintf("   ↑ %d more above", start)))
 		b.WriteString("\n")

@@ -242,7 +242,7 @@ func (a *App) keyPanel() Overlay {
 
 // sidebarKey hands key to the focused sidebar panel and acts on its result.
 func (a *App) sidebarKey(key string) tea.Cmd {
-	return a.sidebarResult(a.side.panel().Update(key))
+	return a.sidebarResult(sendKey(a.side.panel(), key))
 }
 
 // sidebarResult acts on what the focused sidebar panel's key (or click)

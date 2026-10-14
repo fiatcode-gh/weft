@@ -213,7 +213,7 @@ func (b *Backlinks) View() string {
 		sb.WriteString("\n")
 	}
 	rowBudget := inner - 3
-	start, end := scrollWindow(b.sel, len(b.rows), b.visibleRows())
+	start, end := b.window(len(b.rows), b.visibleRows())
 	if start > 0 {
 		sb.WriteString(styleFaint.Render(fmt.Sprintf("   ↑ %d more above", start)))
 		sb.WriteString("\n")

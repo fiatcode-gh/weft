@@ -97,7 +97,7 @@ func (o *OnThisDay) View() string {
 		sb.WriteString(styleFaint.Render(clamp("  nothing on this day — no journal from a week ago, a month ago or this date in earlier years", inner)))
 		sb.WriteString("\n")
 	} else {
-		start, end := scrollWindow(o.sel, len(o.entries), o.visibleEntries())
+		start, end := o.window(len(o.entries), o.visibleEntries())
 		if start > 0 {
 			sb.WriteString(styleFaint.Render(fmt.Sprintf("   ↑ %d more above", start)))
 			sb.WriteString("\n")

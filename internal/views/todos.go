@@ -203,7 +203,7 @@ func (t *Todos) visibleRows() int {
 // that t.sel is always inside it, accounting for the row cost of group
 // headers and inter-group blank lines (1 row each).
 func (t *Todos) computeWindow() (start, end int) {
-	return groupedWindow(len(t.visible), t.sel, t.visibleRows(), func(i int) string { return t.visible[i].Page })
+	return t.groupWindow(len(t.visible), t.visibleRows(), func(i int) string { return t.visible[i].Page })
 }
 
 func (t *Todos) View() string {

@@ -196,7 +196,7 @@ func (t *Tree) View() string {
 		sb.WriteString(styleFaint.Render(clamp("  no pages — journals are not listed here", inner)))
 		sb.WriteString("\n")
 	} else {
-		start, end := scrollWindow(t.sel, len(t.rows), t.visibleRows())
+		start, end := t.window(len(t.rows), t.visibleRows())
 		if start > 0 {
 			sb.WriteString(styleFaint.Render(fmt.Sprintf("   ↑ %d more above", start)))
 			sb.WriteString("\n")
