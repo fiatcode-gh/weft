@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/fiatcode-gh/weft/v2/internal/edit"
 	"github.com/fiatcode-gh/weft/v2/internal/graph"
 )
@@ -64,6 +66,38 @@ func (a *App) createJournalAndReindex(day time.Time) error {
 	}
 	if err := a.reindex(); err != nil {
 		return fmt.Errorf("reindex failed: %w", err)
+	}
+	return nil
+}
+
+// gotoToday opens today's journal, creating its file first when it has none.
+// Callers gate it on a running sync (unlessSyncing).
+func (a *App) gotoToday() tea.Cmd {
+	day := a.today()
+	today := a.lay.JournalName(day)
+	var probe tea.Cmd
+	if _, ok := a.idx.JournalOn(day); !ok {
+		if err := a.createJournalAndReindex(day); err != nil {
+			return a.setHint(err.Error())
+		}
+		// Creating the journal wrote a new file (from the journal
+		// template, or empty without one) — refresh the indicator.
+		probe = a.statusProbeCmd()
+	}
+	if a.page.Page() != today {
+		a.navigate(today)
+	}
+	return probe
+}
+
+// stepJournal moves to the neighbouring journal in direction dir; on a journal
+// with none that way it says none, and on any other page it does nothing.
+func (a *App) stepJournal(dir int, none string) tea.Cmd {
+	page := a.page.Page()
+	if name, ok := a.idx.JournalNeighbor(page, dir); ok {
+		a.navigate(name)
+	} else if _, ok := a.idx.JournalDateOf(page); ok {
+		return a.setHint(none)
 	}
 	return nil
 }

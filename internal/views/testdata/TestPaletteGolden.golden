@@ -1,0 +1,25 @@
+╭──────────────────────────────────────────────────────────────────────────╮
+│                                                                          │
+│  Commands                                                                │
+│                                                                          │
+│  >                                                                       │
+│  ──────────────────────────────────────────────────────────────────────  │
+│   ▶ fold / unfold heading or bullet                              tab     │
+│     fold page: bullets → headings → all                          z       │
+│     follow link ([[Page#Heading]] opens at the heading)          enter   │
+│     back                                                         [       │
+│     forward                                                      ]       │
+│     today's journal (new: from Journal Template)                 .       │
+│     previous journal                                             <       │
+│     next journal                                                 >       │
+│     calendar — move between journals                             C       │
+│     on this day: week, month, years ago                          O       │
+│     picker — find any page                                       ctrl-p  │
+│     page tree: folders and namespaces                            F       │
+│     search the graph (ripgrep)                                   /       │
+│     backlinks + unlinked refs for the current page               b       │
+│    ↓ 10 more below                                                       │
+│                                                                          │
+│  ↑/↓ select · enter run · esc cancel                                     │
+│                                                                          │
+╰──────────────────────────────────────────────────────────────────────────╯

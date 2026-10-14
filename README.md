@@ -132,6 +132,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | `A`        | open the agenda (overdue, today, next 7 days) |
 | `b`        | open backlinks for the current page (linked + unlinked refs) |
 | `?`        | toggle the help overlay             |
+| `:`        | command palette: every action with its key; type to filter, `Enter` runs it |
 | `n` / `N`  | cycle the link cursor (wiki-links and tags) |
 | `Enter`    | follow link (`[[Page#Heading]]` opens at the heading) / open selection |
 | `[` / `]`  | back / forward in page history      |
@@ -213,6 +214,13 @@ A task is a bullet that starts with a marker (`TODO`, `LATER`, `DOING`, `WAITING
 - **Order of writes.** weft rewrites the linking files one by one, then renames the page's file last. Each write checks the file has not changed since the preview, and a rename never overwrites an existing file. `y` is refused while the index is updating.
 - **A file changed on disk.** The rename stops at the first file that changed, overwrites nothing, and shows what was rewritten and what was not. Links already rewritten point to the new name and stay unresolved until the page is renamed, so press `F2` and type the same new name again to finish.
 - **Undo.** There is none. Git is the undo: sync with `S` or commit first, then restore with git. Back/forward history and folds follow the renamed page.
+
+### Command palette
+
+`:` in the read view opens a list of every action with its key, in help order. Movement keys (`j`/`k`, the arrows, `Ctrl-D`/`Ctrl-U`, `g`/`G`, `n`/`N`) and the palette itself are left out.
+Typing filters on the name and the key, the same fuzzy match as the picker. `↑`/`↓` (`Ctrl-K`/`Ctrl-J`) move.
+`Enter` closes the palette and runs the action exactly as its key does, so a refusal shows its usual message and `Enter`/`Tab` act on the row the cursor was on. `Esc` closes it.
+`:` in the editor, a prompt or a panel is plain text.
 
 ## What gets rendered
 

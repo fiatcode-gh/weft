@@ -59,83 +59,66 @@ type helpGroup struct {
 	rows  []helpRow
 }
 
-var helpGroups = []helpGroup{
-	{"Browse", []helpRow{
-		{"j / k", "cursor down / up a row"},
-		{"ctrl-d", "half page down"},
-		{"ctrl-u", "half page up"},
-		{"g / G", "top / bottom"},
-		{"tab", "fold / unfold heading or bullet"},
-		{"z", "fold page: bullets → headings → all"},
-	}},
-	{"Links", []helpRow{
-		{"n / N", "next / previous link or tag"},
-		{"enter", "follow link ([[Page#Heading]] opens at the heading)"},
-	}},
-	{"History", []helpRow{
-		{"[", "back"},
-		{"]", "forward"},
-	}},
-	{"Open", []helpRow{
-		{".", "today's journal (new: from Journal Template)"},
-		{"<", "previous journal"},
-		{">", "next journal"},
-		{"C", "calendar — move between journals"},
-		{"O", "on this day: week, month, years ago"},
-		{"ctrl-p", "picker — find any page"},
-		{"F", "page tree: folders and namespaces"},
-		{"/", "search the graph (ripgrep)"},
-		{"b", "backlinks + unlinked refs for the current page"},
-		{"T", "todos dashboard (x: done / undo)"},
-		{"A", "agenda: overdue, today, next 7 days"},
-	}},
-	{"Sync", []helpRow{
-		{"S", "commit, pull & push the graph (git)"},
-	}},
-	{"Edit", []helpRow{
-		{"c", "capture a line into today's journal (tab: TODO)"},
-		{"e", "edit in-app at the cursor row"},
-		{"E", "edit current page in $EDITOR"},
-	}},
-	{"Editor", []helpRow{
-		{"ctrl-s", "save; merges outside edits, asks on a clash"},
-		{"esc", "leave editor (prompts if unsaved)"},
-		{"ctrl-z / ctrl-y", "undo / redo"},
-		{"shift-arrows", "select (also home/end, pgup/pgdn, words)"},
-		{"ctrl-a", "select all"},
-		{"ctrl-c / ctrl-x", "copy / cut (line if nothing selected)"},
-		{"ctrl-v", "paste the last copy made here"},
-		{"alt-← / alt-→", "word left / right"},
-		{"home / end", "line start / end"},
-		{"pgup / pgdn", "page up / down"},
-		{"enter", "continue bullet (empty bullet ends it)"},
-		{"tab / shift-tab", "indent / de-indent with children"},
-		{"alt-↑ / alt-↓", "move bullet with children"},
-		{"ctrl-t", "cycle marker: open → DONE → plain → TODO"},
-		{"alt-s / alt-e", "set scheduled / deadline date"},
-		{"alt-p", "cycle priority A → B → C → none"},
-		{"ctrl-r", "live preview ↔ source"},
-		{"[[", "link completion (↑/↓, enter/tab, esc)"},
-		{"#", "tag completion after # + letter"},
-	}},
-	{"Find", []helpRow{
-		{"ctrl-f", "open find"},
-		{"enter / ↓", "next match"},
-		{"↑", "previous match"},
-		{"tab", "switch find ↔ replace"},
-		{"enter", "replace (replace field)"},
-		{"ctrl-a", "replace all (replace field)"},
-		{"esc", "close find"},
-	}},
-	{"Maintain", []helpRow{
-		{"R", "rebuild index"},
-		{"F2", "rename page and its links"},
-	}},
-	{"Help / quit", []helpRow{
-		{"?", "toggle this help"},
-		{"esc", "close overlay"},
-		{"q", "quit"},
-	}},
+// helpGroups is built in actions.go's init from the action table.
+var helpGroups []helpGroup
+
+var editorHelp = helpGroup{"Editor", []helpRow{
+	{"ctrl-s", "save; merges outside edits, asks on a clash"},
+	{"esc", "leave editor (prompts if unsaved)"},
+	{"ctrl-z / ctrl-y", "undo / redo"},
+	{"shift-arrows", "select (also home/end, pgup/pgdn, words)"},
+	{"ctrl-a", "select all"},
+	{"ctrl-c / ctrl-x", "copy / cut (line if nothing selected)"},
+	{"ctrl-v", "paste the last copy made here"},
+	{"alt-← / alt-→", "word left / right"},
+	{"home / end", "line start / end"},
+	{"pgup / pgdn", "page up / down"},
+	{"enter", "continue bullet (empty bullet ends it)"},
+	{"tab / shift-tab", "indent / de-indent with children"},
+	{"alt-↑ / alt-↓", "move bullet with children"},
+	{"ctrl-t", "cycle marker: open → DONE → plain → TODO"},
+	{"alt-s / alt-e", "set scheduled / deadline date"},
+	{"alt-p", "cycle priority A → B → C → none"},
+	{"ctrl-r", "live preview ↔ source"},
+	{"[[", "link completion (↑/↓, enter/tab, esc)"},
+	{"#", "tag completion after # + letter"},
+}}
+
+var findHelp = helpGroup{"Find", []helpRow{
+	{"ctrl-f", "open find"},
+	{"enter / ↓", "next match"},
+	{"↑", "previous match"},
+	{"tab", "switch find ↔ replace"},
+	{"enter", "replace (replace field)"},
+	{"ctrl-a", "replace all (replace field)"},
+	{"esc", "close find"},
+}}
+
+// buildHelpGroups lays the help page out: the read-view groups come from acts
+// (a group's rows are the entries with a key of their own, in table order);
+// Editor and Find are hand-written because the editor owns those keys.
+func buildHelpGroups(acts []action) []helpGroup {
+	fromTable := func(title string) helpGroup {
+		g := helpGroup{title: title}
+		for _, act := range acts {
+			if act.group == title && act.key != "" {
+				g.rows = append(g.rows, helpRow{act.key, act.title})
+			}
+		}
+		return g
+	}
+	return []helpGroup{
+		fromTable(groupBrowse),
+		fromTable(groupLinks),
+		fromTable(groupHistory),
+		fromTable(groupOpen),
+		fromTable(groupSync),
+		fromTable(groupEdit),
+		editorHelp,
+		findHelp,
+		fromTable(groupMaintain),
+		fromTable(groupHelp),
+	}
 }
 
 func (h *Help) View() string {
