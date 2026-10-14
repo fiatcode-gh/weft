@@ -28,7 +28,8 @@ type Calendar struct {
 }
 
 // NewCalendar starts the cursor on page when it is a journal date, otherwise
-// on today. It keeps idx as it is now: journals created later do not show.
+// on today. It keeps idx as it is now: journals created later do not show
+// until refresh.
 func NewCalendar(idx *graph.Index, page string, today time.Time, width, height int) *Calendar {
 	c := &Calendar{
 		idx:    idx,

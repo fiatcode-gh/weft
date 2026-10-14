@@ -235,6 +235,22 @@ func TestSidebarHidesOnNarrowResize(t *testing.T) {
 	}
 }
 
+func TestSidebarHidesOnNarrowResizeKeepsWrappedLine(t *testing.T) {
+	a := sidebarApp(t, 120, 16)
+	a.navigate("Corpus")
+	a.Update(key("3"))
+	a.Update(keyEscK)
+	at0 := putCursorOnLine(t, a, 2, 0)
+	resize(a, 110, 16)
+	if a.side.shown {
+		t.Fatal("sidebar still shown at 110")
+	}
+	at, _ := a.page.ReadingAnchor()
+	if at.Line != at0.Line || at.ScreenRow < 0 || at.ScreenRow >= a.page.vp.Height() {
+		t.Errorf("after hide by resize: line %d row %d, want line %d on screen", at.Line, at.ScreenRow, at0.Line)
+	}
+}
+
 func TestSidebarOverlaysFullScreen(t *testing.T) {
 	a := sidebarApp(t, 120, 30)
 	a.navigate("Hub")
@@ -285,7 +301,7 @@ func TestSidebarOverlaysFullScreen(t *testing.T) {
 	t.Run("rename", func(t *testing.T) {
 		a.Update(key("f2"))
 		if a.rename == nil {
-			t.Skipf("f2 did not open the rename prompt")
+			t.Fatal("f2 did not open the rename prompt")
 		}
 		lines := frameLines(a)
 		if len(lines) != a.height || !strings.Contains(lines[0], head) {
@@ -636,6 +652,39 @@ func TestSidebarEnterKeepsFocus(t *testing.T) {
 				t.Errorf("history %d entries, want %d", len(a.hist), hist+1)
 			}
 		})
+	}
+}
+
+// The tree and the calendar keep their own selection when the page changes;
+// only backlinks follows the page.
+func TestSidebarTreeAndCalendarKeepSelectionOnPageChange(t *testing.T) {
+	a := sidebarApp(t, 120, 30)
+	a.navigate("Alpha")
+	focusSection(t, a, "5")
+	a.Update(key("l"))
+	cursor := a.side.calendar.cursor
+	focusSection(t, a, "1")
+	tr := a.side.tree
+	tr.sel = -1
+	for i, r := range tr.rows {
+		if r.node.Page != nil && r.node.Page.Key == "Hub" {
+			tr.sel = i
+		}
+	}
+	if tr.sel < 0 {
+		t.Fatal("no Hub row in the tree")
+	}
+	path := tr.rows[tr.sel].node.Path
+	a.Update(keyEscK)
+	a.navigate("Beta")
+	a.Update(keyEscK) // any message syncs the sidebar
+	if tr := a.side.tree; tr.rows[tr.sel].node.Path != path {
+		got := tr.rows[tr.sel].node.Path
+		t.Errorf("tree selection %q after the page changed, want %q", got, path)
+	}
+	a.Update(key("5"))
+	if !a.side.calendar.cursor.Equal(cursor) {
+		t.Errorf("calendar cursor %v after the page changed, want %v", a.side.calendar.cursor, cursor)
 	}
 }
 
