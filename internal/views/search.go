@@ -197,6 +197,7 @@ func (s *SearchView) visibleRows() int {
 func (s *SearchView) View() string {
 	inner := s.innerWidth()
 	var b strings.Builder
+	s.drawn.reset()
 	b.WriteString(styleTitle.Render("Search the graph"))
 	b.WriteString("\n\n")
 	b.WriteString(styleFaint.Render("/ "))
@@ -236,6 +237,7 @@ func (s *SearchView) View() string {
 		b.WriteString("\n")
 	}
 	for i := start; i < end; i++ {
+		from := b.Len()
 		h := s.hits[i]
 		label := s.hitLabel(h.FilePath)
 		posStr := fmt.Sprintf("%s:%d", label, h.Line)
@@ -263,6 +265,7 @@ func (s *SearchView) View() string {
 		b.WriteString(marker)
 		b.WriteString(line)
 		b.WriteString("\n")
+		s.drawn.span(&b, from, i)
 	}
 	if end < len(s.hits) {
 		b.WriteString(styleFaint.Render(fmt.Sprintf("   ↓ %d more below", len(s.hits)-end)))

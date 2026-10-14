@@ -1,6 +1,11 @@
 package views
 
-import tea "charm.land/bubbletea/v2"
+import (
+	"strings"
+
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+)
 
 // wheelRows is how many page rows one wheel notch scrolls.
 const wheelRows = 3
@@ -37,7 +42,7 @@ func (a *App) mouseClick(m tea.Mouse) tea.Cmd {
 	case a.capture != nil || a.rename != nil:
 		return nil
 	case a.active != nil:
-		return nil
+		return a.overlayClick(m.X, m.Y)
 	}
 	return a.readClick(m.X, m.Y)
 }
@@ -57,7 +62,7 @@ func (a *App) mouseWheel(m tea.Mouse) tea.Cmd {
 	case a.capture != nil || a.rename != nil:
 		return nil
 	case a.active != nil:
-		return nil
+		return a.overlayResult(a.active.Update(wheelKey(dir)))
 	}
 	return a.readWheel(m.X, m.Y, dir)
 }
@@ -77,7 +82,10 @@ func (a *App) readClick(x, y int) tea.Cmd {
 	}
 	if a.inSidebar(x) {
 		a.side.focused = true
-		return nil
+		if y == 0 {
+			return nil
+		}
+		return a.sidebarClick(x, y)
 	}
 	a.side.focused = false
 	px := x
@@ -104,4 +112,89 @@ func (a *App) readWheel(x, y, dir int) tea.Cmd {
 	}
 	a.page.Scroll(dir * wheelRows)
 	return nil
+}
+
+// rowPanel is a list panel whose View records which body line holds which
+// item (listBox), so a click on a row can pick it.
+type rowPanel interface {
+	Overlay
+	selected() int
+	drawnRows() *rowMap
+}
+
+// pickRow is a click on item: on the selected item it is the enter key, else
+// it moves the selection with the panel's own up and down keys (so header
+// skipping and error clearing are the keys') until item is selected.
+func pickRow(p rowPanel, item int) OverlayResult {
+	if p.selected() == item {
+		return p.Update(keyEnter)
+	}
+	for p.selected() != item {
+		cur := p.selected()
+		down := cur < item
+		if down {
+			p.Update(keyDown)
+		} else {
+			p.Update(keyUp)
+		}
+		if now := p.selected(); now == cur || (down && now > item) || (!down && now < item) {
+			break
+		}
+	}
+	return OverlayResult{}
+}
+
+// clickPanel handles a left click at (x, y), relative to the top-left corner
+// of p's box and inside it. A row of a list panel is picked; everything else
+// (title, divider, footer, headers, blank lines, other panels) does nothing.
+func clickPanel(p Overlay, x, y int) OverlayResult {
+	rp, ok := p.(rowPanel)
+	if !ok {
+		return OverlayResult{}
+	}
+	line := y - styleBorder.GetBorderTopSize() - styleBorder.GetPaddingTop()
+	item, ok := rp.drawnRows().itemAt(line)
+	if !ok {
+		return OverlayResult{}
+	}
+	return pickRow(rp, item)
+}
+
+// boxOrigin is the top-left screen cell of a w by h box that centerOverlay
+// placed: Lip Gloss splits the spare space with the leading side rounded
+// down, and leaves a box larger than the screen at the origin.
+func (a *App) boxOrigin(w, h int) (x, y int) {
+	if a.width <= 0 || a.height <= 0 {
+		return 0, 0
+	}
+	return max(0, (a.width-w)/2), max(0, (a.height-h)/2)
+}
+
+// panelBox renders p once and reports the size of its box.
+func panelBox(p Overlay) (w, h int) {
+	view := p.View()
+	return lipgloss.Width(view), strings.Count(view, "\n") + 1
+}
+
+// overlayClick hits the open overlay's box: a click outside it does nothing.
+func (a *App) overlayClick(x, y int) tea.Cmd {
+	w, h := panelBox(a.active)
+	ox, oy := a.boxOrigin(w, h)
+	if x < ox || y < oy || x >= ox+w || y >= oy+h {
+		return nil
+	}
+	return a.overlayResult(clickPanel(a.active, x-ox, y-oy))
+}
+
+// sidebarClick hits the sidebar panel's box, which sits under the header row.
+func (a *App) sidebarClick(x, y int) tea.Cmd {
+	p := a.side.panel()
+	if p == nil {
+		return nil
+	}
+	w, h := panelBox(p)
+	if x >= w || y-1 >= h {
+		return nil
+	}
+	return a.sidebarResult(clickPanel(p, x, y-1))
 }

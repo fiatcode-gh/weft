@@ -202,6 +202,7 @@ func (p *Picker) View() string {
 	nameBudget := inner - hintCol - 2 - 3 // -3 = the " ▶ "/"   " marker cells every row carries
 
 	var b strings.Builder
+	p.drawn.reset()
 	b.WriteString(styleTitle.Render("Find a page"))
 	b.WriteString("\n\n")
 	b.WriteString(styleFaint.Render("> "))
@@ -226,6 +227,7 @@ func (p *Picker) View() string {
 		b.WriteString("\n")
 	}
 	for i := start; i < end; i++ {
+		from := b.Len()
 		m := p.matches[i]
 		hint := ""
 		if m.Index >= 0 && m.Index < len(p.choices) {
@@ -245,12 +247,14 @@ func (p *Picker) View() string {
 		b.WriteString(marker)
 		b.WriteString(row)
 		b.WriteString("\n")
+		p.drawn.span(&b, from, i)
 	}
 	if end < len(p.matches) {
 		b.WriteString(styleFaint.Render(fmt.Sprintf("  ↓ %d more below", len(p.matches)-end)))
 		b.WriteString("\n")
 	}
 	if p.createName != "" {
+		from := b.Len()
 		marker := "   "
 		label := fmt.Sprintf("＋ Create %q", p.createName)
 		if p.sel == len(p.matches) {
@@ -262,6 +266,7 @@ func (p *Picker) View() string {
 		b.WriteString(marker)
 		b.WriteString(clamp(label, inner))
 		b.WriteString("\n")
+		p.drawn.span(&b, from, len(p.matches))
 	}
 	p.writeFooter(&b, inner)
 	// Width(inner) locks the panel so the rounded border doesn't resize when

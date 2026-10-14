@@ -154,6 +154,7 @@ func (a *Agenda) visibleRows() int {
 func (a *Agenda) View() string {
 	inner := a.innerWidth()
 	var sb strings.Builder
+	a.drawn.reset()
 	sb.WriteString(styleTitle.Render("Agenda"))
 	sb.WriteString(styleFaint.Render(fmt.Sprintf("   · today %s   (%d)", a.today.Format("2006-01-02 Mon"), len(a.items))))
 	sb.WriteString("\n\n")
@@ -184,6 +185,7 @@ func (a *Agenda) View() string {
 			sb.WriteString("\n")
 			lastSection = s
 		}
+		from := sb.Len()
 		rowBudget := inner - 3 // marker prefix is 3 cells
 		marker := "   "
 		if i == a.sel {
@@ -193,6 +195,7 @@ func (a *Agenda) View() string {
 		sb.WriteString(marker)
 		sb.WriteString(taskRow(it.Todo, isDone, i == a.sel, taskDates(it.Todo)+" · "+it.Todo.Page, rowBudget))
 		sb.WriteString("\n")
+		a.drawn.span(&sb, from, i)
 	}
 
 	if below := len(a.items) - end; below > 0 {

@@ -1,5 +1,7 @@
 package views
 
+import "strings"
+
 const (
 	listInnerWidthMin  = 30
 	listInnerWidthMax  = 80
@@ -11,6 +13,51 @@ const (
 type listBox struct {
 	width, height int
 	sel           int
+	drawn         rowMap // body lines of the selectable items the last View drew
+}
+
+// selected is the selected item.
+func (b *listBox) selected() int { return b.sel }
+
+// drawnRows is the map of the rows the last View drew.
+func (b *listBox) drawnRows() *rowMap { return &b.drawn }
+
+// rowSpan is the body lines [from, to) one selectable item occupies.
+type rowSpan struct{ from, to, item int }
+
+// rowMap records which body line of a View belongs to which item, so a mouse
+// click on a screen row can find its item. View resets it, then records each
+// selectable item as it writes it; chrome, headers and blank lines stay
+// unmapped. The slice is reused across renders.
+type rowMap struct {
+	spans      []rowSpan
+	seen, line int
+}
+
+func (m *rowMap) reset() {
+	m.spans = m.spans[:0]
+	m.seen, m.line = 0, 0
+}
+
+// span records the lines written to b since from (a builder offset at the
+// start of the item's first line; every line ends in "\n") as item's.
+func (m *rowMap) span(b *strings.Builder, from, item int) {
+	s := b.String()
+	m.line += strings.Count(s[m.seen:from], "\n")
+	start := m.line
+	m.line += strings.Count(s[from:], "\n")
+	m.seen = len(s)
+	m.spans = append(m.spans, rowSpan{start, m.line, item})
+}
+
+// itemAt is the item drawn on body line, if any.
+func (m *rowMap) itemAt(line int) (int, bool) {
+	for _, s := range m.spans {
+		if line >= s.from && line < s.to {
+			return s.item, true
+		}
+	}
+	return 0, false
 }
 
 // SetSize updates the cached terminal dimensions.

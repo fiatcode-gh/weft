@@ -956,42 +956,7 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if key == "ctrl+c" {
 				return a, tea.Quit
 			}
-			res := a.active.Update(key)
-			switch res.kind {
-			case overlayResultCancel:
-				a.active = nil
-			case overlayResultCommand:
-				return a, res.cmd
-			case overlayResultLinkify:
-				if cmd, blocked := a.blockIfSyncing(); blocked {
-					return a, cmd
-				}
-				return a, a.linkify(res.ref, res.target)
-			case overlayResultMarkTask:
-				if cmd, blocked := a.blockIfSyncing(); blocked {
-					return a, cmd
-				}
-				return a, a.markTask(res.mark)
-			case overlayResultCreate:
-				if cmd, blocked := a.blockIfSyncing(); blocked {
-					return a, cmd
-				}
-				a.navigate(res.page)
-				a.active = nil
-				return a, a.enterEditor()
-			case overlayResultCapture:
-				a.openCapture()
-			case overlayResultRename:
-				return a, a.confirmRename()
-			case overlayResultRun:
-				a.active = nil // close first: the action then behaves exactly as its key
-				return a, res.act.run(a)
-			default:
-				if a.openResult(res) {
-					a.active = nil
-				}
-			}
-			return a, nil
+			return a, a.overlayResult(a.active.Update(key))
 		}
 		if a.sidebarFocused() {
 			if key == "ctrl+c" {
@@ -1007,6 +972,46 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return a, nil
+}
+
+// overlayResult acts on what the open overlay's key (or click) produced: it
+// closes the overlay, opens a prompt or the editor, or runs the command.
+func (a *App) overlayResult(res OverlayResult) tea.Cmd {
+	switch res.kind {
+	case overlayResultCancel:
+		a.active = nil
+	case overlayResultCommand:
+		return res.cmd
+	case overlayResultLinkify:
+		if cmd, blocked := a.blockIfSyncing(); blocked {
+			return cmd
+		}
+		return a.linkify(res.ref, res.target)
+	case overlayResultMarkTask:
+		if cmd, blocked := a.blockIfSyncing(); blocked {
+			return cmd
+		}
+		return a.markTask(res.mark)
+	case overlayResultCreate:
+		if cmd, blocked := a.blockIfSyncing(); blocked {
+			return cmd
+		}
+		a.navigate(res.page)
+		a.active = nil
+		return a.enterEditor()
+	case overlayResultCapture:
+		a.openCapture()
+	case overlayResultRename:
+		return a.confirmRename()
+	case overlayResultRun:
+		a.active = nil // close first: the action then behaves exactly as its key
+		return res.act.run(a)
+	default:
+		if a.openResult(res) {
+			a.active = nil
+		}
+	}
+	return nil
 }
 
 // View renders the current frame on the alternate screen, which Bubble
