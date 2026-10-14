@@ -146,6 +146,9 @@ type App struct {
 	// tree overlay for the session; never written anywhere.
 	treeOpen treeExpansion
 
+	// side is the sidebar column's state and panels; session only.
+	side sidebar
+
 	// Browser-style page history. hist[histIdx] is the entry currently on
 	// screen. histIdx == -1 before the first page is shown.
 	hist    []historyEntry
@@ -274,7 +277,7 @@ func (a *App) statusProbeCmd() tea.Cmd {
 func (a *App) tryInitPage() {
 	if a.page == nil && a.idx != nil && a.loadErr == nil && a.width > 0 {
 		name := a.todayJournalName()
-		a.page = newPageView(a.idx, name, a.width, a.height, a.folds)
+		a.page = newPageView(a.idx, name, a.pageWidth(), a.height, a.folds)
 		a.hist = []historyEntry{{page: name, offset: 0, row: -1, cursor: -1, taskOrdinal: -1}}
 		a.histIdx = 0
 	}
@@ -431,7 +434,7 @@ func (a *App) reindexTo(name string) error {
 		// Same-page rebuild: keep the reader's place, exactly like the
 		// async indexLoadedMsg path. Restore clamps if the page shrank.
 		off, row, cur := a.page.Offset(), a.page.CursorRow(), a.page.Cursor()
-		a.page = newPageView(a.idx, name, a.width, a.height, a.folds)
+		a.page = newPageView(a.idx, name, a.pageWidth(), a.height, a.folds)
 		a.page.Restore(off, row, cur)
 	}
 	if fresh := a.newIndexWarnings(idx.Warnings); fresh && len(idx.Warnings) > 0 {
@@ -713,7 +716,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// for the same page so it picks up new links/todos — but keep the
 			// user's place. Restore clamps if the page shrank.
 			off, row, cur := a.page.Offset(), a.page.CursorRow(), a.page.Cursor()
-			a.page = newPageView(a.idx, a.page.Page(), a.width, a.height, a.folds)
+			a.page = newPageView(a.idx, a.page.Page(), a.pageWidth(), a.height, a.folds)
 			a.page.Restore(off, row, cur)
 			if a.editor == nil {
 				// An open editor still owns readFrom for its own exit.
@@ -792,11 +795,15 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 	case tea.WindowSizeMsg:
 		a.width, a.height = m.Width, m.Height
-		if a.page != nil {
-			a.page.SetSize(m.Width, m.Height)
-		} else {
+		switch {
+		case a.side.shown && a.width < sidebarMinWidth:
+			a.hideSidebar()
+		case a.page != nil:
+			a.page.SetSize(a.pageWidth(), m.Height)
+		default:
 			a.tryInitPage()
 		}
+		a.side.setSize(a.height)
 		// Propagate the new size to any open overlay so its scroll-window
 		// budget and inner-width tracking stay correct on resize.
 		if a.active != nil {
@@ -867,7 +874,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.placeFromEditor(at)
 				default:
 					off, row, cur := a.page.Offset(), a.page.CursorRow(), a.page.Cursor()
-					a.page = newPageView(a.idx, a.page.Page(), a.width, a.height, a.folds)
+					a.page = newPageView(a.idx, a.page.Page(), a.pageWidth(), a.height, a.folds)
 					a.page.Restore(off, row, cur)
 					if place {
 						a.placeFromEditor(at)
@@ -1010,7 +1017,7 @@ func (a *App) frame() string {
 	if a.active != nil {
 		base = a.centerOverlay(a.active.View())
 	} else {
-		base = a.page.View() + "\n" + a.statusBar()
+		base = a.readView()
 	}
 	if p := a.bottomPrompt(); p != nil {
 		block, _, _ := p.View()

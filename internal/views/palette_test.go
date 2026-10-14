@@ -30,8 +30,8 @@ func paletteKeys(p *Palette) []string {
 func TestPaletteListsActionsInHelpOrder(t *testing.T) {
 	quietTerm(t)
 	got := paletteKeys(NewPalette(80, 24))
-	want := strings.Fields("tab z enter [ ] . < > C O ctrl-p F / b T A S c e E R F2 ? q")
-	if len(want) != 24 || fmt.Sprint(got) != fmt.Sprint(want) {
+	want := strings.Fields("tab z enter [ ] . < > C O ctrl-p F / b T A S c e E R F2 1 2 3 4 5 | ? q")
+	if len(want) != 30 || fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Errorf("palette keys\n got: %v\nwant: %v", got, want)
 	}
 
@@ -150,6 +150,16 @@ func TestPaletteRunEqualsKey(t *testing.T) {
 			want: func(t *testing.T, a *App) {
 				if a.editor != nil || a.hint != "⟳ "+syncBusyMsg {
 					t.Errorf("editor %v, hint %q", a.editor != nil, a.hint)
+				}
+			}},
+		{name: "sidebar", key: key("3"), label: "3 sidebar: todos",
+			setup: func(a *App) {
+				a.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+				a.navigate("Alpha")
+			},
+			want: func(t *testing.T, a *App) {
+				if !a.side.shown || a.side.section != sectionTodos || !a.side.focused {
+					t.Errorf("sidebar shown %v section %d focused %v", a.side.shown, a.side.section, a.side.focused)
 				}
 			}},
 		{name: "quit", key: key("q"), label: "q quit"},

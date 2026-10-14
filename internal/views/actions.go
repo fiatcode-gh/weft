@@ -11,6 +11,7 @@ const (
 	groupSync     = "Sync"
 	groupEdit     = "Edit"
 	groupMaintain = "Maintain"
+	groupSidebar  = "Sidebar"
 	groupHelp     = "Help / quit"
 )
 
@@ -161,6 +162,18 @@ func init() {
 			}},
 		{keys: []string{"f2"}, key: "F2", title: "rename page and its links", group: groupMaintain, palette: true,
 			run: (*App).openRename},
+		{keys: []string{"1"}, key: "1", title: "sidebar: page tree", group: groupSidebar, palette: true,
+			run: func(a *App) tea.Cmd { return a.showSidebar(sectionTree) }},
+		{keys: []string{"2"}, key: "2", title: "sidebar: backlinks of this page", group: groupSidebar, palette: true,
+			run: func(a *App) tea.Cmd { return a.showSidebar(sectionBacklinks) }},
+		{keys: []string{"3"}, key: "3", title: "sidebar: todos", group: groupSidebar, palette: true,
+			run: func(a *App) tea.Cmd { return a.showSidebar(sectionTodos) }},
+		{keys: []string{"4"}, key: "4", title: "sidebar: agenda", group: groupSidebar, palette: true,
+			run: func(a *App) tea.Cmd { return a.showSidebar(sectionAgenda) }},
+		{keys: []string{"5"}, key: "5", title: "sidebar: calendar", group: groupSidebar, palette: true,
+			run: func(a *App) tea.Cmd { return a.showSidebar(sectionCalendar) }},
+		{keys: []string{"|"}, key: "|", title: "show / hide the sidebar", group: groupSidebar, palette: true,
+			run: (*App).toggleSidebar},
 
 		{keys: []string{"?"}, key: "?", title: "toggle this help", group: groupHelp, palette: true,
 			run: func(a *App) tea.Cmd { a.active = NewHelp(a.version, a.width, a.height); return nil }},
