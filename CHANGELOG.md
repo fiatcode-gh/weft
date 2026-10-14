@@ -22,6 +22,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `Ctrl+T` in the editor cycles any open marker (`TODO`, `LATER`, `DOING`, `WAITING`, `NOW`) → `DONE` → plain → `TODO`, keeps the `[#A]` priority, and turns `CANCELED` into plain; it no longer makes `LATER x` into `TODO LATER x`. Migration: to turn a `LATER`/`DOING`/`WAITING` bullet into `TODO`, press `Ctrl+T` until it is plain, then once more.
 - Journals are named by their filename stem: `2026_10_12` with the default layout, not `2026-10-12`. `[[2026-10-12]]` no longer opens the journal. Migration: link journals as `[[2026_10_12]]` (the form Logseq and the `weft-worklog` skill already write); search the graph for `\[\[\d{4}-\d{2}-\d{2}` to find old links.
 - A page that shares a journal's name no longer wins `[[name]]`; the journal does. Migration: reach the page as `[[pages/name]]`. `Alpha` and `alpha` in different files no longer share backlinks.
+- The mouse is on: a plain drag no longer selects terminal text and the wheel scrolls weft instead of sending arrow keys. Migration: hold Shift while dragging (Option in iTerm2), or press `m` to turn the mouse off until weft quits.
 
 ### Added
 
@@ -59,6 +60,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Journal filename patterns, including folders (`YYYY/MM/YYYY-MM-DD`).
 - `weft doctor` warns about pages that share a name, and about a page no link can open.
 - The picker shows a page that loses a name clash by its shortest path that opens it, such as `b/Note`.
+- The mouse (on by default; `m` turns it off for the session): the wheel scrolls the page, lists and the editor, a click follows a link, picks a row or a calendar day, and places the editor cursor. See the README.
 
 ### Changed
 

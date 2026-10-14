@@ -135,6 +135,7 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | `\|`       | show / hide the sidebar             |
 | `?`        | toggle the help overlay             |
 | `:`        | command palette: every action with its key; type to filter, `Enter` runs it |
+| `m`        | mouse on / off for the session (off: the terminal selects text) |
 | `n` / `N`  | cycle the link cursor (wiki-links and tags) |
 | `Enter`    | follow link (`[[Page#Heading]]` opens at the heading) / open selection |
 | `[` / `]`  | back / forward in page history      |
@@ -237,6 +238,20 @@ A task is a bullet that starts with a marker (`TODO`, `LATER`, `DOING`, `WAITING
 Typing filters on the name and the key, the same fuzzy match as the picker. `↑`/`↓` (`Ctrl-K`/`Ctrl-J`) move.
 `Enter` closes the palette and runs the action exactly as its key does, so a refusal shows its usual message and `Enter`/`Tab` act on the row the cursor was on. `Esc` closes it.
 `:` in the editor, a prompt or a panel is plain text.
+
+### Mouse
+
+The mouse is on by default. Press `m` to turn it off until weft quits (the status bar shows `mouse off`), and again to turn it on.
+
+- **Wheel.** On the page, one step scrolls 3 rows; the row cursor stays where it is unless it leaves the screen. In a list the wheel moves the selection one row; in the calendar, one week. Over the sidebar it moves the sidebar's selection and leaves the focus alone.
+- **Click on the page.** A link or tag follows, as `n` then `Enter` would. Any other row puts the cursor there. The rule row and the status bar do nothing.
+- **Click in the sidebar.** The click focuses the sidebar. A click on a row selects it, and a click on the selected row opens it, as `Enter` does; focus stays in the sidebar. A click on the header row only focuses.
+- **Click in lists and overlays.** The same rule applies in the picker, search, palette, backlinks, todos, agenda, tree and on this day: click a row to select it, click it again to open or run it. In the tree a second click on a group opens or closes it. In the calendar a click picks a day and a second click opens it. A click never scrolls a list, so the clicked row stays under the pointer; keys and the wheel move the selection and keep it centred as before.
+- **Does nothing.** Clicks outside an overlay (it stays open), on its title, on headers, on the footer and on the status bar. Help and the prompts ignore clicks.
+- **Editor.** The wheel scrolls 3 rows, and the cursor moves only if it would leave the screen. A click places the cursor (in live preview, on that line) and clears a selection.
+- **Select terminal text.** Hold `Shift` while dragging (`Option` in iTerm2), or press `m` first.
+- **Nothing is saved.** The on/off state lasts until weft quits. A click never writes a file; it only does what the matching key does.
+- **Not supported.** Drag to select, double click, right click and middle click.
 
 ## What gets rendered
 

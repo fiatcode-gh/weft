@@ -12,7 +12,7 @@ the help page.
 
 Out of scope: the palette in the editor, prompts or panels, editor commands,
 actions with arguments (the picker opens a page by name), recently used
-ordering, custom key bindings, the sidebar (11b), mouse (11c).
+ordering, custom key bindings, the sidebar (11b), mouse (added in 11c, see `mouse.md`).
 
 ## Decisions
 

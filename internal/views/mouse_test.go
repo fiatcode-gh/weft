@@ -1,6 +1,7 @@
 package views
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -429,5 +430,314 @@ func TestPageAt(t *testing.T) {
 	row, l, ok := p.At(79, by)
 	if !ok || l != -1 || row != by {
 		t.Errorf("At(marker column) = %d %d %v, want row %d, no link", row, l, ok, by)
+	}
+}
+
+// mouseState is everything a mouse event may change, in any context: the
+// frame, the page and list state, the open overlay, the editor's cursor and
+// window and the calendars' cursors.
+func mouseState(a *App) string {
+	s := fmt.Sprintf("%s\nframe %q\nactive %p", listStateOf(a), appText(a), a.active)
+	if a.editor != nil {
+		s += fmt.Sprintf("\neditor cursor %v top %v", a.editor.buf.Cursor(), a.editor.top)
+	}
+	if c, ok := a.active.(*Calendar); ok {
+		s += fmt.Sprintf("\noverlay calendar %v", c.cursor)
+	}
+	if a.side.calendar != nil {
+		s += fmt.Sprintf("\nside calendar %v", a.side.calendar.cursor)
+	}
+	return s
+}
+
+// mouseContext builds an app and the mouse events that act in it while the
+// mouse is on. With off set, `m` is pressed in the read view first.
+type mouseContext struct {
+	name  string
+	build func(t *testing.T, off bool) (*App, []tea.Msg)
+}
+
+func withM(off bool, keys ...tea.Msg) []tea.Msg {
+	if off {
+		return append([]tea.Msg{key("m")}, keys...)
+	}
+	return keys
+}
+
+func feed(a *App, msgs ...tea.Msg) {
+	for _, m := range msgs {
+		a.Update(m)
+	}
+}
+
+var mouseFiles = map[string]string{
+	"pages/Long.md":  escPage(),
+	"pages/Linky.md": "- see [[Beta]] now\n- plain row\n",
+	"pages/Other.md": "- o\n",
+	"pages/Third.md": "- t\n",
+}
+
+func mouseContexts() []mouseContext {
+	return []mouseContext{
+		{"page link", func(t *testing.T, off bool) (*App, []tea.Msg) {
+			a := newApp(t, mouseFiles, 80, 24)
+			a.navigate("Linky")
+			feed(a, withM(off)...)
+			x, y := cellOf(t, a, "Beta")
+			return a, []tea.Msg{click(x, y)}
+		}},
+		{"page row and wheel", func(t *testing.T, off bool) (*App, []tea.Msg) {
+			a := newApp(t, mouseFiles, 80, 24)
+			a.navigate("Long")
+			feed(a, withM(off)...)
+			x, y := cellOf(t, a, "L7")
+			return a, []tea.Msg{click(x, y), wheel(10, 5, +1)}
+		}},
+		{"sidebar", func(t *testing.T, off bool) (*App, []tea.Msg) {
+			a := bootApp(t, bootConfig{files: mouseFiles})
+			a.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+			a.navigate("Long")
+			feed(a, withM(off, key("1"), esc)...)
+			return a, []tea.Msg{click(5, 0), click(5, 3), wheel(5, 5, +1)}
+		}},
+		{"todos overlay", func(t *testing.T, off bool) (*App, []tea.Msg) {
+			a := bootAt(t, 24, bootConfig{now: paletteNow}, withM(off, key("T"))...)
+			p := a.active.(*Todos)
+			rx, ry := mustCell(t, a, p.visible[1].Text, 0)
+			tx, ty := mustCell(t, a, "Open todos", 0)
+			return a, []tea.Msg{click(rx, ry), wheel(tx, ty, +1)}
+		}},
+		{"calendar day", func(t *testing.T, off bool) (*App, []tea.Msg) {
+			a := bootAt(t, 24, bootConfig{now: paletteNow}, withM(off, key("C"))...)
+			x, y := calDayCell(t, a, a.active.(*Calendar), 12, 0)
+			return a, []tea.Msg{click(x, y)}
+		}},
+		{"editor", func(t *testing.T, off bool) (*App, []tea.Msg) {
+			a := newApp(t, mouseFiles, 80, 24)
+			a.navigate("Long")
+			feed(a, withM(off, key("e"))...)
+			if a.editor == nil {
+				t.Fatal("editor did not open")
+			}
+			x, y := cellOf(t, a, "L7")
+			return a, []tea.Msg{click(x, y), wheel(10, 5, +1)}
+		}},
+	}
+}
+
+func TestMouseIgnoredWhileOff(t *testing.T) {
+	for _, c := range mouseContexts() {
+		t.Run(c.name, func(t *testing.T) {
+			a, events := c.build(t, true)
+			if !a.mouseOff {
+				t.Fatal("setup: mouse still on after m")
+			}
+			want := mouseState(a)
+			for i, ev := range events {
+				a.Update(ev)
+				if got := mouseState(a); got != want {
+					t.Fatalf("event %d (%+v) changed the state while off:\n got %s\nwant %s", i, ev, got, want)
+				}
+			}
+
+			// Each event must act when the mouse is on, or the check above proves nothing.
+			for i := range events {
+				a, events := c.build(t, false)
+				before := mouseState(a)
+				a.Update(events[i])
+				if mouseState(a) == before {
+					t.Errorf("event %d (%+v) does nothing while on", i, events[i])
+				}
+			}
+		})
+	}
+}
+
+// settle ends an editor a battery left open: the buffer is unchanged, so esc
+// closes it without a prompt.
+func settle(t *testing.T, a *App) {
+	t.Helper()
+	if a.editor == nil {
+		return
+	}
+	if a.editor.dirty() {
+		t.Fatal("the mouse made the buffer dirty")
+	}
+	a.Update(esc)
+	if a.editor != nil {
+		t.Fatal("esc did not close the unchanged editor")
+	}
+}
+
+func TestMouseWritesNothing(t *testing.T) {
+	// run drives one battery and compares the graph's files before and after.
+	run := func(t *testing.T, a *App, battery func()) {
+		t.Helper()
+		before := graphFiles(t, a.graphPath)
+		battery()
+		settle(t, a)
+		after := graphFiles(t, a.graphPath)
+		if fmt.Sprint(before) != fmt.Sprint(after) {
+			t.Errorf("the graph changed:\n before %d files\n after %d files", len(before), len(after))
+			for k, v := range after {
+				if old, ok := before[k]; !ok || old != v {
+					t.Errorf("  %s written or created", k)
+				}
+			}
+			for k := range before {
+				if _, ok := after[k]; !ok {
+					t.Errorf("  %s removed", k)
+				}
+			}
+		}
+	}
+	clickCell := func(t *testing.T, a *App, text string, maxX int) {
+		t.Helper()
+		x, y := mustCell(t, a, text, maxX)
+		a.Update(click(x, y))
+	}
+
+	t.Run("page", func(t *testing.T) {
+		a := newApp(t, mouseFiles, 80, 24)
+		a.navigate("Linky")
+		run(t, a, func() {
+			clickCell(t, a, "Beta", 0)
+			a.navigate("Linky")
+			clickCell(t, a, "plain", 0)
+			a.navigate("Long")
+			a.Update(wheel(10, 5, +1))
+			a.Update(wheel(10, 5, -1))
+		})
+	})
+
+	for _, c := range listCases() {
+		if c.section == 0 {
+			continue
+		}
+		t.Run("sidebar "+c.name, func(t *testing.T) {
+			a := bootApp(t, bootConfig{files: c.files, now: paletteNow})
+			resize(a, 120, 30)
+			a.navigate(c.page)
+			a.Update(key(fmt.Sprint(c.section)))
+			run(t, a, func() {
+				item := c.pickItem(a.side.panel())
+				if item < 0 {
+					t.Fatal("setup: no row to click")
+				}
+				text := c.text(a.side.panel(), item)
+				clickCell(t, a, text, sidebarCols) // select
+				clickCell(t, a, text, sidebarCols) // open
+			})
+		})
+	}
+
+	t.Run("sidebar calendar", func(t *testing.T) {
+		a := sidebarApp(t, 120, 30)
+		a.Update(key("5"))
+		cal := a.side.calendar
+		run(t, a, func() {
+			x, y := calDayCell(t, a, cal, 12, sidebarCols) // a day without a journal
+			a.Update(click(x, y))
+			a.Update(click(x, y))
+		})
+	})
+
+	for _, c := range listCases() {
+		switch c.name {
+		case "picker", "backlinks", "tree", "onthisday", "palette":
+		default:
+			continue
+		}
+		t.Run("overlay "+c.name, func(t *testing.T) {
+			a := c.overlay(t, 24)
+			run(t, a, func() {
+				item := c.pickItem(a.active)
+				if item < 0 {
+					t.Fatal("setup: no row to click")
+				}
+				text := c.text(a.active, item)
+				clickCell(t, a, text, 0) // select
+				if c.name != "palette" {
+					clickCell(t, a, text, 0) // open (a palette row would run an action)
+				}
+			})
+		})
+	}
+
+	t.Run("picker create row", func(t *testing.T) {
+		a := bootAt(t, 24, bootConfig{}, tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
+		typeText(a, "Alp")
+		run(t, a, func() {
+			clickCell(t, a, `＋ Create "Alp"`, 0)
+			clickCell(t, a, `＋ Create "Alp"`, 0)
+			if a.editor == nil {
+				t.Fatal("the create row did not open the editor")
+			}
+		})
+	})
+
+	t.Run("editor", func(t *testing.T) {
+		a := newApp(t, mouseFiles, 80, 24)
+		a.navigate("Long")
+		a.Update(key("e"))
+		if a.editor == nil {
+			t.Fatal("editor did not open")
+		}
+		run(t, a, func() {
+			clickCell(t, a, "L7", 0)
+			a.Update(wheel(10, 5, +1))
+			clickCell(t, a, "L9", 0)
+			a.Update(wheel(10, 5, -1))
+		})
+	})
+}
+
+func TestMouseOutOfRange(t *testing.T) {
+	contexts := []mouseContext{
+		{"read view", func(t *testing.T, _ bool) (*App, []tea.Msg) {
+			a := newApp(t, mouseFiles, 80, 24)
+			a.navigate("Long")
+			return a, nil
+		}},
+		{"sidebar", func(t *testing.T, _ bool) (*App, []tea.Msg) {
+			a := sidebarApp(t, 120, 30)
+			a.Update(key("1"))
+			return a, nil
+		}},
+		{"overlay", func(t *testing.T, _ bool) (*App, []tea.Msg) {
+			return bootAt(t, 24, bootConfig{}, tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl}), nil
+		}},
+		{"editor", func(t *testing.T, _ bool) (*App, []tea.Msg) {
+			a := newApp(t, mouseFiles, 80, 24)
+			a.navigate("Long")
+			a.Update(key("e"))
+			return a, nil
+		}},
+	}
+	for _, c := range contexts {
+		t.Run(c.name, func(t *testing.T) {
+			for _, xy := range [][2]int{{-1, -1}, {0, -5}, {10000, 10000}} {
+				for _, kind := range []string{"click", "wheel up", "wheel down"} {
+					a, _ := c.build(t, false)
+					before := mouseState(a)
+					var ev tea.Msg
+					switch kind {
+					case "click":
+						ev = click(xy[0], xy[1])
+					case "wheel up":
+						ev = wheel(xy[0], xy[1], -1)
+					default:
+						ev = wheel(xy[0], xy[1], +1)
+					}
+					a.Update(ev)
+					// The wheel acts wherever the pointer is on screen, so only
+					// off-screen-negative cells and clicks must change nothing.
+					if (kind == "click" || xy[0] < 0 || xy[1] < 0) && mouseState(a) != before {
+						t.Errorf("%s at %v changed the state", kind, xy)
+					}
+					a.View()
+				}
+			}
+		})
 	}
 }
