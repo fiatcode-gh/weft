@@ -157,21 +157,33 @@ func pickRow(p rowPanel, item int) OverlayResult {
 }
 
 // clickPanel handles a left click at (x, y), relative to the top-left corner
-// of p's box and inside it. A row of a list panel is picked; everything else
+// of p's box and inside it. A row of a list panel is picked and a day of the
+// calendar grid is selected (a second click on it opens it); everything else
 // (title, divider, footer, headers, blank lines, other panels) does nothing.
 func clickPanel(p Overlay, x, y int) OverlayResult {
-	rp, ok := p.(rowPanel)
-	if !ok {
-		return OverlayResult{}
-	}
 	line := y - styleBorder.GetBorderTopSize() - styleBorder.GetPaddingTop()
-	item, ok := rp.drawnRows().itemAt(line)
-	if !ok {
+	switch p := p.(type) {
+	case *Calendar:
+		col := x - styleBorder.GetBorderLeftSize() - styleBorder.GetPaddingLeft()
+		day, ok := p.dayAt(line, col)
+		switch {
+		case !ok:
+			return OverlayResult{}
+		case day.Equal(p.cursor):
+			return p.Update(keyEnter)
+		}
+		p.pickDay(day)
 		return OverlayResult{}
+	case rowPanel:
+		item, ok := p.drawnRows().itemAt(line)
+		if !ok {
+			return OverlayResult{}
+		}
+		res := pickRow(p, item)
+		p.anchor()
+		return res
 	}
-	res := pickRow(rp, item)
-	rp.anchor()
-	return res
+	return OverlayResult{}
 }
 
 // boxOrigin is the top-left screen cell of a w by h box that centerOverlay

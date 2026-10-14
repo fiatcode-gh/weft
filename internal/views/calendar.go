@@ -25,6 +25,7 @@ type Calendar struct {
 	today, cursor time.Time    // civil dates (UTC midnight)
 	width, height int
 	errMsg        string // in-panel feedback (panelFeedback)
+	gridTop       int    // body line of the first week row, set by View
 }
 
 // NewCalendar starts the cursor on page when it is a journal date, otherwise
@@ -143,18 +144,43 @@ func (c *Calendar) dayCell(year int, month time.Month, d int) string {
 	return left + digits + mark + right
 }
 
+// dayAt is the day shown at body line and column (relative to the top-left of
+// the panel's content) of the last View: the grid month is the cursor's.
+func (c *Calendar) dayAt(line, col int) (time.Time, bool) {
+	w := line - c.gridTop
+	y, m, _ := c.cursor.Date()
+	grid := monthGrid(y, m)
+	if w < 0 || w >= len(grid) || col < 0 || col >= 7*5 {
+		return time.Time{}, false
+	}
+	d := grid[w][col/5]
+	if d == 0 {
+		return time.Time{}, false
+	}
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC), true
+}
+
+// pickDay moves the cursor to day, as a move key does.
+func (c *Calendar) pickDay(day time.Time) {
+	c.errMsg = ""
+	c.cursor = day
+}
+
 func (c *Calendar) View() string {
 	inner := clampInt(c.width-10, calendarInnerMin, calendarInnerMax)
 	var sb strings.Builder
+	n := 0
 	row := func(s string) {
 		sb.WriteString(s)
 		sb.WriteString("\n")
+		n++
 	}
 	row(styleTitle.Render("Calendar") + styleFaint.Render("   · today "+c.today.Format(calDayFormat+" Mon")))
 	row("")
 	row(styleTitle.Render(c.cursor.Format("January 2006")))
 	row(styleFaint.Render(clamp(calWeekdayHeader(), inner)))
 	y, m, _ := c.cursor.Date()
+	c.gridTop = n
 	for _, week := range monthGrid(y, m) {
 		var line strings.Builder
 		for _, d := range week {
