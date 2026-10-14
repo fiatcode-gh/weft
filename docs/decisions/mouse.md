@@ -119,5 +119,6 @@ box's screen position when its height changes.
 - In live preview a click on a rendered row that joins several source lines
   (a paragraph) lands on the first of them, by the page-move landing rule; the
   line then shows raw, and a second click is exact.
-- Any accepted mouse event clears the status hint and the editor notice, as a
-  key press does, even a click that does nothing else.
+- An accepted mouse event clears the status hint as a key press does, even a
+  click that does nothing else; the editor notice clears when the editor takes
+  the click.

@@ -256,6 +256,9 @@ func TestMouseLinkClickBesideSidebar(t *testing.T) {
 	keys.Update(key("n"))
 	keys.Update(keyEnterK)
 	want := readStateOf(keys)
+	if want.page != "Beta" {
+		t.Fatalf("n+enter landed on %q, want Beta", want.page)
+	}
 	x0, y := pageCell(mk(), "Beta")
 	for name, x := range map[string]int{"first cell": x0, "last cell": x0 + len("Beta") - 1} {
 		a := mk()
