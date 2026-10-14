@@ -122,10 +122,11 @@ func taskRow(b graph.TodoBullet, done, selected bool, suffix string, budget int)
 }
 
 // markTask writes m to disk through the guarded snapshot path, reindexes, and
-// refreshes the panel. Failures render inside the panel, where the user is
-// looking; the status bar is hidden behind the overlay.
+// refreshes the panel. Failures render inside the panel (the open overlay or
+// the focused sidebar panel), where the user is looking; the status bar is
+// hidden behind an overlay.
 func (a *App) markTask(m taskMark) tea.Cmd {
-	p, _ := a.active.(taskPanel)
+	p, _ := a.keyPanel().(taskPanel)
 	fail := func(reason string) tea.Cmd {
 		if p != nil {
 			p.SetError("not marked: " + reason)

@@ -367,6 +367,26 @@ func (a *App) navigateFocusingLink(name, backTarget string) {
 	a.hist[a.histIdx].cursor = a.page.Cursor()
 }
 
+// openResult navigates to what an overlay or sidebar panel asked to open and
+// reports whether res was one of those navigation results.
+func (a *App) openResult(res OverlayResult) bool {
+	switch res.kind {
+	case overlayResultOpen:
+		if res.page != "" {
+			a.navigate(res.page)
+		}
+	case overlayResultOpenTask:
+		a.navigateToTask(res.page, res.taskOrdinal)
+	case overlayResultFocusLink:
+		a.navigateFocusingLink(res.page, res.target)
+	case overlayResultHighlight:
+		a.navigateHighlighting(res.page, res.target)
+	default:
+		return false
+	}
+	return true
+}
+
 // navigateHighlighting navigates to name and highlights occurrences of term
 // (the page navigated from) on the destination, scrolling to the first — for
 // unlinked references, which have no link to focus a cursor on. One-shot: the
@@ -944,20 +964,6 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.navigate(res.page)
 				a.active = nil
 				return a, a.enterEditor()
-			case overlayResultOpen:
-				if res.page != "" {
-					a.navigate(res.page)
-				}
-				a.active = nil
-			case overlayResultOpenTask:
-				a.navigateToTask(res.page, res.taskOrdinal)
-				a.active = nil
-			case overlayResultFocusLink:
-				a.navigateFocusingLink(res.page, res.target)
-				a.active = nil
-			case overlayResultHighlight:
-				a.navigateHighlighting(res.page, res.target)
-				a.active = nil
 			case overlayResultCapture:
 				a.openCapture()
 			case overlayResultRename:
@@ -965,8 +971,21 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case overlayResultRun:
 				a.active = nil // close first: the action then behaves exactly as its key
 				return a, res.act.run(a)
+			default:
+				if a.openResult(res) {
+					a.active = nil
+				}
 			}
 			return a, nil
+		}
+		if a.sidebarFocused() {
+			if key == "ctrl+c" {
+				return a, tea.Quit
+			}
+			if act := readKeys[key]; act != nil && act.sidebar {
+				return a, act.run(a)
+			}
+			return a, a.sidebarKey(key)
 		}
 		if act := readKeys[key]; act != nil {
 			return a, act.run(a)
@@ -1103,14 +1122,14 @@ func ruleRow(width int) string {
 // sync goroutine is rewriting the worktree: a save landing mid
 // `pull --rebase` is overwritten by the rebase checkout and silently lost,
 // and `add -A` can stage editor temp files. Reports blocked=true while a
-// sync runs. Feedback goes into the open overlay when it has an in-panel
-// channel — the status bar is hidden behind an overlay — falling back to a
-// status-bar hint; cmd is non-nil only for that fallback.
+// sync runs. Feedback goes into the open overlay or the focused sidebar panel
+// when it has an in-panel channel — the status bar is hidden behind an
+// overlay — falling back to a status-bar hint; cmd is non-nil only for that fallback.
 func (a *App) blockIfSyncing() (cmd tea.Cmd, blocked bool) {
 	if !a.syncing {
 		return nil, false
 	}
-	switch o := a.active.(type) {
+	switch o := a.keyPanel().(type) {
 	case *Backlinks:
 		o.SetError(syncBusyMsg)
 		return nil, true

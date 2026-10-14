@@ -188,6 +188,9 @@ func (a *App) showSidebar(sec sidebarSection) tea.Cmd {
 		return a.setHint(fmt.Sprintf("sidebar needs %d+ columns", sidebarMinWidth))
 	}
 	wasShown := a.side.shown
+	if wasShown && a.side.section != sec {
+		a.side.leaveSection()
+	}
 	a.ensurePanel(sec)
 	a.side.section = sec
 	a.side.shown = true
@@ -209,9 +212,61 @@ func (a *App) toggleSidebar() tea.Cmd {
 
 // hideSidebar hides the sidebar and gives the page the full width.
 func (a *App) hideSidebar() {
+	a.side.leaveSection()
 	a.side.shown = false
 	a.side.focused = false
 	a.resizePageKeepingPlace()
+}
+
+// sidebarFocused reports whether keys go to the sidebar's panel.
+func (a *App) sidebarFocused() bool { return a.side.focused && a.side.shown }
+
+// keyPanel is the panel that takes keys and shows feedback: the open overlay,
+// else the focused sidebar panel, else nil.
+func (a *App) keyPanel() Overlay {
+	if a.active != nil {
+		return a.active
+	}
+	if a.sidebarFocused() {
+		return a.side.panel()
+	}
+	return nil
+}
+
+// sidebarKey hands key to the focused sidebar panel and acts on its result.
+// Navigation keeps the focus in the sidebar; only the panel's own cancel moves
+// it back to the page.
+func (a *App) sidebarKey(key string) tea.Cmd {
+	res := a.side.panel().Update(key)
+	switch res.kind {
+	case overlayResultCancel:
+		a.side.focused = false
+	case overlayResultMarkTask:
+		if cmd, blocked := a.blockIfSyncing(); blocked {
+			return cmd
+		}
+		return a.markTask(res.mark)
+	case overlayResultCapture:
+		a.openCapture()
+	default:
+		a.openResult(res)
+	}
+	return nil
+}
+
+// leaveSection drops the struck rows of the todos or agenda panel, which
+// stay listed only while the user is in that section.
+func (s *sidebar) leaveSection() {
+	switch s.section {
+	case sectionTodos:
+		if s.todos != nil {
+			s.todos.clearDone()
+		}
+	case sectionAgenda:
+		if s.agenda != nil {
+			s.agenda.clearDone()
+		}
+	}
 }
 
 // readView is the page with its status bar, with the sidebar column on the

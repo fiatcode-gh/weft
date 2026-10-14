@@ -2,12 +2,14 @@ package views
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/exp/teatest/v2"
+	"github.com/fiatcode-gh/weft/v2/internal/edit"
 )
 
 // sidebarApp boots the fixture clone at the given size.
@@ -399,8 +401,8 @@ func TestSidebarRestoredAfterEditor(t *testing.T) {
 				t.Fatal("editor did not open")
 			}
 			exit(a)
-			if a.editor != nil || !a.side.shown || a.page.width != 69 {
-				t.Fatalf("editor open %v shown %v page width %d", a.editor != nil, a.side.shown, a.page.width)
+			if a.editor != nil || !a.side.shown || a.side.focused || a.page.width != 69 {
+				t.Fatalf("editor open %v shown %v focused %v page width %d", a.editor != nil, a.side.shown, a.side.focused, a.page.width)
 			}
 			at, _ := a.page.ReadingAnchor()
 			if at.Line != at0.Line || at.ScreenRow != at0.ScreenRow {
@@ -408,6 +410,11 @@ func TestSidebarRestoredAfterEditor(t *testing.T) {
 			}
 			if row := frameLines(a)[0]; !strings.Contains(row, "3 Todos") {
 				t.Errorf("row 0 %q lacks the sidebar header", row)
+			}
+			row0 := a.page.CursorRow()
+			a.Update(key("j"))
+			if a.page.CursorRow() == row0 {
+				t.Error("j did not move the page cursor after the editor")
 			}
 		})
 	}
@@ -424,5 +431,359 @@ func TestSidebarNarrowResizeWhileEditing(t *testing.T) {
 	resize(a, 120, 16)
 	if a.side.shown {
 		t.Error("widening reopened the sidebar")
+	}
+}
+
+// focusSection shows the sidebar on the section whose key is digit.
+func focusSection(t *testing.T, a *App, digit string) {
+	t.Helper()
+	a.Update(key(digit))
+	if !a.sidebarFocused() {
+		t.Fatalf("%s did not focus the sidebar", digit)
+	}
+}
+
+// focusTodosOn focuses the todos section and selects the Workbench row with text.
+func focusTodosOn(t *testing.T, a *App, text string) {
+	t.Helper()
+	focusSection(t, a, "3")
+	for i, b := range a.side.todos.visible {
+		if b.Page == "Workbench" && b.Text == text {
+			a.side.todos.sel = i
+			return
+		}
+	}
+	t.Fatalf("no Workbench todo %q", text)
+}
+
+// focusAgendaOn focuses the agenda section and selects the Workbench row with text.
+func focusAgendaOn(t *testing.T, a *App, text string) {
+	t.Helper()
+	focusSection(t, a, "4")
+	for i, it := range a.side.agenda.items {
+		if it.Todo.Page == "Workbench" && it.Todo.Text == text {
+			a.side.agenda.sel = i
+			return
+		}
+	}
+	t.Fatalf("no Workbench agenda row %q", text)
+}
+
+const dustTask = "Replace the dust collector filter"
+
+// doneRow is the struck row as the 50-column panel clips it.
+const doneRow = "DONE [#B] Replace t"
+
+func TestSidebarFocusedKeysGoToPanel(t *testing.T) {
+	a := sidebarApp(t, 120, 30)
+	a.navigate("Workbench")
+	focusSection(t, a, "3")
+	row, sel := a.page.CursorRow(), a.side.todos.sel
+	a.Update(key("j"))
+	if a.side.todos.sel != sel+1 {
+		t.Errorf("todos sel %d, want %d", a.side.todos.sel, sel+1)
+	}
+	if a.page.CursorRow() != row {
+		t.Errorf("page row moved %d -> %d", row, a.page.CursorRow())
+	}
+	for _, k := range []string{"e", ":", "T"} {
+		a.Update(key(k))
+		if a.editor != nil || a.active != nil || a.capture != nil {
+			t.Fatalf("%q reached the read view: editor %v overlay %T", k, a.editor != nil, a.active)
+		}
+	}
+}
+
+func TestSidebarCloseKeysFocusPage(t *testing.T) {
+	cases := []struct {
+		digit string
+		keys  []string
+	}{
+		{"1", []string{"esc", "q", "F"}},
+		{"2", []string{"esc", "b"}},
+		{"3", []string{"esc", "q"}},
+		{"4", []string{"esc", "q"}},
+		{"5", []string{"esc", "q"}},
+	}
+	for _, c := range cases {
+		for _, k := range c.keys {
+			t.Run(c.digit+" "+k, func(t *testing.T) {
+				a := sidebarApp(t, 120, 30)
+				a.navigate("Workbench")
+				focusSection(t, a, c.digit)
+				var msg tea.KeyPressMsg = key(k)
+				if k == "esc" {
+					msg = keyEscK
+				}
+				_, cmd := a.Update(msg)
+				if cmd != nil {
+					if _, quit := cmd().(tea.QuitMsg); quit {
+						t.Fatal("close key quit the app")
+					}
+				}
+				if !a.side.shown || a.side.focused {
+					t.Fatalf("shown %v focused %v, want shown, page focused", a.side.shown, a.side.focused)
+				}
+				if row := frameLines(a)[0]; !strings.Contains(row, c.digit+": focus") {
+					t.Errorf("header %q lacks %q", row, c.digit+": focus")
+				}
+				row := a.page.CursorRow()
+				a.Update(key("j"))
+				if a.page.CursorRow() == row {
+					t.Error("j did not move the page cursor")
+				}
+			})
+		}
+	}
+	t.Run("backlinks q is not a close key", func(t *testing.T) {
+		a := sidebarApp(t, 120, 30)
+		focusSection(t, a, "2")
+		a.Update(key("q"))
+		if !a.sidebarFocused() {
+			t.Error("q left the backlinks panel")
+		}
+	})
+}
+
+func TestSidebarSectionKeysWhileFocused(t *testing.T) {
+	a := sidebarApp(t, 120, 30)
+	focusSection(t, a, "3")
+	a.Update(key("4"))
+	if a.side.section != sectionAgenda || !a.sidebarFocused() {
+		t.Errorf("section %v focused %v, want agenda focused", a.side.section, a.side.focused)
+	}
+	a.Update(key("|"))
+	if a.side.shown || a.side.focused {
+		t.Errorf("| left shown %v focused %v", a.side.shown, a.side.focused)
+	}
+}
+
+func TestSidebarCtrlCQuits(t *testing.T) {
+	a := sidebarApp(t, 120, 30)
+	focusSection(t, a, "3")
+	_, cmd := a.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	if cmd == nil {
+		t.Fatal("ctrl+c returned no cmd")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Errorf("ctrl+c cmd yielded %T, want tea.QuitMsg", cmd())
+	}
+}
+
+func TestSidebarEnterKeepsFocus(t *testing.T) {
+	cases := []struct {
+		name  string
+		setup func(t *testing.T, a *App) (want string)
+	}{
+		{"todos", func(t *testing.T, a *App) string {
+			focusTodosOn(t, a, dustTask)
+			return "Workbench"
+		}},
+		{"tree", func(t *testing.T, a *App) string {
+			focusSection(t, a, "1")
+			for i, r := range a.side.tree.rows {
+				if r.node.Page != nil && r.node.Page.Key == "Hub" {
+					a.side.tree.sel = i
+					return "Hub"
+				}
+			}
+			t.Fatal("no Hub row in the tree")
+			return ""
+		}},
+		{"backlinks", func(t *testing.T, a *App) string {
+			a.navigate("Hub")
+			focusSection(t, a, "2")
+			b := a.side.backlinks
+			if len(b.refs) == 0 || b.sel < 0 || b.rows[b.sel].ref == nil {
+				t.Fatal("Hub has no linked reference selected")
+			}
+			return a.canonicalName(b.rows[b.sel].ref.FromPage)
+		}},
+		{"agenda", func(t *testing.T, a *App) string {
+			focusSection(t, a, "4")
+			if len(a.side.agenda.items) == 0 {
+				t.Fatal("agenda is empty")
+			}
+			a.side.agenda.sel = 0
+			return a.side.agenda.items[0].Todo.Page
+		}},
+		{"calendar", func(t *testing.T, a *App) string {
+			focusSection(t, a, "5")
+			c := a.side.calendar
+			j, ok := a.idx.JournalOn(c.cursor)
+			if !ok {
+				t.Fatalf("no journal on the calendar cursor %v", c.cursor)
+			}
+			return j.Name
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			a := sidebarApp(t, 120, 30)
+			a.navigate("Alpha")
+			want := c.setup(t, a)
+			hist := len(a.hist)
+			a.Update(keyEnterK)
+			if got := a.page.Page(); got != want {
+				t.Errorf("page %q, want %q", got, want)
+			}
+			if !a.side.focused || !a.side.shown || a.active != nil {
+				t.Errorf("focused %v shown %v overlay %T", a.side.focused, a.side.shown, a.active)
+			}
+			if len(a.hist) != hist+1 {
+				t.Errorf("history %d entries, want %d", len(a.hist), hist+1)
+			}
+		})
+	}
+}
+
+func TestSidebarTaskXWritesThroughGuard(t *testing.T) {
+	const dust = "- TODO [#B] " + dustTask
+	for _, sec := range []string{"todos", "agenda"} {
+		t.Run(sec, func(t *testing.T) {
+			a := sidebarApp(t, 120, 30)
+			path := workbenchPath(a)
+			orig, _ := os.ReadFile(path)
+			var view func() string
+			if sec == "todos" {
+				focusTodosOn(t, a, dustTask)
+				view = a.side.todos.View
+			} else {
+				focusAgendaOn(t, a, dustTask)
+				view = a.side.agenda.View
+			}
+			a.Update(key("x"))
+			got, _ := os.ReadFile(path)
+			want := strings.Replace(string(orig), dust, "- DONE [#B] "+dustTask, 1)
+			if string(got) != want {
+				t.Fatalf("after x:\n%q\nwant\n%q", got, want)
+			}
+			if v := plain(view()); !strings.Contains(v, doneRow) {
+				t.Errorf("struck row missing:\n%s", v)
+			}
+			a.Update(key("x"))
+			got, _ = os.ReadFile(path)
+			if string(got) != string(orig) {
+				t.Errorf("second x should restore the original bytes:\n%q\nwant\n%q", got, orig)
+			}
+		})
+	}
+}
+
+func TestSidebarTaskXRefusedWhileSyncing(t *testing.T) {
+	a := sidebarApp(t, 120, 30)
+	path := workbenchPath(a)
+	orig, _ := os.ReadFile(path)
+	focusTodosOn(t, a, "Wax the bench top")
+	a.syncing = true
+	a.Update(key("x"))
+	got, _ := os.ReadFile(path)
+	if string(got) != string(orig) {
+		t.Error("file must be unchanged while syncing")
+	}
+	if !strings.Contains(a.side.todos.errMsg, "sync in progress") {
+		t.Errorf("errMsg = %q, want sync in progress", a.side.todos.errMsg)
+	}
+}
+
+func TestSidebarTaskXRefusedWhenFileChanged(t *testing.T) {
+	a := sidebarApp(t, 120, 30)
+	path := workbenchPath(a)
+	focusTodosOn(t, a, "Wax the bench top")
+	orig, _ := os.ReadFile(path)
+	changed := string(orig) + "- added meanwhile\n"
+	mutated := false
+	real := a.readSnapshot
+	a.readSnapshot = func(p string) (edit.Snapshot, error) {
+		s, err := real(p)
+		if p == path && !mutated {
+			mutated = true
+			if werr := os.WriteFile(p, []byte(changed), 0o644); werr != nil {
+				t.Error(werr)
+			}
+		}
+		return s, err
+	}
+	a.Update(key("x"))
+	got, _ := os.ReadFile(path)
+	if string(got) != changed {
+		t.Errorf("file = %q, want the outside change untouched", got)
+	}
+	if !strings.Contains(a.side.todos.errMsg, "changed on disk") {
+		t.Errorf("errMsg = %q, want changed on disk", a.side.todos.errMsg)
+	}
+}
+
+func TestSidebarDoneRowsClearOnSwitchAndHide(t *testing.T) {
+	leaves := map[string]func(a *App, digit string){
+		"switch": func(a *App, digit string) {
+			other := "4"
+			if digit == "4" {
+				other = "3"
+			}
+			a.Update(key(other))
+			a.Update(key(digit))
+		},
+		"hide": func(a *App, digit string) {
+			a.Update(key("|"))
+			a.Update(key("|"))
+		},
+		"resize": func(a *App, digit string) {
+			resize(a, 100, 30)
+			resize(a, 120, 30)
+			a.Update(key(digit))
+		},
+	}
+	for _, digit := range []string{"3", "4"} {
+		for name, leave := range leaves {
+			t.Run(digit+" "+name, func(t *testing.T) {
+				a := sidebarApp(t, 120, 30)
+				var view func() string
+				var doneLen func() int
+				if digit == "3" {
+					focusTodosOn(t, a, dustTask)
+					view, doneLen = a.side.todos.View, func() int { return len(a.side.todos.done) }
+				} else {
+					focusAgendaOn(t, a, dustTask)
+					view, doneLen = a.side.agenda.View, func() int { return len(a.side.agenda.done) }
+				}
+				a.Update(key("x"))
+				if !strings.Contains(plain(view()), doneRow) || doneLen() == 0 {
+					t.Fatal("setup: no struck row after x")
+				}
+				leave(a, digit)
+				if !a.sidebarFocused() {
+					t.Fatalf("setup: sidebar not back on the section (shown %v focused %v)", a.side.shown, a.side.focused)
+				}
+				if strings.Contains(plain(view()), doneRow) {
+					t.Error("struck row still listed")
+				}
+				if doneLen() != 0 {
+					t.Errorf("%d done rows kept", doneLen())
+				}
+			})
+		}
+	}
+}
+
+func TestSidebarCaptureFeedbackInPanel(t *testing.T) {
+	a := sidebarApp(t, 120, 30)
+	focusSection(t, a, "3")
+	a.Update(key("c"))
+	if a.capture == nil {
+		t.Fatal("c did not open capture")
+	}
+	for _, r := range "hello" {
+		a.Update(key(string(r)))
+	}
+	a.Update(keyEnterK)
+	if a.capture != nil {
+		t.Fatal("capture still open")
+	}
+	if !strings.HasPrefix(a.side.todos.errMsg, "captured to") {
+		t.Errorf("errMsg = %q, want captured to…", a.side.todos.errMsg)
+	}
+	if !a.sidebarFocused() {
+		t.Error("focus left the sidebar")
 	}
 }
