@@ -12,7 +12,7 @@ import (
 
 var paletteNow = time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC)
 
-// typeInto feeds s to the palette one key at a time.
+// typePalette feeds s to the palette one key at a time.
 func typePalette(p *Palette, s string) {
 	for _, r := range s {
 		p.Update(string(r))
@@ -139,7 +139,12 @@ func TestPaletteRunEqualsKey(t *testing.T) {
 				}
 			}},
 		{name: "cursor row", key: keyEnt, label: "enter follow link ([[Page#Heading]] opens at the heading)",
-			setup: func(a *App) { a.navigate("Alpha"); a.Update(key("n")) }},
+			setup: func(a *App) { a.navigate("Alpha"); a.Update(key("n")) },
+			want: func(t *testing.T, a *App) {
+				if got := a.page.Page(); got != "Beta" {
+					t.Errorf("page %q, want Beta", got)
+				}
+			}},
 		{name: "refused", key: key("e"), label: "e edit in-app at the cursor row",
 			setup: func(a *App) { a.navigate("Alpha"); a.syncing = true },
 			want: func(t *testing.T, a *App) {
@@ -229,18 +234,18 @@ func TestColonOnlyOpensPaletteInReadView(t *testing.T) {
 func TestPaletteKeys(t *testing.T) {
 	quietTerm(t)
 	p := NewPalette(80, 24)
-	down := func(k string) { p.Update(k) }
-	down(keyDown)
-	down(keyCtrlJ)
+	press := func(k string) { p.Update(k) }
+	press(keyDown)
+	press(keyCtrlJ)
 	if p.sel != 2 {
 		t.Errorf("after down, ctrl+j: sel %d, want 2", p.sel)
 	}
-	down(keyUp)
-	down(keyCtrlK)
+	press(keyUp)
+	press(keyCtrlK)
 	if p.sel != 0 {
 		t.Errorf("after up, ctrl+k: sel %d, want 0", p.sel)
 	}
-	down(keyUp)
+	press(keyUp)
 	if p.sel != 0 {
 		t.Errorf("up at top: sel %d, want 0", p.sel)
 	}
