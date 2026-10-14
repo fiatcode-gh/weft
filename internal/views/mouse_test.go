@@ -224,6 +224,53 @@ func TestMouseLinkClickMatchesKeys(t *testing.T) {
 	}
 }
 
+// With the sidebar shown the page starts at column sidebarCols: a click on a
+// link's first or last cell follows it as n+enter does, and the cell just
+// left of it does not.
+func TestMouseLinkClickBesideSidebar(t *testing.T) {
+	mk := func() *App {
+		a := newApp(t, map[string]string{
+			"pages/Alpha.md": "- Links to [[Beta]] here\n- x\n",
+			"pages/Beta.md":  "- b\n",
+		}, 130, 24)
+		a.navigate("Alpha")
+		a.Update(key("3"))
+		a.Update(keyEscK)
+		if !a.side.shown || a.sidebarFocused() {
+			t.Fatalf("sidebar shown %v focused %v, want shown, page focused", a.side.shown, a.sidebarFocused())
+		}
+		return a
+	}
+	// pageCell finds text in the page column only (the sidebar may list it too).
+	pageCell := func(a *App, text string) (x, y int) {
+		for y, line := range frameLines(a) {
+			rest := ansi.TruncateLeft(line, sidebarCols, "")
+			if i := strings.Index(rest, text); i >= 0 {
+				return sidebarCols + ansi.StringWidth(rest[:i]), y
+			}
+		}
+		t.Fatalf("%q not in the page column:\n%s", text, appText(a))
+		return 0, 0
+	}
+	keys := mk()
+	keys.Update(key("n"))
+	keys.Update(keyEnterK)
+	want := readStateOf(keys)
+	x0, y := pageCell(mk(), "Beta")
+	for name, x := range map[string]int{"first cell": x0, "last cell": x0 + len("Beta") - 1} {
+		a := mk()
+		a.Update(click(x, y))
+		if got := readStateOf(a); got != want {
+			t.Errorf("click on the %s (%d,%d) != n+enter:\n got %+v\nwant %+v", name, x, y, got, want)
+		}
+	}
+	a := mk()
+	a.Update(click(x0-1, y))
+	if a.page.Page() != "Alpha" {
+		t.Errorf("click left of the link followed it to %q", a.page.Page())
+	}
+}
+
 func TestMouseWrappedLinkClick(t *testing.T) {
 	mk := func() *App {
 		a := newApp(t, map[string]string{

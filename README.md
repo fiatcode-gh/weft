@@ -247,7 +247,7 @@ The mouse is on by default. Press `m` to turn it off until weft quits (the statu
 - **Click on the page.** A link or tag follows, as `n` then `Enter` would. Any other row puts the cursor there. The rule row and the status bar do nothing.
 - **Click in the sidebar.** The click focuses the sidebar. A click on a row selects it, and a click on the selected row opens it, as `Enter` does; focus stays in the sidebar. A click on the header row only focuses.
 - **Click in lists and overlays.** The same rule applies in the picker, search, palette, backlinks, todos, agenda, tree and on this day: click a row to select it, click it again to open or run it. In the tree a second click on a group opens or closes it. In the calendar a click picks a day and a second click opens it. A click never scrolls a list, so the clicked row stays under the pointer; keys and the wheel move the selection and keep it centred as before.
-- **Does nothing.** Clicks outside an overlay (it stays open), on its title, on headers, on the footer and on the status bar. Help and the prompts ignore clicks.
+- **Does nothing.** Clicks outside an overlay (it stays open), on its title, on headers, on the footer and on the status bar. Help, the rename preview and the prompts ignore clicks.
 - **Editor.** The wheel scrolls 3 rows, and the cursor moves only if it would leave the screen. A click places the cursor (in live preview, on that line) and clears a selection.
 - **Select terminal text.** Hold `Shift` while dragging (`Option` in iTerm2), or press `m` first.
 - **Nothing is saved.** The on/off state lasts until weft quits. A click never writes a file; it only does what the matching key does.

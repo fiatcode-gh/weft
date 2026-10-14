@@ -23,8 +23,9 @@ box's screen position when its height changes.
    the mode on quit and around `tea.ExecProcess`, so `$EDITOR` gets no mouse
    reporting and needs no code.
 2. **`m` is an action-table entry** (`readActions`, before `?`), with a help row
-   and a palette entry, so it follows the action-table rule. In the editor,
-   overlays and prompts they see keys first, so `m` stays text there.
+   and a palette entry, so it follows the action-table rule. It works in the
+   read view and in the focused sidebar. The editor, the overlays and the
+   prompts get keys first, so there `m` is typed text or the overlay's own key.
 3. **Marker.** `statusBar()` prefixes `mouse off  ` to the right-hand text while
    off; it is hidden while a hint shows. Nothing shows while on.
 4. **One funnel.** `internal/views/mouse.go` has `mouseClick` and `mouseWheel`;
@@ -115,3 +116,8 @@ box's screen position when its height changes.
   columns today (`helpColGutter`, `helpChrome`) and its golden is 130 wide; a
   longer title in the right column widens it.
 - Text clicks are ignored while the editor's find bar or date prompt is open.
+- In live preview a click on a rendered row that joins several source lines
+  (a paragraph) lands on the first of them, by the page-move landing rule; the
+  line then shows raw, and a second click is exact.
+- Any accepted mouse event clears the status hint and the editor notice, as a
+  key press does, even a click that does nothing else.

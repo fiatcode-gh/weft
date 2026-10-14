@@ -86,6 +86,18 @@ func calMouseCases(t *testing.T, open func(t *testing.T) (*App, *Calendar), maxX
 		})
 	}
 
+	t.Run("cell edges", func(t *testing.T) {
+		// a day is 5 cells wide around its centre: both edge cells pick it
+		for _, c := range []struct{ day, dx int }{{15, -2}, {12, +2}} {
+			a, cal := open(t)
+			x, y := calDayCell(t, a, cal, c.day, maxX)
+			a.Update(click(x+c.dx, y))
+			if !cal.cursor.Equal(may(c.day)) {
+				t.Errorf("click at offset %+d of day %d: cursor %v", c.dx, c.day, cal.cursor)
+			}
+		}
+	})
+
 	t.Run("chrome and empty cells", func(t *testing.T) {
 		a, cal := open(t)
 		hx, hy := mustCell(t, a, "Mo   Tu", maxX)
