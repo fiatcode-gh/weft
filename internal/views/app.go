@@ -958,123 +958,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return a, nil
 		}
-		switch key {
-		case keyQ, "ctrl+c":
-			return a, tea.Quit
-		case "ctrl+p":
-			a.active = NewPicker(a.idx, a.width, a.height)
-		case "/":
-			a.active = NewSearchView(a.idx, a.width, a.height)
-		case "b":
-			name := a.page.Page()
-			a.active = NewBacklinks(a.idx, name, a.unlinkedRefs(name), a.width, a.height)
-		case "T":
-			a.active = NewTodos(a.idx, a.width, a.height)
-		case "A":
-			a.active = NewAgenda(a.idx, a.nowFunc(), a.width, a.height)
-		case "C":
-			a.active = NewCalendar(a.idx, a.page.Page(), a.nowFunc(), a.width, a.height)
-		case "O":
-			a.active = NewOnThisDay(a.idx, a.nowFunc(), a.readSnapshot, a.width, a.height)
-		case keyShiftF:
-			a.active = NewTree(a.idx, a.page.Page(), a.treeOpen, a.width, a.height)
-		case "?":
-			a.active = NewHelp(a.version, a.width, a.height)
-		case "[":
-			a.historyBack()
-		case "]":
-			a.historyForward()
-		case "c":
-			a.openCapture()
-		case "f2":
-			return a, a.openRename()
-		case ".":
-			if cmd, blocked := a.blockIfSyncing(); blocked {
-				return a, cmd
-			}
-			day := a.today()
-			today := a.lay.JournalName(day)
-			var probe tea.Cmd
-			if _, ok := a.idx.JournalOn(day); !ok {
-				if err := a.createJournalAndReindex(day); err != nil {
-					return a, a.setHint(err.Error())
-				}
-				// Creating the journal wrote a new file (from the journal
-				// template, or empty without one) — refresh the indicator.
-				probe = a.statusProbeCmd()
-			}
-			if a.page.Page() != today {
-				a.navigate(today)
-			}
-			return a, probe
-		case "<":
-			page := a.page.Page()
-			if name, ok := a.idx.JournalNeighbor(page, -1); ok {
-				a.navigate(name)
-			} else if _, ok := a.idx.JournalDateOf(page); ok {
-				return a, a.setHint("no earlier journal")
-			}
-		case ">":
-			page := a.page.Page()
-			if name, ok := a.idx.JournalNeighbor(page, +1); ok {
-				a.navigate(name)
-			} else if _, ok := a.idx.JournalDateOf(page); ok {
-				return a, a.setHint("no later journal")
-			}
-		case "g":
-			a.page.GotoTop()
-		case "G":
-			a.page.GotoBottom()
-		case "S":
-			if a.syncing {
-				return a, a.setHint("⟳ already syncing")
-			}
-			a.syncing = true
-			run := a.syncFunc
-			dir := a.graphPath
-			return a, tea.Batch(
-				a.setHint("⟳ syncing…"),
-				func() tea.Msg { return syncDoneMsg{res: run(dir)} },
-			)
-		case "R":
-			// Async reindex — the response lands as indexLoadedMsg and
-			// rebuilds PageView for the current page. The hint makes a
-			// swallowed or racing R visible instead of looking like a
-			// silent no-op. Errors surface in loadErr which the splash
-			// overlay renders.
-			return a, tea.Batch(a.setHint("⟳ reindexing…"), a.buildIndexCmd())
-		case keyE:
-			if cmd, blocked := a.blockIfSyncing(); blocked {
-				return a, cmd
-			}
-			return a, a.enterEditor()
-		case keyShiftE:
-			if cmd, blocked := a.blockIfSyncing(); blocked {
-				return a, cmd
-			}
-			return a, a.editCurrent()
-		case "n":
-			a.page.CycleLink(+1)
-		case "N":
-			a.page.CycleLink(-1)
-		case "tab":
-			if h := a.page.ToggleFold(); h != "" {
-				return a, a.setHint(h)
-			}
-		case "z":
-			return a, a.setHint(a.page.CycleFoldLevel())
-		case keyEnter:
-			if t := a.page.FollowCursor(); t != "" {
-				return a, a.followLink(t)
-			}
-		case keyJ, keyDown:
-			a.page.LineDown()
-		case keyK, keyUp:
-			a.page.LineUp()
-		case "ctrl+d":
-			a.page.HalfPageDown()
-		case "ctrl+u":
-			a.page.HalfPageUp()
+		if act := readKeys[key]; act != nil {
+			return a, act.run(a)
 		}
 	}
 	return a, nil
@@ -1231,6 +1116,21 @@ func (a *App) blockIfSyncing() (cmd tea.Cmd, blocked bool) {
 	default:
 		return a.setHint("⟳ " + syncBusyMsg), true
 	}
+}
+
+// startSync starts the async commit → pull --rebase → push, reporting through
+// the status bar; a second press while one runs only says so.
+func (a *App) startSync() tea.Cmd {
+	if a.syncing {
+		return a.setHint("⟳ already syncing")
+	}
+	a.syncing = true
+	run := a.syncFunc
+	dir := a.graphPath
+	return tea.Batch(
+		a.setHint("⟳ syncing…"),
+		func() tea.Msg { return syncDoneMsg{res: run(dir)} },
+	)
 }
 
 // logSyncFailure appends a failing sync's stage, error, and captured git
