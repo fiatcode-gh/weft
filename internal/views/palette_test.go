@@ -30,8 +30,8 @@ func paletteKeys(p *Palette) []string {
 func TestPaletteListsActionsInHelpOrder(t *testing.T) {
 	quietTerm(t)
 	got := paletteKeys(NewPalette(80, 24))
-	want := strings.Fields("tab z enter [ ] . < > C O ctrl-p F / b T A S c e E R F2 1 2 3 4 5 | ? q")
-	if len(want) != 30 || fmt.Sprint(got) != fmt.Sprint(want) {
+	want := strings.Fields("tab z enter [ ] . < > C O ctrl-p F / b T A S c e E R F2 1 2 3 4 5 | m ? q")
+	if len(want) != 31 || fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Errorf("palette keys\n got: %v\nwant: %v", got, want)
 	}
 

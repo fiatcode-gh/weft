@@ -23,11 +23,11 @@
 │    >               next journal                                            |               show / hide the sidebar          │
 │    C               calendar — move between journals                                                                         │
 │    O               on this day: week, month, years ago                   Help / quit                                        │
-│    ctrl-p          picker — find any page                                  ?               toggle this help                 │
-│    F               page tree: folders and namespaces                       :               command palette                  │
-│    /               search the graph (ripgrep)                              esc             close overlay                    │
-│    b               backlinks + unlinked refs for the current page          q               quit                             │
-│    T               todos dashboard (x: done / undo)                                                                         │
+│    ctrl-p          picker — find any page                                  m               mouse on / off (select text)     │
+│    F               page tree: folders and namespaces                       ?               toggle this help                 │
+│    /               search the graph (ripgrep)                              :               command palette                  │
+│    b               backlinks + unlinked refs for the current page          esc             close overlay                    │
+│    T               todos dashboard (x: done / undo)                        q               quit                             │
 │    A               agenda: overdue, today, next 7 days                                                                      │
 │                                                                                                                             │
 │  Sync                                                                                                                       │

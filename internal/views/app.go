@@ -83,6 +83,8 @@ type App struct {
 	// editor sessions, so Ctrl+R lasts until weft quits; it is never written
 	// to disk.
 	editorSource bool
+	// mouseOff is mouse reporting off for the session (m); never written.
+	mouseOff bool
 
 	// active is the overlay layered over the page, or nil when the page has
 	// focus. Set when an open-overlay key is pressed; cleared by terminal outcomes.
@@ -1007,6 +1009,9 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (a *App) View() tea.View {
 	v := tea.NewView(a.frame())
 	v.AltScreen = true
+	if !a.mouseOff {
+		v.MouseMode = tea.MouseModeCellMotion
+	}
 	if a.editor != nil {
 		v.Cursor = a.editor.Cursor()
 	} else if p := a.bottomPrompt(); p != nil {
@@ -1093,6 +1098,9 @@ func (a *App) statusBar() string {
 		rightText := "? help"
 		if ind := a.page.ScrollIndicator(); ind != "" {
 			rightText = ind + "  " + rightText
+		}
+		if a.mouseOff {
+			rightText = "mouse off  " + rightText
 		}
 		right = styleFaint.Render(rightText)
 		// An unsynced graph shows a leading attention dot — hidden while a

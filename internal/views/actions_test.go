@@ -40,7 +40,7 @@ func TestActionTableShape(t *testing.T) {
 			}
 		}
 	}
-	if want := "[1 2 3 4 5 |]"; fmt.Sprint(sidebarKeys) != want {
+	if want := "[1 2 3 4 5 | m]"; fmt.Sprint(sidebarKeys) != want {
 		t.Errorf("sidebar-flagged keys %v, want %s", sidebarKeys, want)
 	}
 }

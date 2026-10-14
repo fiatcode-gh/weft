@@ -177,6 +177,8 @@ func init() {
 		{keys: []string{"|"}, key: "|", title: "show / hide the sidebar", group: groupSidebar, palette: true, sidebar: true,
 			run: (*App).toggleSidebar},
 
+		{keys: []string{"m"}, key: "m", title: "mouse on / off (select text)", group: groupHelp, palette: true, sidebar: true,
+			run: func(a *App) tea.Cmd { a.mouseOff = !a.mouseOff; return nil }},
 		{keys: []string{"?"}, key: "?", title: "toggle this help", group: groupHelp, palette: true,
 			run: func(a *App) tea.Cmd { a.active = NewHelp(a.version, a.width, a.height); return nil }},
 		{keys: []string{":"}, key: ":", title: "command palette", group: groupHelp,
