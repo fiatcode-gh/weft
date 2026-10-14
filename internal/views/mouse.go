@@ -38,6 +38,7 @@ func (a *App) mouseClick(m tea.Mouse) tea.Cmd {
 	}
 	switch {
 	case a.editor != nil:
+		a.editor.Click(m.X, m.Y)
 		return nil
 	case a.capture != nil || a.rename != nil:
 		return nil
@@ -58,6 +59,7 @@ func (a *App) mouseWheel(m tea.Mouse) tea.Cmd {
 	}
 	switch {
 	case a.editor != nil:
+		a.editor.Wheel(dir)
 		return nil
 	case a.capture != nil || a.rename != nil:
 		return nil
