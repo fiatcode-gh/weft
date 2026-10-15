@@ -57,6 +57,10 @@ func Load() (Config, error) {
 		return Default(), nil
 	}
 	if err != nil {
+		var pe *fs.PathError
+		if errors.As(err, &pe) {
+			err = pe.Err // it names the path already; the prefix below must not repeat it
+		}
 		return Config{}, fmt.Errorf("%s: %s", path, err)
 	}
 	cfg, err := parse(string(data))

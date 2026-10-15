@@ -230,6 +230,44 @@ func TestVimSearchEdges(t *testing.T) {
 			t.Fatalf("cursor %v past the last character", cur)
 		}
 	})
+	t.Run("live match is strictly after the cursor", func(t *testing.T) {
+		e := searchEditor(searchBody, buffer.Pos{Line: 0, Col: 6})
+		vimType(e, "/beta")
+		wantCursor(t, e, buffer.Pos{Line: 2, Col: 0})
+		if e.find == nil {
+			t.Fatal("the bar closed while typing")
+		}
+	})
+	t.Run("esc keeps the previous search", func(t *testing.T) {
+		e := searchEditor(searchBody, buffer.Pos{Line: 0, Col: 6})
+		searchTo(e, "/beta")
+		vimType(e, "/gam")
+		e.Update(escKey)
+		if e.lastQuery != "beta" {
+			t.Fatalf("lastQuery %q after an esc-cancelled search, want beta", e.lastQuery)
+		}
+		vimType(e, "n")
+		wantCursor(t, e, buffer.Pos{Line: 3, Col: 8})
+	})
+	t.Run("no match keeps the previous search", func(t *testing.T) {
+		e := searchEditor(searchBody, buffer.Pos{Line: 0, Col: 6})
+		searchTo(e, "/beta")
+		searchTo(e, "/zzz")
+		if e.lastQuery != "beta" {
+			t.Fatalf("lastQuery %q after a failed search, want beta", e.lastQuery)
+		}
+		vimType(e, "n")
+		wantCursor(t, e, buffer.Pos{Line: 3, Col: 8}) // the failed search left the cursor on the match
+	})
+	t.Run("modeless esc still remembers the query", func(t *testing.T) {
+		e := searchEditor(searchBody, buffer.Pos{Line: 0, Col: 0})
+		e.Update(ctrlFKey)
+		vimType(e, "gam")
+		e.Update(escKey)
+		if e.lastQuery != "gam" {
+			t.Fatalf("lastQuery %q, want gam", e.lastQuery)
+		}
+	})
 	t.Run("search keys are not a recorded change", func(t *testing.T) {
 		e := searchEditor(searchBody, buffer.Pos{Line: 0, Col: 0})
 		vimType(e, "x")

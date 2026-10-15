@@ -233,10 +233,18 @@ func (e *EditorView) vimExec(c vimCmd) (EditorResult, tea.Cmd) {
 		e.vimJoin(c)
 	case "p", "P":
 		e.vimPut(c)
-	case "u":
-		e.history(b.Undo(), "nothing to undo")
-	case "ctrl+r":
-		e.history(b.Redo(), "nothing to redo")
+	case "u", "ctrl+r":
+		step, refusal := b.Undo, "nothing to undo"
+		if c.key == "ctrl+r" {
+			step, refusal = b.Redo, "nothing to redo"
+		}
+		done := step()
+		for range c.count - 1 {
+			if !done || !step() {
+				break
+			}
+		}
+		e.history(done, refusal)
 	default:
 		if q, _, ok := e.vimMotion(c, false); ok {
 			b.MoveTo(q, false)

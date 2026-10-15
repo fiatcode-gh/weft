@@ -64,9 +64,10 @@ func (e *EditorView) Click(x, y int) {
 	}
 	e.goalOK = false
 	if e.vim != nil {
-		if e.vim.mode == vimNormal {
+		if e.vim.mode != vimInsert {
 			e.vim.pending = nil
-		} else if e.vim.mode != vimInsert {
+		}
+		if e.vimVisual() {
 			e.vim.mode = vimNormal
 		}
 	}

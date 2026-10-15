@@ -448,6 +448,50 @@ func TestVimCtrlRRedo(t *testing.T) {
 	}
 }
 
+func TestVimUndoRedoCount(t *testing.T) {
+	e := vimEditor(nil, "abcdef\n", 0)
+	vimType(e, "xxx")
+	if text(e) != "def\n" {
+		t.Fatalf("after xxx: %q", text(e))
+	}
+	vimType(e, "3u")
+	if text(e) != "abcdef\n" {
+		t.Fatalf("3u: %q, want all three deletes undone", text(e))
+	}
+	vimType(e, "9u") // stops at the first nothing to undo
+	if text(e) != "abcdef\n" || e.notice != "nothing to undo" {
+		t.Fatalf("9u: %q notice %q", text(e), e.notice)
+	}
+	vimType(e, "2")
+	e.Update(ctrlR)
+	if text(e) != "cdef\n" {
+		t.Fatalf("2 ctrl+r: %q, want two deletes redone", text(e))
+	}
+	vimType(e, "9")
+	e.Update(ctrlR)
+	if text(e) != "def\n" || e.notice != "" {
+		t.Fatalf("9 ctrl+r: %q notice %q, want the one remaining redo", text(e), e.notice)
+	}
+	e.Update(ctrlR)
+	if e.notice != "nothing to redo" {
+		t.Fatalf("ctrl+r with nothing to redo: notice %q", e.notice)
+	}
+}
+
+func TestVimReplaceBufferSettles(t *testing.T) {
+	e := vimEditor(nil, "abcdef\n", 0)
+	vimType(e, "$")
+	e.replaceBuffer("ab\n", 0, 5)
+	if got, want := cursorPos(e), (buffer.Pos{Line: 0, Col: 1}); got != want {
+		t.Fatalf("normal mode cursor %v after a swap, want the last character %v", got, want)
+	}
+	vimType(e, "A")
+	e.replaceBuffer("xy\n", 0, 5)
+	if got, want := cursorPos(e), (buffer.Pos{Line: 0, Col: 2}); got != want {
+		t.Fatalf("insert mode cursor %v after a swap, want the line end %v", got, want)
+	}
+}
+
 func TestVimNormalClamp(t *testing.T) {
 	open := func(content string, line, col int) *EditorView {
 		e := editorAt(nil, "P", "/tmp/p.md", content, false, 80, 24, 0)

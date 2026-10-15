@@ -154,8 +154,11 @@ func (e *EditorView) Paste(msg tea.PasteMsg) tea.Cmd {
 	if e.vim != nil && e.vim.mode == vimInsert && !e.vim.replaying && e.vim.rec != nil {
 		e.vim.rec.inputs = append(e.vim.rec.inputs, vimInput{paste: msg.Content, isPaste: true})
 	}
-	if e.vimVisual() {
-		e.vim.mode = vimNormal
+	if e.vim != nil && e.vim.mode != vimInsert {
+		e.vim.pending = nil
+		if e.vimVisual() {
+			e.vim.mode = vimNormal
+		}
 	}
 	e.pasteText(msg.Content)
 	return nil
@@ -312,6 +315,9 @@ func (e *EditorView) replaceBuffer(content string, line, col int) {
 	e.syncReveal()
 	e.scrollCursorTo(sr)
 	e.refreshCompleter(false)
+	if e.vim != nil && e.vim.mode != vimInsert {
+		e.vimSettle()
+	}
 }
 
 // applyMerge installs a merged text that was already written to disk: the

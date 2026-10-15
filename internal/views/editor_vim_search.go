@@ -35,6 +35,7 @@ func (e *EditorView) vimSearchEnter() {
 		return
 	}
 	b.MoveTo(r.Start, false)
+	e.lastQuery = q
 	e.closeFind()
 	e.goalOK = false
 	e.syncReveal()

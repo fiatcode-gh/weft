@@ -91,6 +91,9 @@ func TestLoadDirectory(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), path) {
 		t.Fatalf("Load() error = %v, want one naming %s", err, path)
 	}
+	if n := strings.Count(err.Error(), path); n != 1 {
+		t.Errorf("error %q names the path %d times, want once", err, n)
+	}
 }
 
 func writeConfig(t *testing.T, path, body string) {

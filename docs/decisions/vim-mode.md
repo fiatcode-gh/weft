@@ -101,11 +101,13 @@ anything about the vim session.
 18. **Cursor shape.** `Cursor()` asks for a bar in insert mode only; other
     states keep the default block. `quietStdout` does not filter the cursor-style
     sequence (a test pins that).
-19. **Mouse.** Not ready while the ex line is open. A normal click drops a pending
-    command and clamps; a visual click leaves visual; the wheel keeps visual mode;
-    an insert click places the cursor and stays in insert mode (`editor_mouse.go`).
-20. **Paste.** Insert: as before, and recorded. Normal: inserted at the cursor,
-    then `vimSettle`. Visual: leaves visual first. Ex line: ignored.
+19. **Mouse.** Not ready while the ex line is open. A click drops a pending
+    command and clamps; a visual click leaves visual; the wheel
+    keeps visual mode; an insert click places the cursor and stays in insert mode
+    (`editor_mouse.go`).
+20. **Paste.** Insert: as before, and recorded. Normal: drops a pending command,
+    inserts at the cursor, then `vimSettle`. Visual: leaves visual first. Ex
+    line: ignored.
 21. **Help.** `vimHelp` is a hand-written group after `findHelp` in
     `buildHelpGroups`. Modeless editor and find rows are unchanged. Help stays two
     columns at 130.
@@ -131,3 +133,4 @@ anything about the vim session.
   App, which owns the guarded save.
 - Help rows follow the help limits: keys at most 15 cells, descriptions at most
   31 characters, or the two-column help outgrows 130 columns.
+- Parked: `f`/`t`/`r` take one rune (`vimArgToken`), so a grapheme typed as several runes (a ZWJ emoji, a decomposed accent) is dropped.

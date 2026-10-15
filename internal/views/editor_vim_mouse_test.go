@@ -3,6 +3,8 @@ package views
 import (
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/fiatcode-gh/weft/v2/internal/buffer"
 )
 
@@ -79,6 +81,36 @@ func TestVimClickVisual(t *testing.T) {
 			t.Errorf("%s then click: selection %v remains", v, r)
 		}
 	}
+}
+
+func TestVimLeavingVisualDropsPending(t *testing.T) {
+	quietTerm(t)
+	const body = "- alpha\n\n- bc\n"
+	t.Run("click", func(t *testing.T) {
+		e := vimEditor(nil, body, 0)
+		vimType(e, "v2")
+		e.Click(2, vimClickRow(t, e, 0))
+		vimType(e, "l")
+		if got, want := e.buf.Cursor(), (buffer.Pos{Line: 0, Col: 1}); got != want {
+			t.Errorf("cursor %v, want %v: the 2 typed in visual must not count", got, want)
+		}
+	})
+	t.Run("paste in visual", func(t *testing.T) {
+		e := vimEditor(nil, body, 0)
+		vimType(e, "v2")
+		e.Paste(tea.PasteMsg{Content: "Z"})
+		if len(e.vim.pending) != 0 {
+			t.Errorf("pending = %v after a paste, want none", e.vim.pending)
+		}
+	})
+	t.Run("paste in normal", func(t *testing.T) {
+		e := vimEditor(nil, body, 0)
+		vimType(e, "2")
+		e.Paste(tea.PasteMsg{Content: "Z"})
+		if len(e.vim.pending) != 0 {
+			t.Errorf("pending = %v after a paste, want none", e.vim.pending)
+		}
+	})
 }
 
 func TestVimClickInsert(t *testing.T) {

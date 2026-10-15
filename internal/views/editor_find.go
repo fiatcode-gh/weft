@@ -69,9 +69,11 @@ func (e *EditorView) openFind() {
 }
 
 // closeFind closes the bar, leaving the cursor where the current match
-// started (or at the origin) with no selection.
+// started (or at the origin) with no selection. A modeless bar's query becomes
+// the session's last query; a vim bar's does not (vimSearchEnter records it
+// on a hit, so a cancelled or failed search keeps the previous one).
 func (e *EditorView) closeFind() {
-	if f := e.find; f != nil && f.query != "" {
+	if f := e.find; f != nil && f.dir == 0 && f.query != "" {
 		e.lastQuery = f.query
 	}
 	e.find = nil
