@@ -426,3 +426,197 @@ func TestEditsKeepFinalLineWithoutTerminator(t *testing.T) {
 		t.Fatalf("got %q", b.String())
 	}
 }
+
+type historyView struct {
+	text string
+	cur  Pos
+	sel  Range
+	ok   bool
+}
+
+func viewOf(b *Buffer) historyView {
+	r, ok := b.Selection()
+	return historyView{b.String(), b.Cursor(), r, ok}
+}
+
+func TestUndoMarkSquash(t *testing.T) {
+	t.Run("three groups are one step", func(t *testing.T) {
+		b := New("one\ntwo\nthree")
+		at(b, 0, 1)
+		b.Insert("X")
+		m := b.UndoMark()
+		pre := viewOf(b)
+		b.Insert("A")
+		b.DeleteRange(Range{Pos{1, 0}, Pos{1, 2}})
+		b.Newline()
+		post := viewOf(b)
+		b.Squash(m)
+		if len(b.undo) != m+1 {
+			t.Fatalf("undo depth %d, want %d", len(b.undo), m+1)
+		}
+		if !b.Undo() {
+			t.Fatal("undo failed")
+		}
+		if got := viewOf(b); got != pre {
+			t.Fatalf("after undo %+v, want %+v", got, pre)
+		}
+		if !b.Redo() {
+			t.Fatal("redo failed")
+		}
+		if got := viewOf(b); got != post {
+			t.Fatalf("after redo %+v, want %+v", got, post)
+		}
+		b.Undo()
+		b.Undo()
+		if b.String() != "one\ntwo\nthree" {
+			t.Fatalf("second undo left %q", b.String())
+		}
+	})
+	t.Run("typing run before the mark stays separate", func(t *testing.T) {
+		b := New("")
+		b.Type("a")
+		b.Type("b")
+		m := b.UndoMark()
+		b.Type("c")
+		b.Insert("d")
+		b.Squash(m)
+		b.Undo()
+		if b.String() != "ab" {
+			t.Fatalf("got %q, want %q", b.String(), "ab")
+		}
+		b.Undo()
+		if b.String() != "" {
+			t.Fatalf("got %q, want empty", b.String())
+		}
+	})
+	t.Run("typing after squash is a new step", func(t *testing.T) {
+		b := New("x\ny")
+		m := b.UndoMark()
+		b.Insert("a")
+		b.Insert("b")
+		b.Squash(m)
+		text := b.String()
+		b.Type("z")
+		b.Undo()
+		if b.String() != text {
+			t.Fatalf("got %q, want %q", b.String(), text)
+		}
+	})
+	t.Run("fewer than two steps change nothing", func(t *testing.T) {
+		b := New("abc")
+		m := b.UndoMark()
+		b.Squash(m)
+		if len(b.undo) != 0 {
+			t.Fatal("zero steps must stay zero")
+		}
+		b.Insert("x")
+		n := len(b.undo)
+		first := b.undo[m]
+		b.Squash(m)
+		if len(b.undo) != n || b.undo[m] != first {
+			t.Fatal("one step must stay untouched")
+		}
+	})
+	t.Run("mark beyond the stack", func(t *testing.T) {
+		b := New("abc")
+		b.Insert("1")
+		b.Break()
+		b.Insert("2")
+		m := b.UndoMark()
+		b.Undo()
+		b.Undo()
+		text, n := b.String(), len(b.undo)
+		b.Squash(m + 5)
+		if b.String() != text || len(b.undo) != n {
+			t.Fatal("oversized mark must change nothing")
+		}
+		b.Squash(-3)
+		if b.String() != text || len(b.undo) != n {
+			t.Fatal("negative mark on an empty stack must change nothing")
+		}
+	})
+	t.Run("negative mark squashes everything", func(t *testing.T) {
+		b := New("abc")
+		b.Insert("1")
+		b.Insert("2")
+		b.Squash(-1)
+		if len(b.undo) != 1 {
+			t.Fatalf("undo depth %d, want 1", len(b.undo))
+		}
+	})
+	t.Run("open group is left alone", func(t *testing.T) {
+		b := New("abc")
+		m := b.UndoMark()
+		b.Insert("1")
+		b.Insert("2")
+		b.beginGroup()
+		b.Squash(m)
+		b.endGroup()
+		if len(b.undo) != 2 {
+			t.Fatalf("undo depth %d, want 2", len(b.undo))
+		}
+	})
+	t.Run("CRLF and multi-byte round trip", func(t *testing.T) {
+		for _, src := range []string{"a\r\nb\r\nc", "héllo\r\n日本語\r\n👨‍👩‍👧 end"} {
+			b := New(src)
+			at(b, 0, 1)
+			m := b.UndoMark()
+			b.Insert("é\n日")
+			b.DeleteRange(Range{Pos{1, 0}, Pos{1, len("日")}})
+			b.Newline()
+			post := viewOf(b)
+			b.Squash(m)
+			b.Undo()
+			if b.String() != src {
+				t.Fatalf("undo gave %q, want %q", b.String(), src)
+			}
+			b.Redo()
+			if got := viewOf(b); got != post {
+				t.Fatalf("redo %+v, want %+v", got, post)
+			}
+		}
+	})
+	t.Run("selection is restored from the first part", func(t *testing.T) {
+		b := New("hello world")
+		b.MoveTo(Pos{0, 0}, false)
+		b.MoveTo(Pos{0, 5}, true)
+		m := b.UndoMark()
+		pre := viewOf(b)
+		b.Insert("X")
+		b.Insert("Y")
+		b.Squash(m)
+		b.Undo()
+		if got := viewOf(b); got != pre || !got.ok {
+			t.Fatalf("after undo %+v, want %+v", got, pre)
+		}
+	})
+	t.Run("version unchanged", func(t *testing.T) {
+		b := New("abc")
+		m := b.UndoMark()
+		b.Insert("1")
+		b.Insert("2")
+		v := b.Version()
+		b.Squash(m)
+		if b.Version() != v {
+			t.Fatal("Squash must not change the version")
+		}
+	})
+	t.Run("redo stack untouched", func(t *testing.T) {
+		b := New("abc")
+		b.Insert("1")
+		b.Break()
+		b.Insert("2")
+		b.Undo()
+		m := b.UndoMark()
+		b.Redo()
+		if len(b.redo) != 0 {
+			t.Fatal("setup: redo should be empty")
+		}
+		b.Undo()
+		r := len(b.redo)
+		b.Squash(m)
+		if len(b.redo) != r {
+			t.Fatal("Squash must not touch redo")
+		}
+	})
+}

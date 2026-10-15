@@ -11,8 +11,9 @@ Why: reading a page and then editing its raw markdown made every edit a jump
 between two pictures of the same page. The goal is Obsidian-style editing that
 stays inside the plain-markdown line: weft never writes structure into the file.
 
-Out of scope: mouse, Vim mode, multiple cursors, editing in rendered rows
-(text is always edited as source), persisting the mode.
+Out of scope: mouse, Vim mode (added later, see `vim-mode.md`), multiple
+cursors, editing in rendered rows (text is always edited as source),
+persisting the mode.
 
 ## Decisions
 

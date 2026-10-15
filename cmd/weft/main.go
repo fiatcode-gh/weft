@@ -16,6 +16,7 @@ import (
 	"github.com/fiatcode-gh/weft/v2/internal/doctor"
 	"github.com/fiatcode-gh/weft/v2/internal/layout"
 	"github.com/fiatcode-gh/weft/v2/internal/render"
+	"github.com/fiatcode-gh/weft/v2/internal/userconfig"
 	"github.com/fiatcode-gh/weft/v2/internal/views"
 )
 
@@ -123,6 +124,11 @@ func main() {
 		os.Exit(2)
 	}
 
+	cfg, ok := loadUserConfig(os.Stderr)
+	if !ok {
+		os.Exit(2)
+	}
+
 	debugLog, err := initDebugLog(os.Getenv("WEFT_DEBUG"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "weft: WEFT_DEBUG is set but the debug log can't be opened: %v\n", err)
@@ -137,6 +143,7 @@ func main() {
 	render.Warmup()
 
 	app := views.New(graphPath, lay, resolvedVersion())
+	app.SetVimEditor(cfg.Editor == userconfig.Vim)
 
 	if _, err := tea.NewProgram(app, programOptions(os.Stdout)...).Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "weft: %v\n", err)
@@ -174,6 +181,17 @@ func loadLayout(graphPath string, stderr io.Writer) (layout.Layout, bool) {
 		return layout.Layout{}, false
 	}
 	return lay, true
+}
+
+// loadUserConfig reads the user config. An error is printed to stderr as
+// "weft: <err>" and reported as false; the caller exits 2.
+func loadUserConfig(stderr io.Writer) (userconfig.Config, bool) {
+	cfg, err := userconfig.Load()
+	if err != nil {
+		fmt.Fprintf(stderr, "weft: %v\n", err)
+		return userconfig.Config{}, false
+	}
+	return cfg, true
 }
 
 // runDoctor executes the headless doctor subcommand and returns its exit

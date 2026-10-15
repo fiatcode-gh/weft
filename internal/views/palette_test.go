@@ -41,7 +41,7 @@ func TestPaletteListsActionsInHelpOrder(t *testing.T) {
 	}
 	var fromHelp []string
 	for _, g := range helpGroups {
-		if g.title == "Editor" || g.title == "Find" {
+		if g.title == "Editor" || g.title == "Find" || g.title == vimHelp.title {
 			continue
 		}
 		for _, r := range g.rows {

@@ -334,7 +334,7 @@ func (e *EditorView) drawRow(p viewPos) string {
 	r := c.rows[p.row]
 	spans, curMatch := e.findOverlay(c.spans, p.line)
 	lineBreak := false
-	if sel, ok := e.buf.Selection(); ok && sel.Start.Line <= p.line && p.line <= sel.End.Line {
+	if sel, ok := e.selection(); ok && sel.Start.Line <= p.line && p.line <= sel.End.Line {
 		from, to := 0, len(c.text)
 		if p.line == sel.Start.Line {
 			from = sel.Start.Col
@@ -389,6 +389,9 @@ func (e *EditorView) Cursor() *tea.Cursor {
 	e.findSync()
 	e.syncReveal()
 	e.ensureVisible()
+	if e.vim != nil && e.vim.ex != nil {
+		return e.vimExCursor()
+	}
 	if f := e.find; f != nil {
 		_, x := f.barView(max(1, e.width-e.geo.Margin))
 		return tea.NewCursor(min(e.geo.Margin+x, max(0, e.width-1)), e.textHeight()+e.completer.rows()+1)
@@ -401,7 +404,11 @@ func (e *EditorView) Cursor() *tea.Cursor {
 	p := e.top
 	for y := range e.textHeight() {
 		if p == cur {
-			return tea.NewCursor(min(x, max(0, e.width-1)), y)
+			c := tea.NewCursor(min(x, max(0, e.width-1)), y)
+			if e.vim != nil && e.vim.mode == vimInsert {
+				c.Shape = tea.CursorBar
+			}
+			return c
 		}
 		n, ok := e.next(p)
 		if !ok {

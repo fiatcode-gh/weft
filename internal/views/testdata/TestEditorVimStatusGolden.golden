@@ -1,0 +1,7 @@
+normal:   Alpha [edit · source]  :w save · :q quit · :preview preview
+pending 2g:   Alpha [edit · source]  2g
+pending 2d:   Alpha [edit · source]  2d
+insert:   Alpha [edit · source]  -- INSERT --  esc normal · ^S save
+visual:   Alpha [edit · source]  -- VISUAL --  :w save · :q quit · :preview preview
+visual line:   Alpha [edit · source]  -- VISUAL LINE --  :w save · :q quit · :preview preview
+ex:   :wq

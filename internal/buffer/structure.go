@@ -181,7 +181,18 @@ func (b *Buffer) shiftLines(dir int) {
 		}
 		last = b.blockEnd(first) - 1
 	}
+	b.shiftRange(first, last, dir)
+}
 
+// ShiftLines indents (dir > 0) or outdents lines first..last one unit each, as
+// one group; nothing changing opens no group.
+func (b *Buffer) ShiftLines(first, last, dir int) {
+	b.shiftRange(max(first, 0), min(last, len(b.lines)-1), dir)
+}
+
+// shiftRange shifts lines first..last one unit; cursor and anchor move with
+// their lines' columns. Nothing changing opens no group.
+func (b *Buffer) shiftRange(first, last, dir int) {
 	delta := make(map[int]int) // line -> bytes added (+) or removed (-) at the front
 	for l := first; l <= last; l++ {
 		var n int
@@ -217,6 +228,31 @@ func (b *Buffer) shiftLines(dir int) {
 		}
 		b.cursor, b.anchor = cursor, anchor
 	})
+}
+
+// JoinLines joins n lines (at least 2) starting at line into one, as one group.
+// false, changing nothing, when line is LastLine (or beyond).
+func (b *Buffer) JoinLines(line, n int) bool {
+	if line < 0 || line >= b.LastLine() {
+		return false
+	}
+	last := min(line+max(n, 2)-1, b.LastLine())
+	b.edit(func() {
+		var at Pos
+		for j := line; j < last; j++ {
+			cur, next := b.lines[line], b.lines[line+1]
+			trimmed := strings.TrimLeft(next, " \t")
+			sep := " "
+			if cur == "" || cur[len(cur)-1] == ' ' || cur[len(cur)-1] == '\t' ||
+				trimmed == "" || trimmed[0] == ')' {
+				sep = ""
+			}
+			at = Pos{line, len(cur)}
+			b.replace(Range{at, Pos{line + 1, len(next) - len(trimmed)}}, sep)
+		}
+		b.cursor, b.hasAnchor = at, false
+	})
+	return true
 }
 
 // MoveBlock moves the cursor line's block one sibling up (dir < 0) or down (dir > 0):

@@ -22,6 +22,7 @@ Enter continues a `- ` bullet at the same indent (empty bullet ends the list);
 `Alt+S` / `Alt+E` set the scheduled / deadline date and `Alt+P` cycles the priority;
 `Tab` / `Shift+Tab` indent / de-indent a bullet with its children; `Alt+↑/↓` move it.
 The editor has two looks: live preview (default; `internal/views/editor_live.go`) and source, switched with `Ctrl+R`. The App owns the choice per run (`editorSource`). The editor opens with the cursor on the source line behind the read view's cursor row on the same screen row; `Esc` returns the same way.
+An opt-in vim mode (`editor = "vim"` in the user config; `internal/views/editor_vim*.go`, state in `vimState`, nil when modeless) sits on the same buffer: vim keys call the buffer's pure motion and object functions, insert mode and the weft chords go through `editKey`, the same handler the modeless editor uses, and saving and leaving stay `EditorResult`. See `docs/decisions/vim-mode.md`.
 
 Press `S` to sync the graph to git — commit local changes, `pull --rebase`,
 then push — run asynchronously off the UI thread with the outcome in the status
@@ -58,7 +59,9 @@ an intentional UI change, run with `-update` and visually diff the golden before
   `quietStdout`, which drops the terminal probes and keyboard-protocol switches Bubble
   Tea v2 sends on its own, so weft sends no queries and keeps the terminal's normal key
   encoding. It does pass the mouse mode switches (SGR 1002/1006), which are not queries.
+  It loads the user config (`loadUserConfig`) after the layout and passes the editor choice to `App.SetVimEditor`.
 - `internal/layout/` — the one layout definition: config load and validation (`.weft/config.toml`), the journal filename pattern, and page placement (new pages and `RenameRel` for rename). Used by `graph`, `views`, `doctor` and `cmd/weft`. `Layout`'s zero value is invalid; use `layout.Default()` or `layout.Load`.
+- `internal/userconfig/` — the user's own `$XDG_CONFIG_HOME/weft/config.toml` (`Path`, `Load`; one key, `editor`). Optional, never written, read by `cmd/weft` only (not by `weft doctor`); a bad file stops weft with exit 2.
 - `internal/graph/` — recursive filesystem walk, page parsing (wiki links and tags; `tag.go` is the one tag definition every consumer uses), name resolution, index. `task.go`/`taskdate.go`/`agenda.go` are the one task grammar (markers, priorities, stamps, ownership, agenda) every consumer calls; `logbook.go` holds the LOGBOOK regexes and `QueryOrEmbedRe`; `heading.go` is the one heading definition (`Headings`, `HeadingKey`) and `ResolveLink` in `resolve.go` the one heading-link rule. `tree.go` (`PageTree`) groups non-journal pages by folder and namespace for the tree view. `signature.go` (`Signature`, `ScanSignature`) is the stat-only fingerprint of the index walk (`walkGraph`, the one walk definition) that live reload compares. `resolve.go` and `names.go` also hold name resolution (exact, case-folded, path), the clash winner, and each page's `Key`.
 - `internal/render/` — Glamour-based page rendering (wiki-link styling, hanging-indent,
   workflow-marker colouring, `:LOGBOOK:` stripping). Has a `Warmup()` paid before the

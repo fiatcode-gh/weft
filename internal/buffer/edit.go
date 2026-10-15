@@ -326,3 +326,41 @@ func (b *Buffer) afterHistory() {
 	b.last = nil
 	b.version++
 }
+
+// UndoMark closes the typing run and returns the depth of the undo stack, for
+// a later Squash.
+func (b *Buffer) UndoMark() int {
+	b.kind = coalesceNone
+	return len(b.undo)
+}
+
+// Squash merges every undo step recorded since mark into one, so a command
+// made of several edits undoes and redoes in one step. The merged step
+// restores the cursor and selection from before its first part and after its
+// last. With fewer than two steps since mark, or while a group is open
+// (depth > 0), it changes nothing but closing the typing run.
+func (b *Buffer) Squash(mark int) {
+	b.kind = coalesceNone
+	if b.depth > 0 {
+		return
+	}
+	mark = max(0, min(mark, len(b.undo)))
+	steps := b.undo[mark:]
+	if len(steps) < 2 {
+		return
+	}
+	n := 0
+	for _, g := range steps {
+		n += len(g.edits)
+	}
+	merged := &group{
+		edits:  make([]edit, 0, n),
+		before: steps[0].before,
+		after:  steps[len(steps)-1].after,
+	}
+	for _, g := range steps {
+		merged.edits = append(merged.edits, g.edits...)
+	}
+	b.undo = append(b.undo[:mark], merged)
+	b.last = nil
+}

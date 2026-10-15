@@ -25,6 +25,7 @@ type findBar struct {
 	matches      []buffer.Range
 	cur          int // index of the current match, -1 none
 	version      int // buffer version the matches belong to
+	dir          int // 0 modeless; +1 a vim `/` bar, -1 a vim `?` bar
 }
 
 const (
@@ -68,9 +69,11 @@ func (e *EditorView) openFind() {
 }
 
 // closeFind closes the bar, leaving the cursor where the current match
-// started (or at the origin) with no selection.
+// started (or at the origin) with no selection. A modeless bar's query becomes
+// the session's last query; a vim bar's does not (vimSearchEnter records it
+// on a hit, so a cancelled or failed search keeps the previous one).
 func (e *EditorView) closeFind() {
-	if f := e.find; f != nil && f.query != "" {
+	if f := e.find; f != nil && f.dir == 0 && f.query != "" {
 		e.lastQuery = f.query
 	}
 	e.find = nil
@@ -79,17 +82,29 @@ func (e *EditorView) closeFind() {
 }
 
 // findRun recomputes the matches and makes current the first at or after
-// from, wrapping. With move the cursor goes to it (or back to the origin when
+// from, wrapping. A vim bar (dir != 0) makes current the first match
+// strictly after from (dir > 0) or the last strictly before it (dir < 0),
+// wrapping. With move the cursor goes to it (or back to the origin when
 // nothing matches) and is scrolled into view.
 func (e *EditorView) findRun(from buffer.Pos, move bool) {
 	f := e.find
 	f.matches = e.buf.Find(f.query)
 	f.version = e.buf.Version()
 	f.cur = -1
-	if len(f.matches) > 0 {
-		f.cur = sort.Search(len(f.matches), func(i int) bool { return !f.matches[i].Start.Less(from) })
-		if f.cur == len(f.matches) {
-			f.cur = 0
+	if n := len(f.matches); n > 0 {
+		switch {
+		case f.dir > 0:
+			f.cur = sort.Search(n, func(i int) bool { return from.Less(f.matches[i].Start) }) % n
+		case f.dir < 0:
+			f.cur = sort.Search(n, func(i int) bool { return !f.matches[i].Start.Less(from) }) - 1
+			if f.cur < 0 {
+				f.cur = n - 1
+			}
+		default:
+			f.cur = sort.Search(n, func(i int) bool { return !f.matches[i].Start.Less(from) })
+			if f.cur == n {
+				f.cur = 0
+			}
 		}
 	}
 	if move {
@@ -181,6 +196,19 @@ func (e *EditorView) updateFind(msg tea.KeyPressMsg) (res EditorResult, handled 
 	f := e.find
 	e.findSync()
 	key := msg.String()
+	if f.dir != 0 {
+		switch key {
+		case keyEnter:
+			e.vimSearchEnter()
+			return EditorResult{}, true
+		case keyEsc:
+			e.buf.MoveTo(f.origin, false)
+			e.closeFind()
+			return EditorResult{}, true
+		case "tab", "shift+tab", "ctrl+a":
+			return EditorResult{}, true
+		}
+	}
 	switch key {
 	case "ctrl+s", "ctrl+z", "ctrl+y":
 		return EditorResult{}, false
@@ -275,6 +303,9 @@ func (e *EditorView) findOverlay(spans []render.Span, line int) ([]render.Span, 
 
 // hints is the status line's right side while the bar is open.
 func (f *findBar) hints() string {
+	if f.dir != 0 {
+		return "↵ jump · esc cancel"
+	}
 	if f.field == replaceField {
 		return "↵ replace · ^A all · tab find · esc close"
 	}

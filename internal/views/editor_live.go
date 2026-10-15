@@ -111,7 +111,7 @@ func (e *EditorView) revealSpans() []lineSpan {
 	e.syncBuffer()
 	from, to := e.preview.Unit(e.buf, e.scanner, e.buf.Cursor().Line)
 	spans := []lineSpan{{from, to}}
-	if sel, ok := e.buf.Selection(); ok {
+	if sel, ok := e.selection(); ok {
 		a, _ := e.preview.Unit(e.buf, e.scanner, sel.Start.Line)
 		_, z := e.preview.Unit(e.buf, e.scanner, sel.End.Line)
 		spans = append(spans, lineSpan{a, z})

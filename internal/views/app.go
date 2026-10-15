@@ -83,6 +83,9 @@ type App struct {
 	// editor sessions, so Ctrl+R lasts until weft quits; it is never written
 	// to disk.
 	editorSource bool
+	// editorVim opens the editor with vim modal editing, from the user
+	// config; session only, never written.
+	editorVim bool
 	// mouseOff is mouse reporting off for the session (m); never written.
 	mouseOff bool
 
@@ -248,6 +251,10 @@ func (a *App) setHint(s string) tea.Cmd {
 }
 
 func (a *App) Init() tea.Cmd { return a.buildIndexCmd() }
+
+// SetVimEditor chooses whether editors open with vim modal editing. It is
+// called once by main before the program runs.
+func (a *App) SetVimEditor(on bool) { a.editorVim = on }
 
 func (a *App) buildIndexCmd() tea.Cmd {
 	// Stamp the generation now, synchronously, not inside the closure
@@ -580,6 +587,9 @@ func (a *App) enterEditor() tea.Cmd {
 	at.Line += leadingTrimmedLines(content)
 	a.editor = NewEditorView(a.idx, name, path, content, isNew, a.width, a.height, at, &a.clip, a.editorSource)
 	a.editor.now = a.nowFunc
+	if a.editorVim {
+		a.editor.enableVim()
+	}
 	return nil
 }
 

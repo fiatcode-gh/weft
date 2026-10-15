@@ -73,6 +73,37 @@ func TestHelpGolden(t *testing.T) {
 	teatest.RequireEqualOutput(t, []byte(plain(h.View())))
 }
 
+func TestHelpVimGroup(t *testing.T) {
+	quietTerm(t)
+	out := plain(NewHelp("v", 130, 0).View())
+	if !strings.Contains(out, "Vim mode") {
+		t.Fatalf("help missing Vim mode group:\n%s", out)
+	}
+	for _, r := range vimHelp.rows {
+		if !strings.Contains(out, r.desc) {
+			t.Errorf("help missing vim row description %q", r.desc)
+		}
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if w := lipgloss.Width(line); w > 130 {
+			t.Errorf("line is %d cells wide, over 130: %q", w, line)
+		}
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.Contains(line, "Browse") {
+			continue
+		}
+		for _, g := range helpGroups {
+			if g.title != "Browse" && strings.Contains(line, g.title) {
+				return
+			}
+		}
+		t.Errorf("Browse line has no second group title: %q", line)
+		return
+	}
+	t.Error("no line with Browse")
+}
+
 func TestHelpListsJournalKeys(t *testing.T) {
 	quietTerm(t)
 	out := plain(NewHelp("v", 130, 0).View())
