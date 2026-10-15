@@ -14,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/fiatcode-gh/weft/v3/internal/doctor"
+	"github.com/fiatcode-gh/weft/v3/internal/edit"
 	"github.com/fiatcode-gh/weft/v3/internal/layout"
 	"github.com/fiatcode-gh/weft/v3/internal/render"
 	"github.com/fiatcode-gh/weft/v3/internal/userconfig"
@@ -100,24 +101,29 @@ func main() {
 		return
 	}
 
-	graphPath := resolveGraphPath(*graphFlag, os.Getenv("WEFT_GRAPH"))
-	if graphPath == "" {
-		fmt.Fprintln(os.Stderr, "weft: no graph path — pass --graph or set $WEFT_GRAPH")
-		os.Exit(2)
-	}
-
 	if _, err := exec.LookPath("rg"); err != nil {
 		fmt.Fprintln(os.Stderr, "weft: ripgrep (rg) not found on PATH — install it (https://github.com/BurntSushi/ripgrep) and try again.")
 		os.Exit(2)
 	}
-	if err := validateGraphPath(graphPath); err != nil {
+
+	if flag.Arg(0) == "doctor" {
+		os.Exit(runDoctor(flag.Args()[1:], *graphFlag, os.Getenv("WEFT_GRAPH"), os.Stdout, os.Stderr))
+	}
+
+	choice, _, err := resolveGraph(*graphFlag, os.Getenv("WEFT_GRAPH"))
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "weft: %v\n", err)
 		os.Exit(2)
 	}
-
-	if flag.Arg(0) == "doctor" {
-		os.Exit(runDoctor(flag.Args()[1:], graphPath, os.Stdout, os.Stderr))
+	if choice.path == "" {
+		fmt.Fprintf(os.Stderr, "weft: %v\n", noGraphError())
+		os.Exit(2)
 	}
+	if err := validateGraphPath(choice); err != nil {
+		fmt.Fprintf(os.Stderr, "weft: %v\n", err)
+		os.Exit(2)
+	}
+	graphPath := choice.path
 
 	lay, ok := loadLayout(graphPath, os.Stderr)
 	if !ok {
@@ -151,23 +157,50 @@ func main() {
 	}
 }
 
-func resolveGraphPath(flagVal, envVal string) string {
-	if flagVal != "" {
-		return flagVal
+// graphChoice is the graph folder and the source it came from, for messages.
+type graphChoice struct{ path, source string }
+
+// resolveGraph picks --graph, else $WEFT_GRAPH, else the user config's graph
+// key. It reads the user config only when flagVal and envVal are both empty;
+// seen is that read's snapshot (zero otherwise). An empty path means no
+// source named a graph.
+func resolveGraph(flagVal, envVal string) (graphChoice, edit.Snapshot, error) {
+	switch {
+	case flagVal != "":
+		return graphChoice{flagVal, "--graph"}, edit.Snapshot{}, nil
+	case envVal != "":
+		return graphChoice{envVal, "$WEFT_GRAPH"}, edit.Snapshot{}, nil
 	}
-	return envVal
+	cfg, seen, err := userconfig.Load()
+	if err != nil {
+		return graphChoice{}, edit.Snapshot{}, err
+	}
+	if cfg.Graph == "" {
+		return graphChoice{}, seen, nil
+	}
+	return graphChoice{cfg.Graph, userconfig.Path()}, seen, nil
 }
 
-// validateGraphPath reports whether graphPath is an accessible directory.
-func validateGraphPath(graphPath string) error {
-	info, err := os.Stat(graphPath)
+// validateGraphPath reports whether the chosen graph is an accessible
+// directory, naming where the path came from.
+func validateGraphPath(c graphChoice) error {
+	info, err := os.Stat(c.path)
 	if err != nil {
-		return fmt.Errorf("graph path %q is not accessible: %w", graphPath, err)
+		return fmt.Errorf("graph path %q from %s is not accessible: %w", c.path, c.source, err)
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("graph path %q is not a directory", graphPath)
+		return fmt.Errorf("graph path %q from %s is not a directory", c.path, c.source)
 	}
 	return nil
+}
+
+// noGraphError reports that no source named a graph folder.
+func noGraphError() error {
+	cfg := userconfig.Path()
+	if cfg == "" {
+		cfg = "$XDG_CONFIG_HOME/weft/config.toml"
+	}
+	return fmt.Errorf("no graph folder: pass --graph PATH, set $WEFT_GRAPH, or add graph = \"PATH\" to %s", cfg)
 }
 
 const doctorUsage = "usage: weft doctor [--graph PATH]"
@@ -196,14 +229,16 @@ func loadUserConfig(stderr io.Writer) (userconfig.Config, bool) {
 
 // runDoctor executes the headless doctor subcommand and returns its exit
 // code: 0 clean, 1 findings, 2 operational error (including a bad layout
-// config). doctorFlagArgs are the args after the "doctor" word; globalGraph
-// is the already-validated graph path resolved from the global --graph flag
-// / $WEFT_GRAPH.
-func runDoctor(doctorFlagArgs []string, globalGraph string, stdout, stderr io.Writer) int {
+// config). doctorArgs are the args after the "doctor" word; globalFlag is the
+// global --graph value and envGraph is $WEFT_GRAPH. The graph is doctor's own
+// --graph, else the global flag, else the env, else the user config's graph
+// key; the user config is read only when none of the first three names a
+// graph. Doctor never prompts.
+func runDoctor(doctorArgs []string, globalFlag, envGraph string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	fs.SetOutput(io.Discard) // usage printing is owned by this function
 	graphFlag := fs.String("graph", "", "path to Logseq graph (overrides the global --graph and $WEFT_GRAPH)")
-	err := fs.Parse(doctorFlagArgs)
+	err := fs.Parse(doctorArgs)
 	switch {
 	case errors.Is(err, flag.ErrHelp):
 		fmt.Fprintln(stdout, doctorUsage)
@@ -212,19 +247,27 @@ func runDoctor(doctorFlagArgs []string, globalGraph string, stdout, stderr io.Wr
 		fmt.Fprintln(stderr, doctorUsage)
 		return 2
 	}
-	graphPath := globalGraph
-	if *graphFlag != "" {
-		graphPath = *graphFlag
-		if err := validateGraphPath(graphPath); err != nil {
+	choice := graphChoice{*graphFlag, "--graph"}
+	if choice.path == "" {
+		choice, _, err = resolveGraph(globalFlag, envGraph)
+		if err != nil {
 			fmt.Fprintf(stderr, "weft: %v\n", err)
 			return 2
 		}
+		if choice.path == "" {
+			fmt.Fprintf(stderr, "weft: %v\n", noGraphError())
+			return 2
+		}
 	}
-	lay, ok := loadLayout(graphPath, stderr)
+	if err := validateGraphPath(choice); err != nil {
+		fmt.Fprintf(stderr, "weft: %v\n", err)
+		return 2
+	}
+	lay, ok := loadLayout(choice.path, stderr)
 	if !ok {
 		return 2
 	}
-	report, err := doctor.Run(graphPath, lay)
+	report, err := doctor.Run(choice.path, lay)
 	if err != nil {
 		fmt.Fprintf(stderr, "weft: doctor: %v\n", err)
 		return 2
