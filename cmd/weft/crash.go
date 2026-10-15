@@ -42,7 +42,7 @@ func newReporter(dsn, version string, stderr io.Writer) *reporter {
 }
 
 func (r *reporter) hasDSN() bool         { return r.on }
-func (r *reporter) setGraph(path string) { r.graph = path }
+func (r *reporter) setGraph(path string) { r.graph = absGraph(path) }
 
 // muted runs f, the weft doctor and first-run phases, which report nothing.
 // A panic in f skips the reset and stays silent; one after f returns reports.

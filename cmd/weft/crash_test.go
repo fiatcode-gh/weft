@@ -356,7 +356,7 @@ func TestCrashMutedPhase(t *testing.T) {
 	}
 }
 
-func TestAbsGraph(t *testing.T) {
+func TestSetGraphMakesPathAbsolute(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -368,8 +368,10 @@ func TestAbsGraph(t *testing.T) {
 		"/abs/graph/":        "/abs/graph",
 		"/abs/../abs/graph/": "/abs/graph",
 	} {
-		if got := absGraph(in); got != want {
-			t.Errorf("absGraph(%q) = %q, want %q", in, got, want)
+		r := newReporter("", crashRel, io.Discard)
+		r.setGraph(in)
+		if r.graph != want {
+			t.Errorf("setGraph(%q) stored %q, want %q", in, r.graph, want)
 		}
 	}
 }

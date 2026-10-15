@@ -138,7 +138,7 @@ func main() {
 		os.Exit(2)
 	}
 	graphPath := choice.path
-	rep.setGraph(absGraph(graphPath))
+	rep.setGraph(graphPath)
 
 	lay, ok := loadLayout(graphPath, os.Stderr)
 	if !ok {
