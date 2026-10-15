@@ -186,6 +186,7 @@ func (t *Tree) visibleRows() int {
 func (t *Tree) View() string {
 	inner := t.innerWidth()
 	var sb strings.Builder
+	t.drawn.reset()
 	sb.WriteString(styleTitle.Render("Page tree"))
 	sb.WriteString(styleFaint.Render(fmt.Sprintf("   (%d)", t.total)))
 	sb.WriteString("\n\n")
@@ -195,13 +196,15 @@ func (t *Tree) View() string {
 		sb.WriteString(styleFaint.Render(clamp("  no pages — journals are not listed here", inner)))
 		sb.WriteString("\n")
 	} else {
-		start, end := scrollWindow(t.sel, len(t.rows), t.visibleRows())
+		start, end := t.window(len(t.rows), t.visibleRows())
 		if start > 0 {
 			sb.WriteString(styleFaint.Render(fmt.Sprintf("   ↑ %d more above", start)))
 			sb.WriteString("\n")
 		}
 		for i := start; i < end; i++ {
+			from := sb.Len()
 			t.writeRow(&sb, i, inner)
+			t.drawn.span(&sb, from, i)
 		}
 		if below := len(t.rows) - end; below > 0 {
 			sb.WriteString(styleFaint.Render(fmt.Sprintf("   ↓ %d more below", below)))

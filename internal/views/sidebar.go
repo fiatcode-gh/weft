@@ -241,10 +241,14 @@ func (a *App) keyPanel() Overlay {
 }
 
 // sidebarKey hands key to the focused sidebar panel and acts on its result.
-// Navigation keeps the focus in the sidebar; only the panel's own cancel moves
-// it back to the page.
 func (a *App) sidebarKey(key string) tea.Cmd {
-	res := a.side.panel().Update(key)
+	return a.sidebarResult(sendKey(a.side.panel(), key))
+}
+
+// sidebarResult acts on what the focused sidebar panel's key (or click)
+// produced. Navigation keeps the focus in the sidebar; only the panel's own
+// cancel moves it back to the page.
+func (a *App) sidebarResult(res OverlayResult) tea.Cmd {
 	switch res.kind {
 	case overlayResultCancel:
 		a.side.focused = false

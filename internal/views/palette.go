@@ -76,6 +76,7 @@ func (p *Palette) View() string {
 	budget := inner - paletteKeyCol - 2 - 3 // -3 = the " ▶ "/"   " marker cells every row carries
 
 	var b strings.Builder
+	p.drawn.reset()
 	b.WriteString(styleTitle.Render("Commands"))
 	b.WriteString("\n\n")
 	b.WriteString(styleFaint.Render("> "))
@@ -88,12 +89,13 @@ func (p *Palette) View() string {
 		b.WriteString("\n")
 	}
 
-	start, end := scrollWindow(p.sel, len(p.matches), p.visibleRows())
+	start, end := p.window(len(p.matches), p.visibleRows())
 	if start > 0 {
 		b.WriteString(styleFaint.Render(fmt.Sprintf("  ↑ %d more above", start)))
 		b.WriteString("\n")
 	}
 	for i := start; i < end; i++ {
+		from := b.Len()
 		act := paletteActions[p.matches[i].Index]
 		title := clamp(act.title, budget)
 		marker := "   "
@@ -107,6 +109,7 @@ func (p *Palette) View() string {
 		b.WriteString(marker)
 		b.WriteString(row)
 		b.WriteString("\n")
+		p.drawn.span(&b, from, i)
 	}
 	if end < len(p.matches) {
 		b.WriteString(styleFaint.Render(fmt.Sprintf("  ↓ %d more below", len(p.matches)-end)))

@@ -203,12 +203,13 @@ func (t *Todos) visibleRows() int {
 // that t.sel is always inside it, accounting for the row cost of group
 // headers and inter-group blank lines (1 row each).
 func (t *Todos) computeWindow() (start, end int) {
-	return groupedWindow(len(t.visible), t.sel, t.visibleRows(), func(i int) string { return t.visible[i].Page })
+	return t.groupWindow(len(t.visible), t.visibleRows(), func(i int) string { return t.visible[i].Page })
 }
 
 func (t *Todos) View() string {
 	inner := t.innerWidth()
 	var sb strings.Builder
+	t.drawn.reset()
 	filterTxt := "all"
 	if t.filter != "" {
 		filterTxt = t.filter
@@ -245,6 +246,7 @@ func (t *Todos) View() string {
 			sb.WriteString("\n")
 			lastPage = b.Page
 		}
+		from := sb.Len()
 		// Clamp the row content to one line. Without this, a long todo
 		// wraps inside the panel without hanging indent — continuation
 		// lines start flush at column 0 and look like sibling bullets,
@@ -259,6 +261,7 @@ func (t *Todos) View() string {
 		sb.WriteString(marker)
 		sb.WriteString(taskRow(b, isDone, i == t.sel, taskDates(b), rowBudget))
 		sb.WriteString("\n")
+		t.drawn.span(&sb, from, i)
 	}
 
 	if below > 0 {

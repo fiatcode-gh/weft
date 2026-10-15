@@ -202,6 +202,7 @@ func (b *Backlinks) visibleRows() int {
 func (b *Backlinks) View() string {
 	inner := b.innerWidth()
 	var sb strings.Builder
+	b.drawn.reset()
 	sb.WriteString(styleTitle.Render("Backlinks"))
 	sb.WriteString(styleFaint.Render(clamp(fmt.Sprintf("   → %s   (%d)", b.target, len(b.refs)), inner-len("Backlinks"))))
 	sb.WriteString("\n\n")
@@ -212,7 +213,7 @@ func (b *Backlinks) View() string {
 		sb.WriteString("\n")
 	}
 	rowBudget := inner - 3
-	start, end := scrollWindow(b.sel, len(b.rows), b.visibleRows())
+	start, end := b.window(len(b.rows), b.visibleRows())
 	if start > 0 {
 		sb.WriteString(styleFaint.Render(fmt.Sprintf("   ↑ %d more above", start)))
 		sb.WriteString("\n")
@@ -225,6 +226,7 @@ func (b *Backlinks) View() string {
 			sb.WriteString("\n")
 			continue
 		}
+		from := sb.Len()
 		var pos, ctx string
 		if r.ref != nil {
 			ctx = strings.TrimSpace(r.ref.Context)
@@ -244,6 +246,9 @@ func (b *Backlinks) View() string {
 		sb.WriteString(marker)
 		sb.WriteString(line)
 		sb.WriteString("\n")
+		if !b.confirming {
+			b.drawn.span(&sb, from, i)
+		}
 	}
 	if end < len(b.rows) {
 		sb.WriteString(styleFaint.Render(fmt.Sprintf("   ↓ %d more below", len(b.rows)-end)))

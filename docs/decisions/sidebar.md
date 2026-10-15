@@ -10,7 +10,7 @@ Why: these five lists were full-screen overlays. Opening a page from one closed
 it, so browsing several pages from a list meant reopening the list each time,
 and an open list never refreshed.
 
-Out of scope: mouse (11c), a right-hand or second sidebar, resizing the sidebar
+Out of scope: mouse (added in 11c, see `mouse.md`), a right-hand or second sidebar, resizing the sidebar
 by key or config, unlinked references or linkify in the sidebar, search, picker
 or on-this-day as sections, saving sidebar state across runs, showing the
 sidebar beside the editor, changing the overlays' behaviour.

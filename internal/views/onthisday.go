@@ -87,6 +87,7 @@ func (o *OnThisDay) visibleEntries() int {
 func (o *OnThisDay) View() string {
 	inner := o.innerWidth()
 	var sb strings.Builder
+	o.drawn.reset()
 	sb.WriteString(styleTitle.Render("On this day"))
 	sb.WriteString(styleFaint.Render(fmt.Sprintf("   · today %s   (%d)", o.today.Format("2006-01-02 Mon"), len(o.entries))))
 	sb.WriteString("\n\n")
@@ -96,13 +97,15 @@ func (o *OnThisDay) View() string {
 		sb.WriteString(styleFaint.Render(clamp("  nothing on this day — no journal from a week ago, a month ago or this date in earlier years", inner)))
 		sb.WriteString("\n")
 	} else {
-		start, end := scrollWindow(o.sel, len(o.entries), o.visibleEntries())
+		start, end := o.window(len(o.entries), o.visibleEntries())
 		if start > 0 {
 			sb.WriteString(styleFaint.Render(fmt.Sprintf("   ↑ %d more above", start)))
 			sb.WriteString("\n")
 		}
 		for i := start; i < end; i++ {
+			from := sb.Len()
 			o.writeEntry(&sb, i, inner)
+			o.drawn.span(&sb, from, i)
 		}
 		if below := len(o.entries) - end; below > 0 {
 			sb.WriteString(styleFaint.Render(fmt.Sprintf("   ↓ %d more below", below)))

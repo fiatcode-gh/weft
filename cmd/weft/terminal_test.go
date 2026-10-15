@@ -179,3 +179,30 @@ func TestProgramOptionsPassClipboard(t *testing.T) {
 	}
 	t.Logf("OSC 52 on the wire: %q", want)
 }
+
+// mouseModel asks for cell-motion mouse reporting, as the App does.
+type mouseModel struct{ stubModel }
+
+func (m mouseModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	_, cmd := m.stubModel.Update(msg)
+	return m, cmd
+}
+
+func (mouseModel) View() tea.View {
+	v := tea.NewView("hello")
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	return v
+}
+
+// The mouse mode switches must pass quietStdout: it drops only the probes.
+func TestProgramOptionsPassMouseModes(t *testing.T) {
+	f := tempOut(t)
+	runModel(t, mouseModel{}, programOptions(f)...)
+	out := readAll(t, f)
+	for _, seq := range []string{ansi.SetModeMouseButtonEvent, ansi.SetModeMouseExtSgr, ansi.ResetModeMouseButtonEvent} {
+		if !bytes.Contains(out, []byte(seq)) {
+			t.Errorf("mouse sequence %q did not reach the output: %q", seq, out)
+		}
+	}
+}

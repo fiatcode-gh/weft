@@ -83,6 +83,8 @@ type App struct {
 	// editor sessions, so Ctrl+R lasts until weft quits; it is never written
 	// to disk.
 	editorSource bool
+	// mouseOff is mouse reporting off for the session (m); never written.
+	mouseOff bool
 
 	// active is the overlay layered over the page, or nil when the page has
 	// focus. Set when an open-overlay key is pressed; cleared by terminal outcomes.
@@ -105,8 +107,9 @@ type App struct {
 
 	// hint is a transient right-side status replacement. Set via setHint
 	// (which schedules a hintTTL tick) and cleared either at the top of the
-	// next tea.KeyPressMsg or by a matching hintExpireMsg. hintGen is bumped each
-	// time a hint is set so stale ticks ignore themselves.
+	// next tea.KeyPressMsg or accepted mouse event, or by a matching
+	// hintExpireMsg. hintGen is bumped each time a hint is set so stale
+	// ticks ignore themselves.
 	hint    string
 	hintGen int
 
@@ -821,6 +824,10 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.hint = ""
 		}
 		return a, nil
+	case tea.MouseClickMsg:
+		return a, a.mouseClick(m.Mouse())
+	case tea.MouseWheelMsg:
+		return a, a.mouseWheel(m.Mouse())
 	case tea.WindowSizeMsg:
 		a.width, a.height = m.Width, m.Height
 		switch {
@@ -949,42 +956,7 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if key == "ctrl+c" {
 				return a, tea.Quit
 			}
-			res := a.active.Update(key)
-			switch res.kind {
-			case overlayResultCancel:
-				a.active = nil
-			case overlayResultCommand:
-				return a, res.cmd
-			case overlayResultLinkify:
-				if cmd, blocked := a.blockIfSyncing(); blocked {
-					return a, cmd
-				}
-				return a, a.linkify(res.ref, res.target)
-			case overlayResultMarkTask:
-				if cmd, blocked := a.blockIfSyncing(); blocked {
-					return a, cmd
-				}
-				return a, a.markTask(res.mark)
-			case overlayResultCreate:
-				if cmd, blocked := a.blockIfSyncing(); blocked {
-					return a, cmd
-				}
-				a.navigate(res.page)
-				a.active = nil
-				return a, a.enterEditor()
-			case overlayResultCapture:
-				a.openCapture()
-			case overlayResultRename:
-				return a, a.confirmRename()
-			case overlayResultRun:
-				a.active = nil // close first: the action then behaves exactly as its key
-				return a, res.act.run(a)
-			default:
-				if a.openResult(res) {
-					a.active = nil
-				}
-			}
-			return a, nil
+			return a, a.overlayResult(sendKey(a.active, key))
 		}
 		if a.sidebarFocused() {
 			if key == "ctrl+c" {
@@ -1002,11 +974,54 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
+// overlayResult acts on what the open overlay's key (or click) produced: it
+// closes the overlay, opens a prompt or the editor, or runs the command.
+func (a *App) overlayResult(res OverlayResult) tea.Cmd {
+	switch res.kind {
+	case overlayResultCancel:
+		a.active = nil
+	case overlayResultCommand:
+		return res.cmd
+	case overlayResultLinkify:
+		if cmd, blocked := a.blockIfSyncing(); blocked {
+			return cmd
+		}
+		return a.linkify(res.ref, res.target)
+	case overlayResultMarkTask:
+		if cmd, blocked := a.blockIfSyncing(); blocked {
+			return cmd
+		}
+		return a.markTask(res.mark)
+	case overlayResultCreate:
+		if cmd, blocked := a.blockIfSyncing(); blocked {
+			return cmd
+		}
+		a.navigate(res.page)
+		a.active = nil
+		return a.enterEditor()
+	case overlayResultCapture:
+		a.openCapture()
+	case overlayResultRename:
+		return a.confirmRename()
+	case overlayResultRun:
+		a.active = nil // close first: the action then behaves exactly as its key
+		return res.act.run(a)
+	default:
+		if a.openResult(res) {
+			a.active = nil
+		}
+	}
+	return nil
+}
+
 // View renders the current frame on the alternate screen, which Bubble
 // Tea v1 entered through tea.WithAltScreen.
 func (a *App) View() tea.View {
 	v := tea.NewView(a.frame())
 	v.AltScreen = true
+	if !a.mouseOff {
+		v.MouseMode = tea.MouseModeCellMotion
+	}
 	if a.editor != nil {
 		v.Cursor = a.editor.Cursor()
 	} else if p := a.bottomPrompt(); p != nil {
@@ -1093,6 +1108,9 @@ func (a *App) statusBar() string {
 		rightText := "? help"
 		if ind := a.page.ScrollIndicator(); ind != "" {
 			rightText = ind + "  " + rightText
+		}
+		if a.mouseOff {
+			rightText = "mouse off  " + rightText
 		}
 		right = styleFaint.Render(rightText)
 		// An unsynced graph shows a leading attention dot — hidden while a
