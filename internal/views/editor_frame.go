@@ -401,7 +401,11 @@ func (e *EditorView) Cursor() *tea.Cursor {
 	p := e.top
 	for y := range e.textHeight() {
 		if p == cur {
-			return tea.NewCursor(min(x, max(0, e.width-1)), y)
+			c := tea.NewCursor(min(x, max(0, e.width-1)), y)
+			if e.vim != nil && e.vim.mode == vimInsert {
+				c.Shape = tea.CursorBar
+			}
+			return c
 		}
 		n, ok := e.next(p)
 		if !ok {

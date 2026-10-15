@@ -1,0 +1,2 @@
+normal:   Alpha [edit · source]  :w save · :q quit · :preview preview
+insert:   Alpha [edit · source]  -- INSERT --  esc normal · ^S save

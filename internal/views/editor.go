@@ -78,6 +78,8 @@ type EditorView struct {
 	shown     []lineSpan         // the lines drawn raw: the reveal set
 	revealCur buffer.Pos         // the cursor at the last syncReveal
 	previewed map[int]previewRow // preview rows by line, valid until the buffer changes
+
+	vim *vimState // nil: modeless
 }
 
 // EditorResult is what EditorView.Update reports to the App.
@@ -150,6 +152,9 @@ func (e *EditorView) Paste(msg tea.PasteMsg) tea.Cmd {
 	e.buf.Insert(cleanPaste(msg.Content))
 	e.goalOK = false
 	e.afterKey(true)
+	if e.vim != nil && e.vim.mode != vimInsert {
+		e.vimSettle()
+	}
 	return nil
 }
 
@@ -286,7 +291,7 @@ func (e *EditorView) MarkSaved(content string) {
 func (e *EditorView) replaceBuffer(content string, line, col int) {
 	sr := e.cursorScreenRow()
 	e.buf.Break()
-	e.buf.ReplaceAll(content)
+	e.outsideInsertStep(func() { e.buf.ReplaceAll(content) })
 	e.buf.MoveTo(buffer.Pos{Line: line, Col: col}, false)
 	e.goalOK = false
 	e.syncReveal()
@@ -360,11 +365,21 @@ func (e *EditorView) Update(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
 		return EditorResult{}, nil // ignore everything else
 	}
 
-	key := msg.String()
-	if key == "ctrl+r" {
+	if e.vim != nil {
+		return e.vimUpdate(msg)
+	}
+	if msg.String() == "ctrl+r" {
 		e.toggleSource()
 		return EditorResult{}, nil
 	}
+	return e.editKey(msg)
+}
+
+// editKey handles one key of the modeless editor: the date prompt, the find
+// bar, the completion strip and then editing. Vim mode reuses it for the keys
+// it passes through.
+func (e *EditorView) editKey(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
+	key := msg.String()
 	if e.prompt != nil {
 		e.updatePrompt(msg)
 		return EditorResult{}, nil
@@ -628,6 +643,12 @@ func (e *EditorView) statusLine() string {
 	}
 	left := styleTitle.Render(e.pageName) + styleFaint.Render(" [edit · "+look+"]"+mark)
 	right := styleFaint.Render("^S save · ^F find · ^R " + other + " · esc exit")
+	if e.vim != nil {
+		if tag := e.vimTag(); tag != "" {
+			left += "  " + styleTitle.Render(tag)
+		}
+		right = styleFaint.Render(e.vimHints())
+	}
 	if e.outside {
 		right = styleTitle.Render(outsideNotice)
 	}
@@ -639,6 +660,9 @@ func (e *EditorView) statusLine() string {
 		if p.errMsg != "" {
 			right = styleTitle.Render(p.errMsg)
 		}
+	}
+	if e.vim != nil && len(e.vim.pending) > 0 {
+		right = styleTitle.Render(e.vimPendingText())
 	}
 	if e.errMsg != "" {
 		right = styleTitle.Render("save failed: " + e.errMsg)
