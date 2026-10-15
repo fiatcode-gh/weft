@@ -46,6 +46,9 @@ only happens when the key is absent).
    nothing saved. Ctrl+C keeps Go's default SIGINT behaviour (the shell shows
    130): every write happens after the last answer, so an interrupt writes
    nothing.
+   *Superseded in part by `crash-reports.md`: first run now asks the crash
+   question after the folder is confirmed and created, so Ctrl+C or end of
+   input there can leave a folder but no saved config.*
 6. **Stored form.** `userconfig.GraphValue` stores `~/rel` when the folder is
    strictly inside the home folder, else the absolute path, so a config copied
    between machines keeps working.
@@ -55,6 +58,8 @@ only happens when the key is absent).
    strict parser rejects tables, so the file cannot end up with the key inside
    a table. If the file changed while weft was asking, the save is refused
    (`edit.ErrChanged`), nothing is overwritten, and weft exits 2.
+   *Superseded in part by `crash-reports.md`: `SaveGraph` is now
+   `SaveFirstRun`, which also appends `crash_reports` in release builds.*
 8. **Writes.** First run writes the folder (after yes) and the user config, and
    nothing else: no `.weft/`, no pages, no journals.
 9. **`/v3`.** The module path moves to `/v3` everywhere except released

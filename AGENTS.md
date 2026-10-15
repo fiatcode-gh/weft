@@ -60,8 +60,10 @@ an intentional UI change, run with `-update` and visually diff the golden before
   Tea v2 sends on its own, so weft sends no queries and keeps the terminal's normal key
   encoding. It does pass the mouse mode switches (SGR 1002/1006), which are not queries.
   `resolveGraph` picks the graph: `--graph` > `$WEFT_GRAPH` > the user config's `graph`; it reads the config only when both of the others are empty, and `graphChoice` carries the source so errors name it. `weft doctor` is dispatched before resolution; `runDoctor` resolves its own graph (its flag, the global flag, env, then the config key) and never prompts. First run is `firstrun.go` (`pickGraph`, `firstRun`): the prompt runs only when no graph is set and stdin and stdout are terminals (`x/term`). `main` then loads the user config (`loadUserConfig`) after the layout and passes the editor choice to `App.SetVimEditor`.
+  `crash.go` holds `reporter`: the consent check (`crash_reports` in the user config), muting during `weft doctor` and first run, `runUI` (runs the app under `crash.Guard`, sends after the terminal is restored) and `recoverMain` (a panic outside the UI, exits 2). `crashDSN` is empty by default and set only by the release ldflags; empty means no question and no report.
 - `internal/layout/` — the one layout definition: config load and validation (`.weft/config.toml`), the journal filename pattern, and page placement (new pages and `RenameRel` for rename). Used by `graph`, `views`, `doctor` and `cmd/weft`. `Layout`'s zero value is invalid; use `layout.Default()` or `layout.Load`.
-- `internal/userconfig/` — the user's own `$XDG_CONFIG_HOME/weft/config.toml` (`Path`, `Load`; two keys, `editor` and `graph`). Optional. `Load` returns the `edit.Snapshot` it parsed. `SaveGraph` is the one write: it appends the `graph` line, content-guarded through `internal/edit`, and only first run uses it. Read by `cmd/weft` (`weft doctor` only to find the graph); a bad file stops weft with exit 2.
+- `internal/userconfig/` — the user's own `$XDG_CONFIG_HOME/weft/config.toml` (`Path`, `Load`; three keys, `editor`, `graph` and `crash_reports`). Optional. `Load` returns the `edit.Snapshot` it parsed. `SaveFirstRun` is the one write: it appends the `graph` line and, in release builds, the `crash_reports` line, content-guarded through `internal/edit`, and only first run uses it. Read by `cmd/weft` (`weft doctor` only to find the graph); a bad file stops weft with exit 2.
+- `internal/crash/` — the one network surface. `Capture` turns a recovered panic into a `Report`, `Guard` wraps the root Bubble Tea model so a panic in `Init`, `Update`, `View` or a command is recorded, and `Send` posts one Sentry envelope (2 s limit). Only release builds with `crash_reports = true` send. No SDK; the event fields are an allow-list (see `docs/decisions/crash-reports.md`).
 - `internal/graph/` — recursive filesystem walk, page parsing (wiki links and tags; `tag.go` is the one tag definition every consumer uses), name resolution, index. `task.go`/`taskdate.go`/`agenda.go` are the one task grammar (markers, priorities, stamps, ownership, agenda) every consumer calls; `logbook.go` holds the LOGBOOK regexes and `QueryOrEmbedRe`; `heading.go` is the one heading definition (`Headings`, `HeadingKey`) and `ResolveLink` in `resolve.go` the one heading-link rule. `tree.go` (`PageTree`) groups non-journal pages by folder and namespace for the tree view. `signature.go` (`Signature`, `ScanSignature`) is the stat-only fingerprint of the index walk (`walkGraph`, the one walk definition) that live reload compares. `resolve.go` and `names.go` also hold name resolution (exact, case-folded, path), the clash winner, and each page's `Key`.
 - `internal/render/` — Glamour-based page rendering (wiki-link styling, hanging-indent,
   workflow-marker colouring, `:LOGBOOK:` stripping). Has a `Warmup()` paid before the
@@ -81,7 +83,7 @@ an intentional UI change, run with `-update` and visually diff the golden before
   `internal/sync/`). Resolves
   `$VISUAL` / `$EDITOR` / `vi`, snapshots file mtime, and exposes
   `Resolve` / `EnsureFile` / `ReadSnapshot` / `WriteFileIfUnchanged` / `CheckRenameDest` / `RenameIfUnchanged` / `SnapshotMtime`.
-  Every replacing write is content-guarded: `writeFile` is unexported. Invoked by the in-app editor (`e`, saves on `Ctrl+S`), by task done/undo in the todos and agenda overlays, by linkify in the backlinks panel, by capture (`c`, one guarded append to today's journal), by template journal creation (`.`, `E`, capture), by page rename (`F2`, guarded rewrites of linking files then one guarded rename), by the first-run user-config save (`userconfig.SaveGraph`), and by `App.editCurrent` for `$EDITOR` handoff (`E`).
+  Every replacing write is content-guarded: `writeFile` is unexported. Invoked by the in-app editor (`e`, saves on `Ctrl+S`), by task done/undo in the todos and agenda overlays, by linkify in the backlinks panel, by capture (`c`, one guarded append to today's journal), by template journal creation (`.`, `E`, capture), by page rename (`F2`, guarded rewrites of linking files then one guarded rename), by the first-run user-config save (`userconfig.SaveFirstRun`), and by `App.editCurrent` for `$EDITOR` handoff (`E`).
 - `internal/merge/` — pure git-style three-way line merge (adjacent changes
   conflict; both sides inserting at the same spot keeps mine then theirs) used by
   the editor save. No disk access.
@@ -132,6 +134,7 @@ an intentional UI change, run with `-update` and visually diff the golden before
   runs in source mode through a child process with `WEFT_TEST_EDITOR_SOURCE`
   set (`TestSuiteInSourceMode`); it is skipped under `-race` and CI runs it in the
   non-race `go test ./...` step.
+- Crash tests in `cmd/weft` re-exec the test binary through `WEFT_TEST_CRASH` and send to a fake `httptest` endpoint. They never contact the real host; the DSN in tests is a local fake.
 - `testdata/fake-editor.sh` is a POSIX shell script that stands in for a real
   editor in the App integration tests for the `E` key (`$EDITOR` handoff).
 
@@ -151,7 +154,7 @@ otherwise `runtime/debug.BuildInfo` fills it in for `go install` users.
 
 Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`: it vets and tests,
 then GoReleaser (`.goreleaser.yaml`) builds linux/darwin amd64/arm64 binaries
-with `main.Version` set to the tag and publishes a GitHub Release. The release
+with `main.Version` set to the tag and `main.crashDSN` set from the `SENTRY_DSN` repository secret, and publishes a GitHub Release. Without the secret the value is empty and reporting is off. The release
 notes are the tag's `## [X.Y.Z]` section of `CHANGELOG.md`; the workflow fails
 before publishing when that section is missing, so rename `## [Unreleased]`
 before tagging.
