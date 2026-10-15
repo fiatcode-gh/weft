@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fiatcode-gh/weft/v2/internal/layout"
+	"github.com/fiatcode-gh/weft/v3/internal/layout"
 )
 
 // writeTree writes files (graph-relative slash paths → body) under dir and

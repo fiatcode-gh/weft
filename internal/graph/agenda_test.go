@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fiatcode-gh/weft/v2/internal/layout"
+	"github.com/fiatcode-gh/weft/v3/internal/layout"
 )
 
 type agendaRow struct {

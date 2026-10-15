@@ -11,7 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/exp/teatest/v2"
-	"github.com/fiatcode-gh/weft/v2/internal/edit"
+	"github.com/fiatcode-gh/weft/v3/internal/edit"
 )
 
 // sidebarApp boots the fixture clone at the given size.

@@ -17,6 +17,17 @@ func TestNewHelpRendersVersion(t *testing.T) {
 	if !strings.Contains(view, "? or esc to close") {
 		t.Errorf("help view missing close hint; got:\n%s", view)
 	}
+	if !strings.Contains(view, "https://github.com/fiatcode-gh/weft") {
+		t.Errorf("help view missing project URL; got:\n%s", view)
+	}
+}
+
+func TestHelpFooterShowsProjectURL(t *testing.T) {
+	quietTerm(t)
+	view := plain(NewHelp("v1.0.0", 130, 0).View())
+	if !strings.Contains(view, "weft v1.0.0 · https://github.com/fiatcode-gh/weft") {
+		t.Errorf("help footer should show version and URL on one line; got:\n%s", view)
+	}
 }
 
 func TestNewHelpEmptyVersionHidesSegment(t *testing.T) {

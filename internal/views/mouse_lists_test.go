@@ -10,7 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/fiatcode-gh/weft/v2/internal/search"
+	"github.com/fiatcode-gh/weft/v3/internal/search"
 )
 
 // topicFiles is a graph where Topic has three linked references and two bare

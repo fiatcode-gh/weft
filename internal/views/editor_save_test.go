@@ -8,7 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/fiatcode-gh/weft/v2/internal/edit"
+	"github.com/fiatcode-gh/weft/v3/internal/edit"
 )
 
 var ctrlS = tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl}

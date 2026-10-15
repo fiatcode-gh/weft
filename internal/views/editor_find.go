@@ -12,8 +12,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/rivo/uniseg"
 
-	"github.com/fiatcode-gh/weft/v2/internal/buffer"
-	"github.com/fiatcode-gh/weft/v2/internal/render"
+	"github.com/fiatcode-gh/weft/v3/internal/buffer"
+	"github.com/fiatcode-gh/weft/v3/internal/render"
 )
 
 // findBar is the state of the open find/replace bar (PLAN §7).

@@ -202,20 +202,30 @@ func (h *Help) renderBody() string {
 	return body
 }
 
-// footer renders the close hint on the left and the version on the right,
-// padded to contentWidth. It wraps to two lines when they can't fit inline,
-// and omits the version segment entirely when version is empty.
+// projectURL is shown in the help footer next to the version.
+const projectURL = "https://github.com/fiatcode-gh/weft"
+
+// footer renders the close hint on the left and "weft <version> · <url>" on
+// the right, padded to contentWidth. When they can't fit inline it wraps to
+// three lines (hint, version, URL), each clamped to the panel's content
+// width. It omits the right segment entirely when version is empty.
 func (h *Help) footer(contentWidth int) string {
 	left := "? or esc to close"
 	if h.version == "" {
 		return left
 	}
-	right := "weft " + h.version
+	right := "weft " + h.version + " · " + projectURL
 	gap := contentWidth - lipgloss.Width(left) - lipgloss.Width(right)
-	if gap < 2 {
-		return left + "\n" + right
+	if gap >= 2 {
+		return left + strings.Repeat(" ", gap) + right
 	}
-	return left + strings.Repeat(" ", gap) + right
+	lines := []string{left, "weft " + h.version, projectURL}
+	if h.width > helpChrome {
+		for i, line := range lines {
+			lines[i] = clamp(line, h.width-helpChrome)
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // renderColumn stacks groups vertically with one blank line between them.

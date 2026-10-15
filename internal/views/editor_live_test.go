@@ -8,8 +8,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/fiatcode-gh/weft/v2/internal/buffer"
-	"github.com/fiatcode-gh/weft/v2/internal/render"
+	"github.com/fiatcode-gh/weft/v3/internal/buffer"
+	"github.com/fiatcode-gh/weft/v3/internal/render"
 )
 
 // liveEditor opens a live-preview editor on content with line 0 under the top

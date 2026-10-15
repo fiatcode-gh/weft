@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fiatcode-gh/weft/v2/internal/layout"
+	"github.com/fiatcode-gh/weft/v3/internal/layout"
 )
 
 // Index is the read-only in-memory view of a Logseq graph.

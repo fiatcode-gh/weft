@@ -12,7 +12,7 @@ import (
 	"charm.land/glamour/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v3/internal/graph"
 )
 
 // SourceRows is computed from a second Glamour render of a tagged

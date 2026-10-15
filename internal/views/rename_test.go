@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fiatcode-gh/weft/v2/internal/doctor"
-	"github.com/fiatcode-gh/weft/v2/internal/edit"
-	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v3/internal/doctor"
+	"github.com/fiatcode-gh/weft/v3/internal/edit"
+	"github.com/fiatcode-gh/weft/v3/internal/graph"
 )
 
 // graphFiles reads every file under root (graph-relative, slash paths).

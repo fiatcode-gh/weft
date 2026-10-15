@@ -26,11 +26,11 @@ tar -xzf weft_<version>_<os>_<arch>.tar.gz weft
 install weft ~/.local/bin/
 ```
 
-Or install with Go 1.26+ (works from v2.5.1 on; earlier versions use the old
-`git.fiatcode.dev` module path):
+Or install with Go 1.26+ (v3.0.0 and later; for v2 use
+`go install github.com/fiatcode-gh/weft/v2/cmd/weft@v2.5.1`):
 
 ```bash
-go install github.com/fiatcode-gh/weft/v2/cmd/weft@latest
+go install github.com/fiatcode-gh/weft/v3/cmd/weft@latest
 ```
 
 Or build from source (Go 1.26+):
@@ -41,17 +41,49 @@ cd weft
 go build ./cmd/weft
 ```
 
-## Usage
+## Getting started
 
-```bash
-weft --graph /path/to/graph    # explicit path
-WEFT_GRAPH=/path/to/graph weft # via env var
-weft -version                  # print version and exit
-```
-
-A graph path is required — either pass `--graph` or set `$WEFT_GRAPH`. The flag wins when both are set. Drop the env var into your shell config for the zero-arg invocation.
+1. Run `weft`. It asks `Notes folder [~/notes]:`. Press Enter for `~/notes`, or type any folder. An existing Logseq graph or Obsidian vault works (an Obsidian vault needs the layout file, see Configuration). If the folder does not exist, weft asks `Create …? [Y/n]`. weft saves your choice as `graph = "…"` in the user config (it prints the path), and later runs open that folder straight away. `Ctrl+C` or `Ctrl+D` at a prompt quits and saves nothing.
+2. weft opens on today's journal (`.` brings you back to it from anywhere). Press `e` to write, `Ctrl+S` to save and `Esc` to leave the editor. The journal file is created on the first save.
+3. To link a page, type `[[` in the editor, pick or type a page name, and save. In the read view, `n` moves to the link and `Enter` follows it. A new page has no file yet: press `e` there, write and save to create it. `Ctrl+P` finds any page.
+4. Press `?` to see every key. Press `:` to list every action and run one.
+5. Optional: make the folder a git repository with a remote. `S` then commits, pulls and pushes.
 
 ## Configuration
+
+### Choosing the graph
+
+weft takes the graph folder from the first of these that is set:
+
+1. `--graph PATH`
+2. the `WEFT_GRAPH` environment variable
+3. `graph` in the user config (see User config)
+
+The first one set is used. If its folder is missing or is not a folder, weft stops with exit status 2 and names where the path came from, for example `weft: graph path "/nope" from --graph is not accessible: stat /nope: no such file or directory`. It never falls back to another source and never asks.
+
+If none is set and both stdin and stdout are a terminal, weft runs the first-run prompt from Getting started. Otherwise it stops with exit status 2 and `weft: no graph folder: pass --graph PATH, set $WEFT_GRAPH, or add graph = "PATH" to <user config path>`.
+
+### User config
+
+Your own settings, apart from any graph's layout, live in `$XDG_CONFIG_HOME/weft/config.toml` (`~/.config/weft/config.toml` when `XDG_CONFIG_HOME` is unset or not an absolute path). The file is optional. weft reads it at start. It is separate from the graph's `<graph>/.weft/config.toml`, which travels with the graph.
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `editor` | `"modeless"` | `"modeless"` is the editor as it has always been. `"vim"` turns on vim mode in the in-app editor (see Vim mode). |
+| `graph` | none | The graph folder: an absolute path or one that starts with `~/`. Anything else is an error. |
+
+```toml
+editor = "vim"
+graph = "~/notes"
+```
+
+weft writes this file only on first run: it appends the `graph` line and keeps everything else in the file. If the file changed while weft was asking for the folder, weft saves nothing and exits with status 2. There is no key to switch modes while weft runs; edit the file and start weft again.
+
+A problem stops weft with exit status 2 and a message that names the file, for example `weft: /home/you/.config/weft/config.toml: editor: "emacs" must be "modeless" or "vim"`. The problems are: the file cannot be read, a TOML syntax error, an unknown key, an unknown `editor` value, and a bad `graph` value (for example `graph: "notes" must be an absolute path or start with ~/`). A missing file is the defaults.
+
+`weft doctor` reads this file only to find the graph, when no flag or environment variable names one. It ignores `editor`.
+
+### Graph config (.weft/config.toml)
 
 weft needs no config for a Logseq-style graph. To change where pages and journals live, add `<graph>/.weft/config.toml`. weft reads it at start and in `weft doctor`, never writes it, and it travels with the graph when you sync with git. With no file, every key has its default.
 
@@ -70,7 +102,7 @@ The pattern uses three tokens: `YYYY` (four digits), `MM` and `DD` (two digits, 
 
 A config problem stops weft and `weft doctor` with exit status 2. The message names the file and the problem, for example `weft: <graph>/.weft/config.toml: unknown key "bogus"`. The problems are: the file cannot be read, a TOML syntax error, a wrong type or repeated key, an unknown key, a folder outside the graph, a `namespace_files` value other than the two above, and an invalid pattern. weft never falls back to the defaults.
 
-### Recipes
+#### Recipes
 
 A Logseq graph needs no file. The explicit equivalent of the defaults is:
 
@@ -92,7 +124,7 @@ namespace_files = "folders"
 
 If your daily notes sit in year and month folders, use `journal_file_pattern = "YYYY/MM/YYYY-MM-DD"`. weft does not read `.obsidian/` or `logseq/config.edn`.
 
-### Names and links
+#### Names and links
 
 - A page's name is its filename stem. `___` reads as `/`, so `A___B.md` is `A/B`. Folders are not part of the name. A journal's name is its filename stem as it is: `2026_10_12` with the default layout, `2026-10-12` in the Obsidian recipe.
 - `[[a/Note]]` picks a page by its path, relative to the graph, without `.md`. It matches whole folders and ignores case, so `[[pages/2026_05_24]]` reaches a page that a journal of the same name hides.
@@ -103,25 +135,22 @@ If your daily notes sit in year and month folders, use `journal_file_pattern = "
 - Dot-folders (`.obsidian`, `.git`, `.trash`, `.weft`) are skipped. Only `.md` files are indexed, and search and unlinked mentions read only those files.
 - A new page goes to `pages_dir`. A new journal goes to `journals_dir` through the pattern. weft creates a missing folder when the file is first saved.
 
-### User config
+### Environment variables
 
-Your own settings, apart from any graph, live in `$XDG_CONFIG_HOME/weft/config.toml` (`~/.config/weft/config.toml` when `XDG_CONFIG_HOME` is unset or not an absolute path). The file is optional. weft reads it once at start, never writes it, and `weft doctor` ignores it. It is separate from the graph's `<graph>/.weft/config.toml`, which travels with the graph.
+| Variable        | Effect                                                                            |
+|-----------------|-----------------------------------------------------------------------------------|
+| `WEFT_GRAPH`   | Graph path. `--graph` overrides it, and it overrides the `graph` key in the user config. |
+| `WEFT_STYLE`   | Force a Glamour markdown style (`dark`, `light`, `ascii`, `notty`) instead of weft's default terminal-palette style, which follows your terminal's own colors. |
+| `NO_COLOR`      | Honoured: drops every colour; bold, italic, underline, strikethrough, faint and reverse video stay. Use `TERM=dumb` for fully unstyled output. |
+| `WEFT_DEBUG=1` | Mirror Bubble Tea events to `weft.log` under the user cache dir (`$XDG_CACHE_HOME/weft/weft.log`, or the OS equivalent via `os.UserCacheDir`; falls back to `./weft.log` only if the cache dir is unavailable). Useful when reporting bugs. |
 
-| Key | Default | Meaning |
-|-----|---------|---------|
-| `editor` | `"modeless"` | `"modeless"` is the editor as it has always been. `"vim"` turns on vim mode in the in-app editor (see Vim mode). |
-
-```toml
-editor = "vim"
-```
-
-A problem stops weft with exit status 2 and a message that names the file, for example `weft: ~/.config/weft/config.toml: editor: "emacs" must be "modeless" or "vim"`. The problems are: the file cannot be read, a TOML syntax error, an unknown key, and an unknown `editor` value. A missing file is the defaults. There is no key to switch modes while weft runs; edit the file and start weft again.
-
-## Doctor
+### Command line
 
 ```bash
-weft doctor                  # check the graph from --graph / $WEFT_GRAPH
-weft doctor --graph PATH     # explicit path
+weft [--graph PATH]                # open the graph
+weft -version                      # print version and exit
+weft doctor [--graph PATH]         # health report
+weft --graph PATH doctor           # the same, with the flag before the word
 ```
 
 `weft doctor` walks the graph once and prints a health report. It is read-only and never writes to the graph.
@@ -133,7 +162,10 @@ weft doctor --graph PATH     # explicit path
 
 Two warnings come from page names. A name clash: several pages share a name, and the warning lists the files and says which one `[[name]]` opens. An unreachable page: every path link to it opens another page, so no link can reach it (rare). See Names and links under Configuration.
 
-Exit codes: `0` graph is clean, `1` findings exist, `2` operational error (bad graph path, bad config file, missing ripgrep, failed scan).
+### Exit codes
+
+- `weft`: `0` quit normally. `1` the terminal UI failed. `2` weft could not start: no graph, a bad graph path, a bad graph or user config, ripgrep missing, the debug log cannot open, or first run ended without a choice or could not save. `Ctrl+C` at a first-run prompt ends weft by the interrupt (shells show 130).
+- `weft doctor`: `0` the graph is clean, `1` findings exist, `2` operational error (bad graph path, no graph set, bad config file, missing ripgrep, failed scan).
 
 ## Keys
 
@@ -216,7 +248,7 @@ With `editor = "vim"` in the user config the in-app editor is modal. It opens in
 - **weft's own keys keep working** in normal and insert mode: `Ctrl-S`, `Ctrl-F`, `Ctrl-Z`/`Ctrl-Y`, `Ctrl-T`, `Alt-S`/`Alt-E`, `Alt-P`, `Alt-↑`/`Alt-↓`, `Ctrl-A`, `Ctrl-C`/`Ctrl-X`/`Ctrl-V`, `Shift` plus arrows, `PgUp`/`PgDn`. In insert mode `[[` and `#` completion, `Tab`/`Shift-Tab` and `Enter` work as in the table above, and `Ctrl-D`/`Ctrl-U` stay the delete keys. In normal and visual mode `Ctrl-D` and `Ctrl-U` scroll. In visual mode only `Ctrl-S` of these works.
 - **Mouse.** The wheel scrolls as before. A click in normal mode places the cursor (never past the last character) and drops a pending command. A click in visual mode leaves visual and places the cursor; the wheel keeps visual mode. A click in insert mode places the cursor and stays in insert mode. The mouse does nothing while the `:` line is open.
 - **Paste.** A terminal paste in normal mode inserts at the cursor as one undo step; in visual mode it leaves visual mode first; while the `:` line is open it is ignored.
-- **Not supported.** Named registers, marks, macros, `*` and `#`, `:s` and any ex command beyond those above, ranges and counts before `:`, `:set`, folds in the editor, several windows, `R` replace mode, block visual (`Ctrl-V`), `gq` and `=`, `~` in normal mode, `Y`, `H M L`, `Ctrl-F`/`Ctrl-B` as page keys, space, `Enter` and `Backspace` as motions, an operator with a search or `Ctrl-D`/`Ctrl-U`, `r` followed by `Enter`, objects, `p`, `r` and `/` in visual mode, vim's insert-mode `Ctrl-W`, `Ctrl-O` and `Ctrl-R` (register paste), vim keys in the read view, switching modes while weft runs, and writing the user config from weft.
+- **Not supported.** Named registers, marks, macros, `*` and `#`, `:s` and any ex command beyond those above, ranges and counts before `:`, `:set`, folds in the editor, several windows, `R` replace mode, block visual (`Ctrl-V`), `gq` and `=`, `~` in normal mode, `Y`, `H M L`, `Ctrl-F`/`Ctrl-B` as page keys, space, `Enter` and `Backspace` as motions, an operator with a search or `Ctrl-D`/`Ctrl-U`, `r` followed by `Enter`, objects, `p`, `r` and `/` in visual mode, vim's insert-mode `Ctrl-W`, `Ctrl-O` and `Ctrl-R` (register paste), vim keys in the read view, switching modes while weft runs, and setting `editor` from weft (weft writes the user config only on first run, and only the `graph` line).
 
 ### Tasks
 
@@ -301,18 +333,9 @@ The mouse is on by default. Press `m` to turn it off until weft quits (the statu
 - Long bullets wrap with hanging indent, so continuation lines align with the text after the bullet rather than under the bullet glyph.
 - Backlinks (`b`) shows two sections: **Linked references** (`[[…]]` links and tags) followed by **Unlinked references** — bare-text mentions of the page name that aren't yet wiki-linked. `Enter` on either section jumps to the mention's page and lands on the reference itself: a linked backlink focuses the back-reference `[[link]]` or tag (cursor on it, scrolled into view), and an unlinked reference highlights the bare-text mention and scrolls it into view. Self-references are always excluded.
 
-## Environment
-
-| Variable        | Effect                                                                            |
-|-----------------|-----------------------------------------------------------------------------------|
-| `WEFT_GRAPH`   | Default graph path (overridden by `--graph`).                                     |
-| `WEFT_STYLE`   | Force a Glamour markdown style (`dark`, `light`, `ascii`, `notty`) instead of weft's default terminal-palette style, which follows your terminal's own colors. |
-| `NO_COLOR`      | Honoured: drops every colour; bold, italic, underline, strikethrough, faint and reverse video stay. Use `TERM=dumb` for fully unstyled output. |
-| `WEFT_DEBUG=1` | Mirror Bubble Tea events to `weft.log` under the user cache dir (`$XDG_CACHE_HOME/weft/weft.log`, or the OS equivalent via `os.UserCacheDir`; falls back to `./weft.log` only if the cache dir is unavailable). Useful when reporting bugs. |
-
 ## Scope
 
-Writes graph files only via the in-app editor (`e`, saves on `Ctrl+S`) and the `$EDITOR` handoff (`E`); the `.` key creates today's journal (from the `Journal Template` page) if it doesn't exist, `c` appends one line to today's journal (creating it the same way when missing), and the picker can create a new page by name. Linkifying a mention in the backlinks panel also writes the mentioning file. Renaming a page (`F2`) rewrites the files that link to it and then renames its file. The editor, linkify and rename never overwrite outside changes unseen. Press `S` to sync the whole graph with git (commit → `pull --rebase` → push); it runs against the graph directory and degrades to a status-bar hint if that directory isn't a git repository. Folding is view-only and lasts for the session; nothing is saved. weft checks the graph's folders every 2 seconds (file names, sizes and modification times; nothing is read) and rebuilds the index when a page or journal changed outside weft. The page on screen updates in place, open panels keep their rows until reopened, and an open editor is never changed: it shows that the file changed, and `Ctrl+S` merges or asks.
+Writes graph files only via the in-app editor (`e`, saves on `Ctrl+S`) and the `$EDITOR` handoff (`E`); the `.` key creates today's journal (from the `Journal Template` page) if it doesn't exist, `c` appends one line to today's journal (creating it the same way when missing), and the picker can create a new page by name. Linkifying a mention in the backlinks panel also writes the mentioning file. Renaming a page (`F2`) rewrites the files that link to it and then renames its file. The editor, linkify and rename never overwrite outside changes unseen. Outside the graph, weft writes the user config file once, on first run (the `graph` line), and creates the notes folder you confirm there. Press `S` to sync the whole graph with git (commit → `pull --rebase` → push); it runs against the graph directory and degrades to a status-bar hint if that directory isn't a git repository. Folding is view-only and lasts for the session; nothing is saved. weft checks the graph's folders every 2 seconds (file names, sizes and modification times; nothing is read) and rebuilds the index when a page or journal changed outside weft. The page on screen updates in place, open panels keep their rows until reopened, and an open editor is never changed: it shows that the file changed, and `Ctrl+S` merges or asks.
 
 ### What is not supported
 

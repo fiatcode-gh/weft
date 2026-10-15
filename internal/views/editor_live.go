@@ -4,8 +4,8 @@ import (
 	"slices"
 	"sort"
 
-	"github.com/fiatcode-gh/weft/v2/internal/buffer"
-	"github.com/fiatcode-gh/weft/v2/internal/render"
+	"github.com/fiatcode-gh/weft/v3/internal/buffer"
+	"github.com/fiatcode-gh/weft/v3/internal/render"
 )
 
 // lineSpan is the buffer lines [from, to).

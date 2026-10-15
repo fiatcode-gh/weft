@@ -2,12 +2,15 @@ package views
 
 import (
 	"fmt"
-	"slices"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/fiatcode-gh/weft/v3/internal/buffer"
+	"github.com/fiatcode-gh/weft/v3/internal/render"
 )
 
 // perfContent is n lines mixing bullets with wiki links and bold text, long
@@ -57,10 +60,7 @@ func perfTaskContent(n int) string {
 const (
 	perfW, perfH  = 100, 40
 	perfWindowH   = perfH - 2 // text rows: the rule row and the status line take two
-	perfOpenMS    = 56
-	perfKeyMS     = 26
-	perfPageMS    = 4
-	perfSlack     = 4 // machine slack over the v1 numbers
+	perfSlack     = 4         // machine slack over the v1 numbers
 	perfBestOfRun = 5
 	perfPageMoves = 20 // fresh page moves whose mean is bounded
 )
@@ -85,81 +85,139 @@ func perfEditor(content string, anchor int, source bool) *EditorView {
 	return NewEditorView(nil, "P", "/tmp/p.md", content, false, perfW, perfH, Anchor{anchor, 0, 10}, nil, source)
 }
 
-// The wall-clock bounds are the v1 numbers (56/26/4 ms) times a machine slack
-// and the race factor; the real proof of independence from the buffer length
-// is TestEditorWorkIsWindowBounded.
+// perfReference is the editor-independent part of opening at line 9000: build the buffer
+// and scan its source lines up to the anchor.
+func perfReference(content string) { render.NewScanner().Info(buffer.New(content), 9000) }
+
+// perfRefRounds is how many times the reference and each operation are timed
+// alternately; the minimum of each is kept.
+const perfRefRounds = 3
+
+// perfKeyBatch is how many consecutive Update+View calls make one keystroke or
+// reveal sample; the mean per call is compared. One sub-millisecond call is
+// too noisy to bound.
+const perfKeyBatch = 20
+
+// perfPermille bounds each operation as thousandths of perfReference timed in
+// the same run, each from a collected heap, so a slow or loaded machine
+// stretches the reference and the operation alike. Keys are
+// "<corpus>/<mode>/<op>"; each is twice the largest ratio seen over repeated
+// runs (10 without -race, 5 with). The race detector slows the reference far
+// more than the batched operations, so it has its own table. The real proof of
+// independence from the buffer length is TestEditorWorkIsWindowBounded.
+var perfPermille = map[bool]map[string]int{
+	false: {
+		"mixed/live/open":        4983,
+		"mixed/live/keystroke":   38,
+		"mixed/live/reveal":      15,
+		"mixed/live/page":        441,
+		"mixed/source/open":      2067,
+		"mixed/source/keystroke": 45,
+		"mixed/source/reveal":    33,
+		"mixed/source/page":      71,
+		"tasks/live/open":        4191,
+		"tasks/live/keystroke":   50,
+		"tasks/live/reveal":      9,
+		"tasks/live/page":        448,
+		"tasks/source/open":      2065,
+		"tasks/source/keystroke": 23,
+		"tasks/source/reveal":    15,
+		"tasks/source/page":      73,
+	},
+	true: {
+		"mixed/live/open":        3345,
+		"mixed/live/keystroke":   9,
+		"mixed/live/reveal":      3,
+		"mixed/live/page":        134,
+		"mixed/source/open":      2092,
+		"mixed/source/keystroke": 8,
+		"mixed/source/reveal":    6,
+		"mixed/source/page":      19,
+		"tasks/live/open":        3017,
+		"tasks/live/keystroke":   15,
+		"tasks/live/reveal":      1,
+		"tasks/live/page":        138,
+		"tasks/source/open":      2032,
+		"tasks/source/keystroke": 5,
+		"tasks/source/reveal":    3,
+		"tasks/source/page":      19,
+	},
+}
+
 func TestEditorSpeed10000(t *testing.T) {
 	quietTerm(t)
-	bound := func(ms int) time.Duration { return time.Duration(ms*perfSlack*raceFactor) * time.Millisecond }
-
 	for _, corpus := range []struct {
 		name    string
 		content string
 	}{{"mixed", perfContent(10000)}, {"tasks", perfTaskContent(10000)}} {
-		content := corpus.content
 		t.Run(corpus.name, func(t *testing.T) {
-			testEditorSpeed(t, content, bound)
+			testEditorSpeed(t, corpus.name, corpus.content)
 		})
 	}
 }
 
-func testEditorSpeed(t *testing.T, content string, bound func(int) time.Duration) {
+// perfTimed collects garbage, then times f once.
+func perfTimed(f func()) time.Duration {
+	runtime.GC()
+	t0 := time.Now()
+	f()
+	return time.Since(t0)
+}
+
+func testEditorSpeed(t *testing.T, corpus, content string) {
 	for _, mode := range perfModes {
 		t.Run(mode.name, func(t *testing.T) {
-			t.Run("open", func(t *testing.T) {
-				got := bestOf(perfBestOfRun, func() {
-					e := perfEditor(content, 9000, mode.source)
-					_ = e.View()
-				})
-				if got > bound(perfOpenMS) {
-					t.Errorf("open took %v, bound %v", got, bound(perfOpenMS))
-				}
-			})
+			const unset = time.Duration(1<<63 - 1)
+			ref, open, keyT, reveal, page := unset, unset, unset, unset, unset
 			e := perfEditor(content, 9000, mode.source)
 			_ = e.View()
-			t.Run("keystroke", func(t *testing.T) {
-				got := bestOf(perfBestOfRun, func() {
-					e.Update(key("x"))
-					_ = e.View()
-				})
-				if got > bound(perfKeyMS) {
-					t.Errorf("keystroke took %v, bound %v", got, bound(perfKeyMS))
-				}
-			})
-			t.Run("reveal", func(t *testing.T) {
-				got := bestOf(perfBestOfRun, func() {
-					e.Update(tea.KeyPressMsg{Code: tea.KeyDown})
-					_ = e.View()
-				})
-				if got > bound(perfKeyMS) {
-					t.Errorf("reveal took %v, bound %v", got, bound(perfKeyMS))
-				}
-			})
-			// Fresh page moves from the top: every move shows rows no earlier
-			// move rendered, so a cached window cannot hide a slow one. The
-			// mean is bounded, not the best of a few, so a slowdown of the
-			// typical move fails.
-			t.Run("page", func(t *testing.T) {
+			for range perfRefRounds {
+				ref = min(ref, perfTimed(func() { perfReference(content) }))
+				open = min(open, perfTimed(func() {
+					o := perfEditor(content, 9000, mode.source)
+					_ = o.View()
+				}))
+				keyT = min(keyT, perfTimed(func() {
+					for range perfKeyBatch {
+						e.Update(key("x"))
+						_ = e.View()
+					}
+				})/perfKeyBatch)
+				reveal = min(reveal, perfTimed(func() {
+					for range perfKeyBatch {
+						e.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+						_ = e.View()
+					}
+				})/perfKeyBatch)
+				// Fresh page moves from the top: every move shows rows no
+				// earlier move rendered, so a cached window cannot hide a slow
+				// one. The mean is bounded, not the best of a few, so a
+				// slowdown of the typical move fails.
 				p := perfEditor(content, 0, mode.source)
 				_ = p.View()
-				times := make([]time.Duration, perfPageMoves)
-				var sum time.Duration
-				for i := range times {
-					t0 := time.Now()
-					p.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
-					_ = p.View()
-					times[i] = time.Since(t0)
-					sum += times[i]
-				}
-				mean := sum / perfPageMoves
-				slices.Sort(times)
-				t.Logf("%d page moves: mean %v, p90 %v, max %v", perfPageMoves, mean, times[perfPageMoves*9/10], times[perfPageMoves-1])
-				// The shared slack (16 ms) leaves room for CI's slower runners;
-				// algorithmic regressions are caught by TestEditorWorkIsWindowBounded.
-				if limit := time.Duration(perfPageMS*perfSlack*raceFactor) * time.Millisecond; mean > limit {
-					t.Errorf("mean page move took %v, bound %v", mean, limit)
-				}
-			})
+				page = min(page, perfTimed(func() {
+					for range perfPageMoves {
+						p.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
+						_ = p.View()
+					}
+				})/perfPageMoves)
+			}
+			for _, op := range []struct {
+				name string
+				got  time.Duration
+			}{{"open", open}, {"keystroke", keyT}, {"reveal", reveal}, {"page", page}} {
+				t.Run(op.name, func(t *testing.T) {
+					permille, ok := perfPermille[raceDetector][corpus+"/"+mode.name+"/"+op.name]
+					if !ok {
+						t.Fatalf("no per-mille bound for %s/%s/%s", corpus, mode.name, op.name)
+					}
+					limit := ref * time.Duration(permille) / 1000
+					t.Logf("%s %v, ref %v, ratio %.4f", op.name, op.got, ref, float64(op.got)/float64(ref))
+					if op.got > limit {
+						t.Errorf("%s took %v, bound %v (reference %v)", op.name, op.got, limit, ref)
+					}
+				})
+			}
 		})
 	}
 }

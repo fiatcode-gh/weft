@@ -12,8 +12,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/fiatcode-gh/weft/v2/internal/layout"
-	syncpkg "github.com/fiatcode-gh/weft/v2/internal/sync"
+	"github.com/fiatcode-gh/weft/v3/internal/layout"
+	syncpkg "github.com/fiatcode-gh/weft/v3/internal/sync"
 )
 
 // pressE sends the e key to a booted app and returns the resulting cmd.

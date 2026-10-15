@@ -4,7 +4,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v3/internal/graph"
 )
 
 // FoldKind says what kind of line a fold hangs from.

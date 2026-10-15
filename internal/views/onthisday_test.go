@@ -8,7 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
-	"github.com/fiatcode-gh/weft/v2/internal/edit"
+	"github.com/fiatcode-gh/weft/v3/internal/edit"
 )
 
 var otdFiles = map[string]string{

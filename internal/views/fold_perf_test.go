@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fiatcode-gh/weft/v2/internal/graph"
-	"github.com/fiatcode-gh/weft/v2/internal/layout"
-	"github.com/fiatcode-gh/weft/v2/internal/render"
+	"github.com/fiatcode-gh/weft/v3/internal/graph"
+	"github.com/fiatcode-gh/weft/v3/internal/layout"
+	"github.com/fiatcode-gh/weft/v3/internal/render"
 )
 
 // perfFoldMS is the bound for a Tab or z once the page's row map is built, on
@@ -84,7 +84,9 @@ func TestFoldSpeed10000(t *testing.T) {
 				rowMap = min(rowMap, time.Since(t0))
 			}
 			t.Logf("first Tab %v, row map alone %v", first, rowMap)
-			if limit := rowMap*11/10 + time.Duration(50*raceFactor)*time.Millisecond; first > limit {
+			// Half the row map again absorbs CI noise (1.14× seen on a runner, 1.0–1.05× locally)
+			// and still fails a first Tab that builds the row map twice.
+			if limit := rowMap*3/2 + time.Duration(50*raceFactor)*time.Millisecond; first > limit {
 				t.Errorf("first Tab took %v, bound %v (row map alone %v)", first, limit, rowMap)
 			}
 

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	syncpkg "github.com/fiatcode-gh/weft/v2/internal/sync"
+	syncpkg "github.com/fiatcode-gh/weft/v3/internal/sync"
 )
 
 // stubProbe makes a's status probe return a fixed result without shelling out
