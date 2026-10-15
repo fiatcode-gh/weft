@@ -19,6 +19,9 @@ keys, space, `Enter` and `Backspace` as normal-mode motions, an operator with a
 search or `Ctrl-D`/`Ctrl-U`, vim's exclusive-to-linewise rule, and persisting
 anything about the vim session.
 
+*Superseded in part by `public-readiness.md`: weft now writes the user config
+once, on first run, to save the `graph` line. It still never writes `editor`.*
+
 ## Decisions
 
 1. **Opt-in and plumbing.** `internal/userconfig` (`Path`, `Load`) reads the one
@@ -28,6 +31,9 @@ anything about the vim session.
    `App.enterEditor` calls `EditorView.enableVim` when it is set. `views.New` and
    `NewEditorView` keep their signatures. `EditorView.vim` is a `*vimState`; nil
    is the modeless editor and every modeless path is as before.
+   *Superseded in part by `public-readiness.md`: the user config now has a
+   second key, `graph`, and `weft doctor` reads the file to find the graph when
+   no flag or env names one.*
 2. **Routing.** `EditorView.Update` keeps the clash and exit prompts first. The
    old key body, minus the `Ctrl+R` toggle, is `editKey`. Modeless: the toggle,
    then `editKey`. Vim: `vimUpdate`. The ex line owns the keys while it is open;

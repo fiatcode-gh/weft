@@ -27,7 +27,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- A user config file, `$XDG_CONFIG_HOME/weft/config.toml` (`~/.config/weft/config.toml` by default), with one key: `editor = "modeless"` (the default) or `"vim"`. It is optional and weft never writes it; a bad file stops weft with exit status 2. See the README, Configuration.
+- A user config file, `$XDG_CONFIG_HOME/weft/config.toml` (`~/.config/weft/config.toml` by default), with the keys `editor = "modeless"` (the default) or `"vim"`, and `graph`. It is optional. weft writes it only on first run, to save `graph`; a bad file stops weft with exit status 2. See the README, Configuration.
 - Vim mode, opt-in with `editor = "vim"`: normal, insert, visual and visual-line modes in the in-app editor, with counts, the usual motions, `d c y > <` and their shortcuts, text objects, one register shared with `Ctrl+C/X/V`, `u`/`Ctrl+R` undo and redo, `.` repeat, `/ ? n N` search and the ex commands `:w :q :wq :x :q! :<n> :preview` (plus `ZZ`, `ZQ`). weft's own editor keys keep working. `Ctrl+R` is redo there; `:preview` switches the look. Without the setting nothing changes. See the README, Vim mode.
 - `:` opens a command palette listing every read-view action with its key; type to filter, `Enter` runs it. Help and the palette come from the same action table as the keys.
 - `F2` renames the page on screen: it rewrites every link and tag to it in every file (alias and `#Heading` kept), then renames the file. A preview comes first; if a file changed on disk the rename stops without overwriting it and `F2` with the same name finishes. See the README.
@@ -64,6 +64,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `weft doctor` warns about pages that share a name, and about a page no link can open.
 - The picker shows a page that loses a name clash by its shortest path that opens it, such as `b/Note`.
 - The mouse (on by default; `m` turns it off for the session): the wheel scrolls the page, lists and the editor, a click follows a link, picks a row or a calendar day, and places the editor cursor. See the README.
+- First run: with no graph set and a terminal on stdin and stdout, `weft` asks for the notes folder (`~/notes` by default), offers to create it, and saves it as `graph` in the user config. Later runs open it straight away.
+- The `graph` key in the user config. The graph folder comes from `--graph`, then `$WEFT_GRAPH`, then `graph`.
+- The help overlay footer shows the project URL.
 
 ### Changed
 
@@ -76,6 +79,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Subfolders of `pages/` and `journals/` are indexed instead of skipped with a warning. Dot-folders are skipped.
 - Search and unlinked mentions read only the indexed `.md` files, not other file types or dot-folders.
 - A new journal, or a page saved into a missing folder, creates the folder.
+- A graph path error says where the path came from (`--graph`, `$WEFT_GRAPH` or the user config file). weft does not try another source.
+- The message when no graph is set lists all three ways to set one.
 
 ### Fixed
 
@@ -83,6 +88,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Saving in the in-app editor (`Ctrl+S`, or save from the exit prompt) no longer overwrites changes made to the file outside weft while it was open, for example an agent appending to today's journal. Changes on separate lines are merged, and so are lines both sides added at the same spot, such as you and an agent both appending to a journal (yours first); the status line says so. Overlapping or adjacent changes, a page that appeared on disk while being drafted, or a deleted file stop the save and ask: overwrite, reload (not for a deleted file) or keep editing (`Esc`). The comparison is by content, so a touched modification time alone is not a change.
 - Linkifying a mention no longer writes when the file changed between weft reading and writing it. The backlinks panel says so; try again.
 - Keys that reach weft together — fast typing, an input method, `tmux send-keys` — now each count. Before, a run of characters that arrived at once was dropped, so a picker or search query typed that way stayed empty.
+- `weft doctor --graph PATH` works without `$WEFT_GRAPH`.
 
 ## [2.5.1] - 2026-10-03
 

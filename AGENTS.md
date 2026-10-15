@@ -59,9 +59,9 @@ an intentional UI change, run with `-update` and visually diff the golden before
   `quietStdout`, which drops the terminal probes and keyboard-protocol switches Bubble
   Tea v2 sends on its own, so weft sends no queries and keeps the terminal's normal key
   encoding. It does pass the mouse mode switches (SGR 1002/1006), which are not queries.
-  It loads the user config (`loadUserConfig`) after the layout and passes the editor choice to `App.SetVimEditor`.
+  `resolveGraph` picks the graph: `--graph` > `$WEFT_GRAPH` > the user config's `graph`; it reads the config only when both of the others are empty, and `graphChoice` carries the source so errors name it. `weft doctor` is dispatched before resolution; `runDoctor` resolves its own graph (its flag, the global flag, env, then the config key) and never prompts. First run is `firstrun.go` (`pickGraph`, `firstRun`): the prompt runs only when no graph is set and stdin and stdout are terminals (`x/term`). It then loads the user config (`loadUserConfig`) after the layout and passes the editor choice to `App.SetVimEditor`.
 - `internal/layout/` — the one layout definition: config load and validation (`.weft/config.toml`), the journal filename pattern, and page placement (new pages and `RenameRel` for rename). Used by `graph`, `views`, `doctor` and `cmd/weft`. `Layout`'s zero value is invalid; use `layout.Default()` or `layout.Load`.
-- `internal/userconfig/` — the user's own `$XDG_CONFIG_HOME/weft/config.toml` (`Path`, `Load`; one key, `editor`). Optional, never written, read by `cmd/weft` only (not by `weft doctor`); a bad file stops weft with exit 2.
+- `internal/userconfig/` — the user's own `$XDG_CONFIG_HOME/weft/config.toml` (`Path`, `Load`; two keys, `editor` and `graph`). Optional. `Load` returns the `edit.Snapshot` it parsed. `SaveGraph` is the one write: it appends the `graph` line, content-guarded through `internal/edit`, and only first run uses it. Read by `cmd/weft` (`weft doctor` only to find the graph); a bad file stops weft with exit 2.
 - `internal/graph/` — recursive filesystem walk, page parsing (wiki links and tags; `tag.go` is the one tag definition every consumer uses), name resolution, index. `task.go`/`taskdate.go`/`agenda.go` are the one task grammar (markers, priorities, stamps, ownership, agenda) every consumer calls; `logbook.go` holds the LOGBOOK regexes and `QueryOrEmbedRe`; `heading.go` is the one heading definition (`Headings`, `HeadingKey`) and `ResolveLink` in `resolve.go` the one heading-link rule. `tree.go` (`PageTree`) groups non-journal pages by folder and namespace for the tree view. `signature.go` (`Signature`, `ScanSignature`) is the stat-only fingerprint of the index walk (`walkGraph`, the one walk definition) that live reload compares. `resolve.go` and `names.go` also hold name resolution (exact, case-folded, path), the clash winner, and each page's `Key`.
 - `internal/render/` — Glamour-based page rendering (wiki-link styling, hanging-indent,
   workflow-marker colouring, `:LOGBOOK:` stripping). Has a `Warmup()` paid before the
@@ -81,8 +81,7 @@ an intentional UI change, run with `-update` and visually diff the golden before
   `internal/sync/`). Resolves
   `$VISUAL` / `$EDITOR` / `vi`, snapshots file mtime, and exposes
   `Resolve` / `EnsureFile` / `ReadSnapshot` / `WriteFileIfUnchanged` / `CheckRenameDest` / `RenameIfUnchanged` / `SnapshotMtime`.
-  Every replacing write is content-guarded: `writeFile` is unexported. Invoked by the in-app editor (`e`,
-  saves on `Ctrl+S`), by task done/undo in the todos and agenda overlays, by linkify in the backlinks panel, by capture (`c`, one guarded append to today's journal), by template journal creation (`.`, `E`, capture), by page rename (`F2`, guarded rewrites of linking files then one guarded rename), and by `App.editCurrent` for `$EDITOR` handoff (`E`).
+  Every replacing write is content-guarded: `writeFile` is unexported. Invoked by the in-app editor (`e`, saves on `Ctrl+S`), by task done/undo in the todos and agenda overlays, by linkify in the backlinks panel, by capture (`c`, one guarded append to today's journal), by template journal creation (`.`, `E`, capture), by page rename (`F2`, guarded rewrites of linking files then one guarded rename), by the first-run user-config save (`userconfig.SaveGraph`), and by `App.editCurrent` for `$EDITOR` handoff (`E`).
 - `internal/merge/` — pure git-style three-way line merge (adjacent changes
   conflict; both sides inserting at the same spot keeps mine then theirs) used by
   the editor save. No disk access.
@@ -118,7 +117,8 @@ an intentional UI change, run with `-update` and visually diff the golden before
   with. Tests that assert styling read raw output.
 - Tests that depend on the Glamour style re-exec in a fresh process
   (`inFreshProcess`): Glamour registers its chroma style once per process.
-- Timing tests scale their limits with `raceFactor` (`-race` is slower).
+- Timing tests scale their limits with `raceFactor` (`-race` is slower), except `TestEditorSpeed10000`: its bounds are ratios to a reference timed in the same run (separate tables for race and non-race), so a slow machine stretches both.
+- Tests in `cmd/weft` that re-exec the binary drop `WEFT_GRAPH` from the environment and use a temp `HOME` and `XDG_CONFIG_HOME`, so they never read the real user config or graph.
 - Under `NO_COLOR` styling keeps attributes (`Ascii` profile), so a test that
   asserts "no styling" must convert with the `NoTTY` profile explicitly. Run the
   suite both with and without `NO_COLOR` set: `go test ./... -count=1` and
