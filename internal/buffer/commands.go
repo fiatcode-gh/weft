@@ -48,7 +48,67 @@ const (
 	CaseCapitalize CaseMode = iota
 	CaseLower
 	CaseUpper
+	CaseToggle
 )
+
+// CaseRange rewrites the text in r (CaseLower, CaseUpper, CaseToggle) as one
+// group, leaving invalid UTF-8 and unchanged lines alone; the cursor goes to
+// r.Start. Nothing changing opens no group.
+func (b *Buffer) CaseRange(r Range, m CaseMode) {
+	r = b.clampRange(r)
+	type change struct {
+		r   Range
+		out string
+	}
+	var changes []change
+	for l := r.Start.Line; l <= r.End.Line; l++ {
+		from, to := 0, len(b.lines[l])
+		if l == r.Start.Line {
+			from = r.Start.Col
+		}
+		if l == r.End.Line {
+			to = r.End.Col
+		}
+		seg := b.lines[l][from:to]
+		if seg == "" || !utf8.ValidString(seg) {
+			continue
+		}
+		if out := mapCase(seg, m); out != seg {
+			changes = append(changes, change{Range{Pos{l, from}, Pos{l, to}}, out})
+		}
+	}
+	if len(changes) == 0 {
+		b.MoveTo(r.Start, false)
+		return
+	}
+	b.edit(func() {
+		for _, c := range changes {
+			b.replace(c.r, c.out)
+		}
+		b.cursor, b.hasAnchor = r.Start, false
+	})
+}
+
+// mapCase maps each rune of s by m; CaseCapitalize and unknown modes keep s.
+func mapCase(s string, m CaseMode) string {
+	switch m {
+	case CaseLower:
+		return strings.Map(unicode.ToLower, s)
+	case CaseUpper:
+		return strings.Map(unicode.ToUpper, s)
+	case CaseToggle:
+		return strings.Map(func(r rune) rune {
+			switch {
+			case unicode.IsUpper(r):
+				return unicode.ToLower(r)
+			case unicode.IsLower(r):
+				return unicode.ToUpper(r)
+			}
+			return r
+		}, s)
+	}
+	return s
+}
 
 // CaseWord rewrites the word after the cursor (spaces skipped) and leaves the cursor
 // at its end. It never crosses a line break and leaves invalid UTF-8 words alone.
