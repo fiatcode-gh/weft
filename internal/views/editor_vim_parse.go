@@ -42,10 +42,19 @@ var vimSimple = map[string]bool{
 	"u": true, "ctrl+r": true,
 	"x": true, "X": true, "s": true, "S": true, "J": true,
 	"p": true, "P": true, "D": true, "C": true, ".": true,
+	"v": true, "V": true,
 }
 
 // vimOperators are the keys that take a motion, an object or themselves.
 var vimOperators = map[string]bool{"d": true, "c": true, "y": true, ">": true, "<": true}
+
+// vimVisualSimple are the visual-mode commands that take no further token:
+// the operators act on the selection at once.
+var vimVisualSimple = map[string]bool{
+	"o": true, "v": true, "V": true,
+	"d": true, "x": true, "c": true, "y": true, ">": true, "<": true,
+	"J": true, "~": true, "u": true, "U": true,
+}
 
 // vimObjectOpener maps the character after i or a to the key an object is
 // stored under: the brackets are named by their opener.
@@ -138,6 +147,10 @@ func parseVim(tokens []string, visual bool) (vimCmd, vimParse) {
 	}
 	var st vimParse
 	switch t := tokens[i]; {
+	case visual && vimVisualSimple[t]:
+		c.key, i, st = t, i+1, vimDone
+	case visual:
+		c.key, c.arg, i, st = vimMotionTokens(tokens, i)
 	case vimOperators[t]:
 		c.op = t
 		var n int

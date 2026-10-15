@@ -45,7 +45,7 @@ func TestVimWorkIsWindowBounded(t *testing.T) {
 						check(k, func() { e.Update(key(k)) })
 					}
 				}
-				for _, k := range []string{"x", "dd", "p", "u", "J", "dw", ">>"} {
+				for _, k := range []string{"x", "dd", "p", "u", "J", "dw", ">>", "vjd", "Vj>", "vlU", "Vjy"} {
 					check(k, func() {
 						for _, r := range k {
 							e.Update(key(string(r)))

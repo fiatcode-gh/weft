@@ -334,7 +334,7 @@ func (e *EditorView) drawRow(p viewPos) string {
 	r := c.rows[p.row]
 	spans, curMatch := e.findOverlay(c.spans, p.line)
 	lineBreak := false
-	if sel, ok := e.buf.Selection(); ok && sel.Start.Line <= p.line && p.line <= sel.End.Line {
+	if sel, ok := e.selection(); ok && sel.Start.Line <= p.line && p.line <= sel.End.Line {
 		from, to := 0, len(c.text)
 		if p.line == sel.Start.Line {
 			from = sel.Start.Col

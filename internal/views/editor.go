@@ -151,6 +151,9 @@ func (e *EditorView) Paste(msg tea.PasteMsg) tea.Cmd {
 	if e.vim != nil && e.vim.mode == vimInsert && !e.vim.replaying && e.vim.rec != nil {
 		e.vim.rec.inputs = append(e.vim.rec.inputs, vimInput{paste: msg.Content, isPaste: true})
 	}
+	if e.vimVisual() {
+		e.vim.mode = vimNormal
+	}
 	e.pasteText(msg.Content)
 	return nil
 }

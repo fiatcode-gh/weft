@@ -7,6 +7,8 @@ import (
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/fiatcode-gh/weft/v2/internal/buffer"
 )
 
 // vimMode is the modal state of a vim-mode editor.
@@ -23,8 +25,9 @@ const (
 // modeless editor has none (EditorView.vim is nil).
 type vimState struct {
 	mode    vimMode
-	pending []string // tokens of the command being typed
-	insMark int      // undo depth before the change that entered insert mode
+	pending []string   // tokens of the command being typed
+	insMark int        // undo depth before the change that entered insert mode
+	anchor  buffer.Pos // visual mode: the end of the selection that stays put
 
 	// Dot repeat (LD12): last is the change `.` repeats, rec the change whose
 	// insert session is open, replaying is set while `.` or a counted insert
@@ -82,6 +85,9 @@ func (e *EditorView) vimUpdate(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
 	}
 	if e.vim.mode == vimInsert {
 		return e.vimInsertKey(msg)
+	}
+	if e.vimVisual() {
+		return e.vimVisualKey(msg)
 	}
 	return e.vimNormalKey(msg)
 }
@@ -197,6 +203,10 @@ func (e *EditorView) vimExec(c vimCmd) (EditorResult, tea.Cmd) {
 			b.OpenLine(true)
 		}
 		e.vimEnterInsert(mark)
+	case "v":
+		e.vimStartVisual(vimVisual)
+	case "V":
+		e.vimStartVisual(vimVisualLine)
 	case "r":
 		e.vimReplace(c)
 	case "J":

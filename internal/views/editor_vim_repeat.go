@@ -11,6 +11,7 @@ import (
 type vimChange struct {
 	cmd    vimCmd
 	inputs []vimInput
+	extent *vimExtent // set for a visual change: the selection `.` reapplies
 }
 
 // vimInput is one input of an insert session: a key, or a bracketed paste.
@@ -83,7 +84,12 @@ func (e *EditorView) vimDot(count int) tea.Cmd {
 	}
 	mark := e.buf.UndoMark()
 	v.replaying = true
-	_, cmd := e.vimRun(last.cmd)
+	var cmd tea.Cmd
+	if last.extent != nil {
+		cmd = e.vimVisualDot(last)
+	} else {
+		_, cmd = e.vimRun(last.cmd)
+	}
 	if v.mode == vimInsert {
 		v.rec = last
 		for _, in := range last.inputs {
