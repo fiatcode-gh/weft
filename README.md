@@ -44,8 +44,8 @@ go build ./cmd/weft
 ## Getting started
 
 1. Run `weft`. It asks `Notes folder [~/notes]:`. Press Enter for `~/notes`, or type any folder. An existing Logseq graph or Obsidian vault works (an Obsidian vault needs the layout file, see Configuration). If the folder does not exist, weft asks `Create …? [Y/n]`. weft saves your choice as `graph = "…"` in the user config (it prints the path), and later runs open that folder straight away. `Ctrl+C` or `Ctrl+D` at a prompt quits and saves nothing.
-2. Press `.` to open today's journal. Press `e` to write, `Ctrl+S` to save and `Esc` to leave the editor.
-3. To make a page and a link, type `[[` in the editor, pick or type a page name, and save. In the read view, `n` moves to the link and `Enter` follows it. `Ctrl+P` finds any page.
+2. weft opens on today's journal (`.` brings you back to it from anywhere). Press `e` to write, `Ctrl+S` to save and `Esc` to leave the editor. The journal file is created on the first save.
+3. To link a page, type `[[` in the editor, pick or type a page name, and save. In the read view, `n` moves to the link and `Enter` follows it. A new page has no file yet: press `e` there, write and save to create it. `Ctrl+P` finds any page.
 4. Press `?` to see every key. Press `:` to list every action and run one.
 5. Optional: make the folder a git repository with a remote. `S` then commits, pulls and pushes.
 
