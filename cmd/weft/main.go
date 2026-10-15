@@ -93,6 +93,9 @@ func initDebugLog(val string) (io.Closer, error) {
 }
 
 func main() {
+	rep := newReporter(crashDSN, resolvedVersion(), os.Stderr)
+	defer rep.recoverMain()
+
 	graphFlag := flag.String("graph", "", "path to Logseq graph (overrides $WEFT_GRAPH)")
 	versionFlag := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
@@ -108,6 +111,7 @@ func main() {
 	}
 
 	if flag.Arg(0) == "doctor" {
+		rep.mute()
 		os.Exit(runDoctor(flag.Args()[1:], *graphFlag, os.Getenv("WEFT_GRAPH"), os.Stdout, os.Stderr))
 	}
 
@@ -118,17 +122,20 @@ func main() {
 	}
 	if choice.path == "" {
 		interactive := term.IsTerminal(os.Stdin.Fd()) && term.IsTerminal(os.Stdout.Fd())
+		rep.mute()
 		choice, err = pickGraph(interactive, os.Stdin, os.Stdout, seen)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "weft: %v\n", err)
 			os.Exit(2)
 		}
+		rep.unmute()
 	}
 	if err := validateGraphPath(choice); err != nil {
 		fmt.Fprintf(os.Stderr, "weft: %v\n", err)
 		os.Exit(2)
 	}
 	graphPath := choice.path
+	rep.setGraph(graphPath)
 
 	lay, ok := loadLayout(graphPath, os.Stderr)
 	if !ok {
@@ -139,6 +146,7 @@ func main() {
 	if !ok {
 		os.Exit(2)
 	}
+	rep.setConsent(cfg.CrashReports)
 
 	debugLog, err := initDebugLog(os.Getenv("WEFT_DEBUG"))
 	if err != nil {
@@ -156,9 +164,8 @@ func main() {
 	app := views.New(graphPath, lay, resolvedVersion())
 	app.SetVimEditor(cfg.Editor == userconfig.Vim)
 
-	if _, err := tea.NewProgram(app, programOptions(os.Stdout)...).Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "weft: %v\n", err)
-		os.Exit(1)
+	if code := rep.runUI(app, programOptions(os.Stdout)...); code != 0 {
+		os.Exit(code)
 	}
 }
 

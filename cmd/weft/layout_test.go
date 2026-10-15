@@ -13,6 +13,9 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if where := os.Getenv("WEFT_TEST_CRASH"); where != "" {
+		os.Exit(crashChild(where))
+	}
 	if os.Getenv("WEFT_TEST_RUN_MAIN") == "1" {
 		main()
 		os.Exit(0)
