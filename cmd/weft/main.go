@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/term"
 
 	"github.com/fiatcode-gh/weft/v3/internal/doctor"
 	"github.com/fiatcode-gh/weft/v3/internal/edit"
@@ -110,14 +111,18 @@ func main() {
 		os.Exit(runDoctor(flag.Args()[1:], *graphFlag, os.Getenv("WEFT_GRAPH"), os.Stdout, os.Stderr))
 	}
 
-	choice, _, err := resolveGraph(*graphFlag, os.Getenv("WEFT_GRAPH"))
+	choice, seen, err := resolveGraph(*graphFlag, os.Getenv("WEFT_GRAPH"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "weft: %v\n", err)
 		os.Exit(2)
 	}
 	if choice.path == "" {
-		fmt.Fprintf(os.Stderr, "weft: %v\n", noGraphError())
-		os.Exit(2)
+		interactive := term.IsTerminal(os.Stdin.Fd()) && term.IsTerminal(os.Stdout.Fd())
+		choice, err = pickGraph(interactive, os.Stdin, os.Stdout, seen)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "weft: %v\n", err)
+			os.Exit(2)
+		}
 	}
 	if err := validateGraphPath(choice); err != nil {
 		fmt.Fprintf(os.Stderr, "weft: %v\n", err)
