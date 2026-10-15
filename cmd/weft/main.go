@@ -186,7 +186,7 @@ func loadLayout(graphPath string, stderr io.Writer) (layout.Layout, bool) {
 // loadUserConfig reads the user config. An error is printed to stderr as
 // "weft: <err>" and reported as false; the caller exits 2.
 func loadUserConfig(stderr io.Writer) (userconfig.Config, bool) {
-	cfg, err := userconfig.Load()
+	cfg, _, err := userconfig.Load()
 	if err != nil {
 		fmt.Fprintf(stderr, "weft: %v\n", err)
 		return userconfig.Config{}, false
