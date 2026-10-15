@@ -79,7 +79,7 @@ graph = "~/notes"
 
 weft writes this file only on first run: it appends the `graph` line and keeps everything else in the file. If the file changed while weft was asking for the folder, weft saves nothing and exits with status 2. There is no key to switch modes while weft runs; edit the file and start weft again.
 
-A problem stops weft with exit status 2 and a message that names the file, for example `weft: ~/.config/weft/config.toml: editor: "emacs" must be "modeless" or "vim"`. The problems are: the file cannot be read, a TOML syntax error, an unknown key, an unknown `editor` value, and a bad `graph` value (for example `graph: "notes" must be an absolute path or start with ~/`). A missing file is the defaults.
+A problem stops weft with exit status 2 and a message that names the file, for example `weft: /home/you/.config/weft/config.toml: editor: "emacs" must be "modeless" or "vim"`. The problems are: the file cannot be read, a TOML syntax error, an unknown key, an unknown `editor` value, and a bad `graph` value (for example `graph: "notes" must be an absolute path or start with ~/`). A missing file is the defaults.
 
 `weft doctor` reads this file only to find the graph, when no flag or environment variable names one. It ignores `editor`.
 
@@ -165,7 +165,7 @@ Two warnings come from page names. A name clash: several pages share a name, and
 ### Exit codes
 
 - `weft`: `0` quit normally. `1` the terminal UI failed. `2` weft could not start: no graph, a bad graph path, a bad graph or user config, ripgrep missing, the debug log cannot open, or first run ended without a choice or could not save. `Ctrl+C` at a first-run prompt ends weft by the interrupt (shells show 130).
-- `weft doctor`: `0` the graph is clean, `1` findings exist, `2` operational error (bad graph path, bad config file, missing ripgrep, failed scan).
+- `weft doctor`: `0` the graph is clean, `1` findings exist, `2` operational error (bad graph path, no graph set, bad config file, missing ripgrep, failed scan).
 
 ## Keys
 

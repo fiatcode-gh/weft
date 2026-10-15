@@ -216,6 +216,44 @@ func TestFirstRunEOF(t *testing.T) {
 	}
 }
 
+func TestFirstRunEOFAfterExistingFolderWithoutNewline(t *testing.T) {
+	home, cfg := frEnv(t)
+	existing := t.TempDir()
+
+	_, _, err := runFirstRun(t, existing, home, cfg, edit.Snapshot{})
+
+	if !errors.Is(err, errNoAnswer) {
+		t.Fatalf("err = %v, want errNoAnswer", err)
+	}
+	mustNotExist(t, cfg)
+}
+
+func TestFirstRunCannotCreateReasks(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	home, cfg := frEnv(t)
+	parent := t.TempDir()
+	if err := os.Chmod(parent, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(parent, 0o755) })
+	target := filepath.Join(parent, "sub", "g")
+
+	_, out, err := runFirstRun(t, target+"\ny\n", home, cfg, edit.Snapshot{})
+
+	if !errors.Is(err, errNoAnswer) {
+		t.Fatalf("err = %v, want errNoAnswer", err)
+	}
+	if !strings.Contains(out, "Cannot create "+target) {
+		t.Errorf("output missing mkdir failure:\n%s", out)
+	}
+	if n := strings.Count(out, "Notes folder [~/notes]: "); n != 2 {
+		t.Errorf("folder prompt asked %d times, want 2:\n%s", n, out)
+	}
+	mustNotExist(t, cfg)
+}
+
 func TestFirstRunKeepsConfig(t *testing.T) {
 	home, cfg := frEnv(t)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Dir(filepath.Dir(cfg)))

@@ -140,7 +140,9 @@ func GraphValue(abs, home string) string {
 // SaveGraph appends graph = "value" to the config text seen and writes it to
 // path, refusing (edit.ErrChanged) if the file no longer matches seen. seen
 // must come from a Load whose config had no graph key; appending at the end is
-// then always a top-level key, since the parser rejects tables.
+// then always a top-level key, since the parser rejects tables. A symlinked
+// config is written through to its target so the link survives; a dangling
+// link is an error and nothing is written.
 func SaveGraph(path string, seen edit.Snapshot, value string) error {
 	var line bytes.Buffer
 	if err := toml.NewEncoder(&line).Encode(struct {
@@ -152,5 +154,12 @@ func SaveGraph(path string, seen edit.Snapshot, value string) error {
 	if text != "" && !strings.HasSuffix(text, "\n") {
 		text += "\n"
 	}
-	return edit.WriteFileIfUnchanged(path, seen, []byte(text+line.String()))
+	target := path
+	if fi, err := os.Lstat(path); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		target, err = filepath.EvalSymlinks(path)
+		if err != nil {
+			return fmt.Errorf("%s is a broken symlink: %w", path, err)
+		}
+	}
+	return edit.WriteFileIfUnchanged(target, seen, []byte(text+line.String()))
 }

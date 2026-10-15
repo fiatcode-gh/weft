@@ -67,25 +67,17 @@ func TestLoadUserConfig(t *testing.T) {
 }
 
 func TestMainUserConfigErrorExitsTwo(t *testing.T) {
-	if _, err := exec.LookPath("rg"); err != nil {
-		t.Skip("rg not on PATH; install ripgrep to run this test")
-	}
 	dir := writeTempGraph(t, map[string]string{"pages/a.md": "- a\n"})
-	path := writeUserConfig(t, "editor = \"emacs\"\n")
-	cmd := exec.Command(os.Args[0], "--graph", dir)
-	cmd.Env = append(os.Environ(), "WEFT_TEST_RUN_MAIN=1", "XDG_CONFIG_HOME="+filepath.Dir(filepath.Dir(path)))
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
+	body := "editor = \"emacs\"\n"
 
-	err := cmd.Run()
+	code, stderr, _, path := runMain(t, &body, nil, "--graph", dir)
 
-	var ee *exec.ExitError
-	if !errors.As(err, &ee) || ee.ExitCode() != 2 {
-		t.Fatalf("exit = %v, want exit status 2", err)
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
 	}
 	want := "weft: " + path + `: editor: "emacs" must be "modeless" or "vim"`
-	if !strings.Contains(stderr.String(), want) {
-		t.Errorf("stderr = %q, want %q", stderr.String(), want)
+	if !strings.Contains(stderr, want) {
+		t.Errorf("stderr = %q, want %q", stderr, want)
 	}
 }
 
@@ -111,27 +103,19 @@ func TestRunDoctorConfigErrorExitsTwo(t *testing.T) {
 }
 
 func TestMainConfigErrorExitsTwo(t *testing.T) {
-	if _, err := exec.LookPath("rg"); err != nil {
-		t.Skip("rg not on PATH; install ripgrep to run this test")
-	}
 	// arrange
 	dir := writeTempGraph(t, map[string]string{".weft/config.toml": "namespace_files = \"x\"\n"})
-	cmd := exec.Command(os.Args[0], "--graph", dir)
-	cmd.Env = append(os.Environ(), "WEFT_TEST_RUN_MAIN=1")
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
 
 	// act
-	err := cmd.Run()
+	code, stderr, _, _ := runMain(t, nil, nil, "--graph", dir)
 
 	// assert
-	var ee *exec.ExitError
-	if !errors.As(err, &ee) || ee.ExitCode() != 2 {
-		t.Fatalf("exit = %v, want exit status 2", err)
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
 	}
 	want := "weft: " + filepath.Join(dir, ".weft", "config.toml") + `: namespace_files: "x" must be "triple-lowbar" or "folders"`
-	if !strings.Contains(stderr.String(), want) {
-		t.Errorf("stderr = %q, want %q", stderr.String(), want)
+	if !strings.Contains(stderr, want) {
+		t.Errorf("stderr = %q, want %q", stderr, want)
 	}
 }
 

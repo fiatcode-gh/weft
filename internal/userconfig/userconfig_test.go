@@ -246,6 +246,54 @@ func TestSaveGraph(t *testing.T) {
 		}
 	})
 
+	t.Run("symlinked config keeps the link", func(t *testing.T) {
+		path, _ := setup(t)
+		target := filepath.Join(t.TempDir(), "dotfiles", "config.toml")
+		seed := "# managed\neditor = \"vim\"\n"
+		writeConfig(t, target, seed)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, path); err != nil {
+			t.Skipf("symlink unsupported: %v", err)
+		}
+		_, snap, err := Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := SaveGraph(path, snap, "~/notes"); err != nil {
+			t.Fatal(err)
+		}
+		fi, err := os.Lstat(path)
+		if err != nil || fi.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("config is no longer a symlink: %v, %v", fi, err)
+		}
+		if got, want := read(t, target), seed+"graph = \"~/notes\"\n"; got != want {
+			t.Errorf("target = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("dangling symlink errors", func(t *testing.T) {
+		path, _ := setup(t)
+		missing := filepath.Join(t.TempDir(), "gone.toml")
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(missing, path); err != nil {
+			t.Skipf("symlink unsupported: %v", err)
+		}
+		err := SaveGraph(path, edit.Snapshot{}, "/srv/g")
+		if err == nil || !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "broken") {
+			t.Fatalf("SaveGraph error = %v, want broken-link error naming %s", err, path)
+		}
+		if got, rerr := os.Readlink(path); rerr != nil || got != missing {
+			t.Errorf("link = %q, %v; want unchanged %q", got, rerr, missing)
+		}
+		if _, serr := os.Stat(missing); !errors.Is(serr, os.ErrNotExist) {
+			t.Errorf("%s should not exist (stat err %v)", missing, serr)
+		}
+	})
+
 	t.Run("refuses changed file", func(t *testing.T) {
 		path, _ := setup(t)
 		writeConfig(t, path, "editor = \"vim\"\n")

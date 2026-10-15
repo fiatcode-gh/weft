@@ -74,6 +74,8 @@ only happens when the key is absent).
   re-exec tests.
 - A new user-config key must keep `SaveGraph`'s append valid: top-level keys
   only, no tables.
+- `SaveGraph` writes through a symlinked config to its target, so a dotfiles
+  link survives; a dangling link is an error and nothing is written.
 - The prompt reads through a `bufio.Reader`, which can read ahead. Keys typed
   before the UI starts on a first run may be swallowed. This was accepted: it
   happens once.
