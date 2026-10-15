@@ -53,6 +53,21 @@ func TestQuietStdoutDropsProbeSequences(t *testing.T) {
 	}
 }
 
+// DECSCUSR (cursor shape) must pass quietStdout: vim insert mode uses a bar.
+func TestQuietStdoutPassesCursorStyle(t *testing.T) {
+	f := tempOut(t)
+	in := ansi.SetCursorStyle(5) + "x" + ansi.SetCursorStyle(1)
+
+	n, err := quietStdout{f}.Write([]byte(in))
+
+	if err != nil || n != len(in) {
+		t.Fatalf("Write = (%d, %v), want (%d, nil)", n, err, len(in))
+	}
+	if got := string(readAll(t, f)); got != in {
+		t.Errorf("wrote %q, want %q", got, in)
+	}
+}
+
 // *os.File also offers WriteString and ReadFrom, which io.WriteString and
 // io.Copy prefer over Write; neither may carry a probe past the filter.
 func TestQuietStdoutFiltersEveryWritePath(t *testing.T) {
