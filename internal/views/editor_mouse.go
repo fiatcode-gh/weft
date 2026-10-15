@@ -6,7 +6,7 @@ import "github.com/fiatcode-gh/weft/v2/internal/buffer"
 // no find bar or date prompt owning the keys. It then clears the notice like a
 // key press and brings the layout up to date with the one View draws.
 func (e *EditorView) mouseReady() bool {
-	if e.mode != editing || e.find != nil || e.prompt != nil {
+	if e.mode != editing || e.find != nil || e.prompt != nil || (e.vim != nil && e.vim.ex != nil) {
 		return false
 	}
 	e.notice = ""
@@ -63,7 +63,17 @@ func (e *EditorView) Click(x, y int) {
 		pos = e.landing(p, x)
 	}
 	e.goalOK = false
+	if e.vim != nil {
+		if e.vim.mode == vimNormal {
+			e.vim.pending = nil
+		} else if e.vim.mode != vimInsert {
+			e.vim.mode = vimNormal
+		}
+	}
 	e.moveTo(pos)
+	if e.vim != nil && e.vim.mode != vimInsert {
+		e.vimSettle()
+	}
 }
 
 // Wheel scrolls the text wheelRows display rows up (dir < 0) or down. The
@@ -109,6 +119,9 @@ func (e *EditorView) Wheel(dir int) {
 		e.goalX, e.goalOK = x, true
 	}
 	e.moveTo(e.landing(target, e.goalX))
+	if e.vim != nil && e.vim.mode != vimInsert {
+		e.vimSettle()
+	}
 }
 
 // windowBottom is the last display row of the text window.
