@@ -10,37 +10,37 @@
 │    z               fold page: bullets → headings → all                     ctrl-a          replace all (replace field)      │
 │                                                                            esc             close find                       │
 │  Links                                                                                                                      │
-│    n / N           next / previous link or tag                           Maintain                                           │
-│    enter           follow link ([[Page#Heading]] opens at the heading)     R               rebuild index                    │
-│                                                                            F2              rename page and its links        │
-│  History                                                                                                                    │
-│    [               back                                                  Sidebar                                            │
-│    ]               forward                                                 1               sidebar: page tree               │
+│    n / N           next / previous link or tag                           Vim mode                                           │
+│    enter           follow link ([[Page#Heading]] opens at the heading)     editor = "vim"  in ~/.config/weft/config.toml    │
+│                                                                            i a o / esc     insert / back to normal          │
+│  History                                                                   v / V           visual / visual line             │
+│    [               back                                                    d c y > <       operators; dd cc yy for lines    │
+│    ]               forward                                                 u / ctrl-r      undo / redo                      │
+│                                                                            .               repeat the last change           │
+│  Open                                                                      / ? n N         search, next, previous           │
+│    .               today's journal (new: from Journal Template)            :w :q :wq :q!   save / leave / both / discard    │
+│    <               previous journal                                        ZZ / ZQ         save and leave / discard         │
+│    >               next journal                                            :preview        live preview ↔ source            │
+│    C               calendar — move between journals                        esc             in normal mode: leave editor     │
+│    O               on this day: week, month, years ago                                                                      │
+│    ctrl-p          picker — find any page                                Maintain                                           │
+│    F               page tree: folders and namespaces                       R               rebuild index                    │
+│    /               search the graph (ripgrep)                              F2              rename page and its links        │
+│    b               backlinks + unlinked refs for the current page                                                           │
+│    T               todos dashboard (x: done / undo)                      Sidebar                                            │
+│    A               agenda: overdue, today, next 7 days                     1               sidebar: page tree               │
 │                                                                            2               sidebar: backlinks of this page  │
-│  Open                                                                      3               sidebar: todos                   │
-│    .               today's journal (new: from Journal Template)            4               sidebar: agenda                  │
-│    <               previous journal                                        5               sidebar: calendar                │
-│    >               next journal                                            |               show / hide the sidebar          │
-│    C               calendar — move between journals                                                                         │
-│    O               on this day: week, month, years ago                   Help / quit                                        │
-│    ctrl-p          picker — find any page                                  m               mouse on / off (select text)     │
-│    F               page tree: folders and namespaces                       ?               toggle this help                 │
-│    /               search the graph (ripgrep)                              :               command palette                  │
-│    b               backlinks + unlinked refs for the current page          esc             close overlay                    │
-│    T               todos dashboard (x: done / undo)                        q               quit                             │
-│    A               agenda: overdue, today, next 7 days                                                                      │
-│                                                                                                                             │
-│  Sync                                                                                                                       │
-│    S               commit, pull & push the graph (git)                                                                      │
-│                                                                                                                             │
-│  Edit                                                                                                                       │
+│  Sync                                                                      3               sidebar: todos                   │
+│    S               commit, pull & push the graph (git)                     4               sidebar: agenda                  │
+│                                                                            5               sidebar: calendar                │
+│  Edit                                                                      |               show / hide the sidebar          │
 │    c               capture a line into today's journal (tab: TODO)                                                          │
-│    e               edit in-app at the cursor row                                                                            │
-│    E               edit current page in $EDITOR                                                                             │
-│                                                                                                                             │
-│  Editor                                                                                                                     │
-│    ctrl-s          save; merges outside edits, asks on a clash                                                              │
-│    esc             leave editor (prompts if unsaved)                                                                        │
+│    e               edit in-app at the cursor row                         Help / quit                                        │
+│    E               edit current page in $EDITOR                            m               mouse on / off (select text)     │
+│                                                                            ?               toggle this help                 │
+│  Editor                                                                    :               command palette                  │
+│    ctrl-s          save; merges outside edits, asks on a clash             esc             close overlay                    │
+│    esc             leave editor (prompts if unsaved)                       q               quit                             │
 │    ctrl-z / ctrl-y undo / redo                                                                                              │
 │    shift-arrows    select (also home/end, pgup/pgdn, words)                                                                 │
 │    ctrl-a          select all                                                                                               │

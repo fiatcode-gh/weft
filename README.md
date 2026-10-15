@@ -6,6 +6,8 @@ Two kinds of link, both pointing at a page — `[[wiki-links]]` and `#tag` / `#[
 
 Press `e` to edit the current page in a full-screen in-app editor (`Ctrl+S` saves, `Esc` exits with an unsaved-changes prompt). It opens on the cursor row's line, at the same screen row, and `Esc` brings you back the same way. The editor is a live preview: the page is drawn exactly as the read view draws it, and only the line or block under the cursor (a table, a fence, a quote, a joined paragraph, a `:LOGBOOK:` block) turns back into source while you edit it, then renders again when you move away. `Ctrl+R` switches to the plain source look and back; the choice lasts until weft quits and is never saved. The editor is coloured like the read view (same styles, `WEFT_STYLE` and `NO_COLOR` apply) and shows your terminal's own cursor. Any markdown file opens — CRLF, tabs, any length — and saves byte-for-byte, with the file's own line endings and final-newline state kept. If the file changed on disk since you opened or last saved it, a save merges changes on separate lines (lines both sides added at the same spot are all kept, yours first), and otherwise asks whether to overwrite, reload or keep editing; `E` hands the file to your `$EDITOR`. The editor has undo/redo, selection, copy/cut/paste (copies also go to the system clipboard through OSC 52), find and replace, and bullet-aware editing: `Enter` continues a bullet, `Tab`/`Shift+Tab` indent a bullet with its children, `Alt+↑/↓` move it, `Ctrl+T` cycles its workflow marker. Typing `[[` opens a live, fuzzy-filtered page-name completion list — `↑`/`↓` to choose, `Enter` or `Tab` to insert `[[Page Name]]`, `Esc` to dismiss; an unmatched name shows a `＋ Create` row to insert a link to the not-yet-created page in one keystroke. Press `.` to jump to today's journal.
 
+Prefer modal editing? Set `editor = "vim"` in your user config (see User config under Configuration) and the editor opens in vim-style normal mode; see Vim mode under Keys. Nothing changes unless you set it.
+
 Press `S` to sync the graph with git without leaving weft — it commits any changes, `pull --rebase`s, then pushes, reporting progress in the status bar (`⟳ syncing…` → `✓ synced`). A `●` shows in the status bar whenever the graph has local changes that aren't committed or pushed yet, so you always know when a sync is due. Conflicts are left for you to resolve in a shell — weft never touches a conflicted tree.
 
 *Already keep a Logseq graph? weft reads it as-is — the on-disk format (`.md` pages under `pages/`, `YYYY_MM_DD` journals, `[[wiki-links]]`, `TODO`-style bullets) is adapted from Logseq's. But weft is its own tool, not a Logseq client.*
@@ -101,6 +103,20 @@ If your daily notes sit in year and month folders, use `journal_file_pattern = "
 - Dot-folders (`.obsidian`, `.git`, `.trash`, `.weft`) are skipped. Only `.md` files are indexed, and search and unlinked mentions read only those files.
 - A new page goes to `pages_dir`. A new journal goes to `journals_dir` through the pattern. weft creates a missing folder when the file is first saved.
 
+### User config
+
+Your own settings, apart from any graph, live in `$XDG_CONFIG_HOME/weft/config.toml` (`~/.config/weft/config.toml` when `XDG_CONFIG_HOME` is unset or not an absolute path). The file is optional. weft reads it once at start, never writes it, and `weft doctor` ignores it. It is separate from the graph's `<graph>/.weft/config.toml`, which travels with the graph.
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `editor` | `"modeless"` | `"modeless"` is the editor as it has always been. `"vim"` turns on vim mode in the in-app editor (see Vim mode). |
+
+```toml
+editor = "vim"
+```
+
+A problem stops weft with exit status 2 and a message that names the file, for example `weft: ~/.config/weft/config.toml: editor: "emacs" must be "modeless" or "vim"`. The problems are: the file cannot be read, a TOML syntax error, an unknown key, and an unknown `editor` value. A missing file is the defaults. There is no key to switch modes while weft runs; edit the file and start weft again.
+
 ## Doctor
 
 ```bash
@@ -179,8 +195,28 @@ Press `?` from the page view at any time to see a grouped keymap inside the app.
 | `Alt-P` | cycle priority `[#A]` → `[#B]` → `[#C]` → none |
 | `[[` | page-name completion (`↑`/`↓`, `Enter`/`Tab`, `Esc`) |
 | `#` + letter | page-name completion inserting `#name`, or `#[[Name]]` when the name has spaces or other characters a tag cannot hold |
-| `Ctrl-R` | switch between live preview and source look |
+| `Ctrl-R` | switch between live preview and source look (redo in vim mode, where `:preview` switches) |
 | `Ctrl-F` | find; `Enter`/`↓` next, `↑` previous, `Tab` find ↔ replace, `Enter` replace, `Ctrl-A` replace all (replace field), `Esc` close |
+
+### Vim mode
+
+With `editor = "vim"` in the user config the in-app editor is modal. It opens in normal mode with the cursor where it opens today. Without the setting nothing here applies. The table above still holds for insert mode, except as noted below. This is a subset of vim, not a copy.
+
+- **Modes and status line.** The status line shows `-- INSERT --`, `-- VISUAL --` or `-- VISUAL LINE --` (nothing in normal mode), and the keys typed so far of a pending command, such as `2d3`. The hint on the right is `:w save · :q quit · :preview source` (or `preview`), or `esc normal · ^S save` in insert mode. The terminal cursor is a bar in insert mode and your terminal's usual cursor in the other modes. In normal and visual mode the cursor never rests past the last character of a line.
+- **Enter insert mode.** `i`, `a`, `I` (first non-blank), `A` (line end), `o`/`O` (a new line below / above; on a `- ` bullet it continues the bullet), and `s`, `S`, `c` and `C` (they delete first). A count on `i a I A o O` repeats what you type. `Esc` leaves insert mode and moves the cursor one left.
+- **Motions** (all take a count). `h j k l` (the arrow keys, `Home` and `End` work too), `w b e W B E`, `0 ^ $`, `gg` and `G` (`5G` or `5gg` go to line 5), `f F t T` with `;` and `,`, `%` for `() [] {}`, `{` and `}` for blank-line paragraphs, and `Ctrl-D`/`Ctrl-U` for half a page. `j` and `k` move as the arrow keys do, row by row as the editor wraps; after an operator they are whole lines.
+- **Operators.** `d`, `c`, `y` with any motion or text object, and `>` and `<` (shift the lines the motion touches). Doubled (`dd`, `cc`, `yy`, `>>`, `<<`) they act on the current line, or on a count of lines; `>>` and `<<` on one line indent and de-indent a bullet with its children, as `Tab` and `Shift-Tab` do. Shortcuts: `x X s S D C`, `r{char}`, `J` (join), `p` and `P` (below / above for whole lines, after / before the cursor otherwise). Counts multiply: `2d3w` deletes six words.
+- **Text objects**, after an operator: `iw aw iW aW`, `i" a" i' a'`, `i( a( i[ a[ i{ a{` (`ib` and `ab` mean the parentheses; the closing bracket works too), `ip ap`.
+- **One register.** Yanks, deletes and changes fill the register `Ctrl-C`/`Ctrl-X`/`Ctrl-V` use, and also copy to the system clipboard through OSC 52. `p` pastes it. There are no named registers.
+- **Undo, redo, repeat.** `u` undoes and `Ctrl-R` redoes (`Ctrl-R` no longer switches the look in vim mode: use `:preview`). Each normal-mode change is one undo step, and so is an insert session from the key that entered it to `Esc`. `Ctrl-Z`/`Ctrl-Y` also work. `.` repeats the last change; a count before `.` replaces the old count.
+- **Search.** `/` and `?` open the find bar to search forward or backward; `Enter` jumps and closes it, `Esc` returns to where you were. `n` and `N` repeat in the same and the opposite direction. With an empty field `Enter` uses the last search. `Ctrl-F` still opens the find and replace bar.
+- **Visual modes.** `v` starts visual, `V` visual line. Motions extend the selection, `o` swaps its ends, `v` or `V` again leaves or switches, `Esc` leaves. `d x c y > < J` act on it, and `~ u U` change its case. A count with `>` or `<` shifts that many levels. Objects, `p`, `r`, `:` and `/` do nothing in visual mode. `.` repeats a visual change on the same size of text from the cursor.
+- **Ex commands.** `:` opens a line on the status row: `:w` saves, `:q` leaves (asks when there are unsaved changes), `:wq` and `:x` save and leave, `:q!` leaves and discards, `:12` goes to line 12, `:preview` switches live preview and source, and anything else says `not an editor command`. `Esc` cancels, `Backspace` on an empty line closes it. `ZZ` is `:x` and `ZQ` is `:q!`. Saving goes through the same guarded save as `Ctrl-S` (merge, clash prompt).
+- **`Esc`.** In insert mode it returns to normal mode. In visual mode it leaves visual. With a command pending it clears it. In normal mode with nothing pending it leaves the editor as `Esc` always has (the unsaved prompt when dirty).
+- **weft's own keys keep working** in normal and insert mode: `Ctrl-S`, `Ctrl-F`, `Ctrl-Z`/`Ctrl-Y`, `Ctrl-T`, `Alt-S`/`Alt-E`, `Alt-P`, `Alt-↑`/`Alt-↓`, `Ctrl-A`, `Ctrl-C`/`Ctrl-X`/`Ctrl-V`, `Shift` plus arrows, `PgUp`/`PgDn`. In insert mode `[[` and `#` completion, `Tab`/`Shift-Tab` and `Enter` work as in the table above, and `Ctrl-D`/`Ctrl-U` stay the delete keys. In normal and visual mode `Ctrl-D` and `Ctrl-U` scroll. In visual mode only `Ctrl-S` of these works.
+- **Mouse.** The wheel scrolls as before. A click in normal mode places the cursor (never past the last character) and drops a pending command. A click in visual mode leaves visual and places the cursor; the wheel keeps visual mode. A click in insert mode places the cursor and stays in insert mode. The mouse does nothing while the `:` line is open.
+- **Paste.** A terminal paste in normal mode inserts at the cursor as one undo step; in visual mode it leaves visual mode first; while the `:` line is open it is ignored.
+- **Not supported.** Named registers, marks, macros, `*` and `#`, `:s` and any ex command beyond those above, ranges and counts before `:`, `:set`, folds in the editor, several windows, `R` replace mode, block visual (`Ctrl-V`), `gq` and `=`, `~` in normal mode, `Y`, `H M L`, `Ctrl-F`/`Ctrl-B` as page keys, space, `Enter` and `Backspace` as motions, an operator with a search or `Ctrl-D`/`Ctrl-U`, `r` followed by `Enter`, objects, `p`, `r` and `/` in visual mode, vim's insert-mode `Ctrl-W`, `Ctrl-O` and `Ctrl-R` (register paste), vim keys in the read view, switching modes while weft runs, and writing the user config from weft.
 
 ### Tasks
 
@@ -249,6 +285,7 @@ The mouse is on by default. Press `m` to turn it off until weft quits (the statu
 - **Click in lists and overlays.** The same rule applies in the picker, search, palette, backlinks, todos, agenda, tree and on this day: click a row to select it, click it again to open or run it. In the tree a second click on a group opens or closes it. In the calendar a click picks a day and a second click opens it. A click never scrolls a list, so the clicked row stays under the pointer; keys and the wheel move the selection and keep it centred as before.
 - **Does nothing.** Clicks outside an overlay (it stays open), on its title, on headers, on the footer and on the status bar. Help, the rename preview and the prompts ignore clicks.
 - **Editor.** The wheel scrolls 3 rows, and the cursor moves only if it would leave the screen. A click places the cursor (in live preview, on that line) and clears a selection.
+- **Editor in vim mode.** The click rules depend on the mode; see Vim mode under Keys.
 - **Select terminal text.** Hold `Shift` while dragging (`Option` in iTerm2), or press `m` first.
 - **Nothing is saved.** The on/off state lasts until weft quits. A click never writes a file; it only does what the matching key does.
 - **Not supported.** Drag to select, double click, right click and middle click.

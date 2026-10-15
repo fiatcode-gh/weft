@@ -94,9 +94,23 @@ var findHelp = helpGroup{"Find", []helpRow{
 	{"esc", "close find"},
 }}
 
+var vimHelp = helpGroup{"Vim mode", []helpRow{
+	{`editor = "vim"`, "in ~/.config/weft/config.toml"},
+	{"i a o / esc", "insert / back to normal"},
+	{"v / V", "visual / visual line"},
+	{"d c y > <", "operators; dd cc yy for lines"},
+	{"u / ctrl-r", "undo / redo"},
+	{".", "repeat the last change"},
+	{"/ ? n N", "search, next, previous"},
+	{":w :q :wq :q!", "save / leave / both / discard"},
+	{"ZZ / ZQ", "save and leave / discard"},
+	{":preview", "live preview ↔ source"},
+	{"esc", "in normal mode: leave editor"},
+}}
+
 // buildHelpGroups lays the help page out: the read-view groups come from acts
 // (a group's rows are the entries with a key of their own, in table order);
-// Editor and Find are hand-written because the editor owns those keys.
+// Editor, Find and Vim mode are hand-written because the editor owns those keys.
 func buildHelpGroups(acts []action) []helpGroup {
 	fromTable := func(title string) helpGroup {
 		g := helpGroup{title: title}
@@ -116,6 +130,7 @@ func buildHelpGroups(acts []action) []helpGroup {
 		fromTable(groupEdit),
 		editorHelp,
 		findHelp,
+		vimHelp,
 		fromTable(groupMaintain),
 		fromTable(groupSidebar),
 		fromTable(groupHelp),

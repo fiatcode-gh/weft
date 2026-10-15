@@ -13,8 +13,9 @@ pages about ten times slower. Every editor workaround in the codebase existed
 because of it. The goal is an editor that can replace nvim for note work.
 
 Out of scope: live preview (rendering rows while editing; added later, see
-`live-preview.md`), mouse, Vim mode, kitty keyboard enhancements, multiple
-cursors, reading the system clipboard on `Ctrl+V`, reloading while editing.
+`live-preview.md`), mouse, Vim mode (added later, see `vim-mode.md`), kitty
+keyboard enhancements, multiple cursors, reading the system clipboard on
+`Ctrl+V`, reloading while editing.
 
 ## Decisions
 
