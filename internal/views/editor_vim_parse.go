@@ -41,7 +41,7 @@ var vimSimple = map[string]bool{
 	"i": true, "a": true, "I": true, "A": true, "o": true, "O": true,
 	"u": true, "ctrl+r": true,
 	"x": true, "X": true, "s": true, "S": true, "J": true,
-	"p": true, "P": true, "D": true, "C": true,
+	"p": true, "P": true, "D": true, "C": true, ".": true,
 }
 
 // vimOperators are the keys that take a motion, an object or themselves.

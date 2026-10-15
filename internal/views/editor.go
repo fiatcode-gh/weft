@@ -148,14 +148,23 @@ func (e *EditorView) Paste(msg tea.PasteMsg) tea.Cmd {
 		e.pasteFind(msg.Content)
 		return nil
 	}
+	if e.vim != nil && e.vim.mode == vimInsert && !e.vim.replaying && e.vim.rec != nil {
+		e.vim.rec.inputs = append(e.vim.rec.inputs, vimInput{paste: msg.Content, isPaste: true})
+	}
+	e.pasteText(msg.Content)
+	return nil
+}
+
+// pasteText inserts pasted content at the cursor as one undo group, the
+// insertion Paste and a repeated insert session share.
+func (e *EditorView) pasteText(content string) {
 	e.buf.Break()
-	e.buf.Insert(cleanPaste(msg.Content))
+	e.buf.Insert(cleanPaste(content))
 	e.goalOK = false
 	e.afterKey(true)
 	if e.vim != nil && e.vim.mode != vimInsert {
 		e.vimSettle()
 	}
-	return nil
 }
 
 // cleanPaste normalises pasted text: CRLF and CR become "\n", and every other

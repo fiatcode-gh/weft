@@ -2,6 +2,7 @@ package views
 
 import (
 	"math"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -24,6 +25,14 @@ type vimState struct {
 	mode    vimMode
 	pending []string // tokens of the command being typed
 	insMark int      // undo depth before the change that entered insert mode
+
+	// Dot repeat (LD12): last is the change `.` repeats, rec the change whose
+	// insert session is open, replaying is set while `.` or a counted insert
+	// re-runs input, insCount the times the session's input is applied in all.
+	last      *vimChange
+	rec       *vimChange
+	replaying bool
+	insCount  int
 
 	// lastFind is the last f F t T, which ; and , repeat.
 	lastFind struct {
@@ -114,8 +123,32 @@ func (e *EditorView) vimNormalKey(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
 	return res, cmd
 }
 
-// vimRun executes one parsed normal-mode command.
+// vimRun executes one parsed normal-mode command and records it for `.`.
 func (e *EditorView) vimRun(c vimCmd) (EditorResult, tea.Cmd) {
+	if c.key == "." && c.op == "" {
+		return EditorResult{}, e.vimDot(c.count)
+	}
+	v := e.vim
+	change := vimIsChange(c)
+	before := e.buf.Version()
+	res, cmd := e.vimExec(c)
+	if v.mode == vimInsert {
+		v.insCount = 1
+		if c.op == "" && slices.Contains(vimCountedInserts, c.key) {
+			v.insCount = max(1, c.count)
+		}
+		if !v.replaying {
+			v.rec = &vimChange{cmd: c}
+		}
+	} else if change && !v.replaying && e.buf.Version() != before {
+		v.last = &vimChange{cmd: c}
+	}
+	return res, cmd
+}
+
+// vimExec runs one parsed normal-mode command, the one executor of live and
+// replayed commands.
+func (e *EditorView) vimExec(c vimCmd) (EditorResult, tea.Cmd) {
 	if alias, ok := vimShortcuts[c.key]; ok && c.op == "" {
 		c = vimCmd{count: c.count, op: alias[0], key: alias[1]}
 	}
@@ -214,6 +247,9 @@ func (e *EditorView) vimInsertKey(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
 		e.findSync()
 		return EditorResult{}, nil
 	}
+	if v := e.vim; !v.replaying && v.rec != nil && !vimUnrecorded[key] {
+		v.rec.inputs = append(v.rec.inputs, vimInput{key: msg})
+	}
 	return e.editKey(msg)
 }
 
@@ -223,7 +259,14 @@ func (e *EditorView) vimLeaveInsert() {
 	if e.completer.active {
 		e.completer.dismiss()
 	}
-	e.buf.Squash(e.vim.insMark)
+	v := e.vim
+	if v.insCount > 1 && v.rec != nil {
+		e.vimReplayInsert(v.rec, v.insCount-1)
+	}
+	e.buf.Squash(v.insMark)
+	if v.rec != nil {
+		v.last, v.rec = v.rec, nil
+	}
 	q, _ := e.buf.StepLeft(e.buf.Cursor(), 1)
 	e.buf.MoveTo(q, false)
 	e.vim.mode = vimNormal
