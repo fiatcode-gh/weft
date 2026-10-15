@@ -66,6 +66,11 @@ only happens when the key is absent).
     anchor) timed in the same run, with separate tables for race and non-race.
     A slow or loaded machine stretches both sides, so the test no longer scales
     by `raceFactor`.
+12. **Fold first-Tab margin.** `TestFoldSpeed10000` already compared the first
+    `Tab` with the row-map build timed in the same run, but allowed only 10%
+    plus 50 ms. A GitHub runner measured 1.14× and failed it on this unit's
+    PR. The limit is now 1.5× plus 50 ms. A first Tab that builds the row map
+    twice (about 2×) still fails.
 
 ## Traps
 
