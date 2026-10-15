@@ -1,7 +1,7 @@
 // Package userconfig reads the user's own weft settings from
 // $XDG_CONFIG_HOME/weft/config.toml (~/.config/weft/config.toml when it is
 // unset). The file is optional; weft writes it only to save the first-run
-// graph (SaveGraph).
+// answers (SaveFirstRun).
 package userconfig
 
 import (
@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -29,16 +30,19 @@ const (
 // Config is the validated user config. Graph is the expanded, cleaned
 // absolute graph folder, "" when the key is absent.
 type Config struct {
-	Editor Editor
-	Graph  string
+	Editor          Editor
+	Graph           string
+	CrashReports    bool // crash_reports; false when absent
+	CrashReportsSet bool // the key is in the file (first run must not append it again)
 }
 
 // Default is the config with no file.
 func Default() Config { return Config{Editor: Modeless} }
 
 type rawConfig struct {
-	Editor *string `toml:"editor"`
-	Graph  *string `toml:"graph"`
+	Editor       *string `toml:"editor"`
+	Graph        *string `toml:"graph"`
+	CrashReports any     `toml:"crash_reports"`
 }
 
 // Path is the config file path: $XDG_CONFIG_HOME/weft/config.toml when that
@@ -105,7 +109,21 @@ func parse(text string) (Config, error) {
 			return Config{}, err
 		}
 	}
+	if raw.CrashReports != nil {
+		b, ok := raw.CrashReports.(bool)
+		if !ok {
+			return Config{}, fmt.Errorf("crash_reports: %s must be true or false", tomlValue(raw.CrashReports))
+		}
+		cfg.CrashReports, cfg.CrashReportsSet = b, true
+	}
 	return cfg, nil
+}
+
+func tomlValue(v any) string {
+	if s, ok := v.(string); ok {
+		return fmt.Sprintf("%q", s)
+	}
+	return fmt.Sprint(v)
 }
 
 // ExpandGraph turns a configured graph value into a cleaned absolute folder:
@@ -137,17 +155,19 @@ func GraphValue(abs, home string) string {
 	return "~/" + filepath.ToSlash(rel)
 }
 
-// SaveGraph appends graph = "value" to the config text seen and writes it to
-// path, refusing (edit.ErrChanged) if the file no longer matches seen. seen
-// must come from a Load whose config had no graph key; appending at the end is
-// then always a top-level key, since the parser rejects tables. A symlinked
-// config is written through to its target so the link survives; a dangling
-// link is an error and nothing is written.
-func SaveGraph(path string, seen edit.Snapshot, value string) error {
+// SaveFirstRun appends the first-run answers to the config text seen and
+// writes it to path: graph = "graph", then crash_reports = true|false when
+// crashReports is non-nil. One guarded write; edit.ErrChanged if the file no
+// longer matches seen. seen must come from a Load whose config had no graph
+// key, and no crash_reports key when crashReports is non-nil; appending at the
+// end is then always a top-level key, since the parser rejects tables. A
+// symlinked config is written through to its target so the link survives; a
+// dangling link is an error and nothing is written.
+func SaveFirstRun(path string, seen edit.Snapshot, graph string, crashReports *bool) error {
 	var line bytes.Buffer
 	if err := toml.NewEncoder(&line).Encode(struct {
 		Graph string `toml:"graph"`
-	}{value}); err != nil {
+	}{graph}); err != nil {
 		return err
 	}
 	text := seen.Content
@@ -160,6 +180,9 @@ func SaveGraph(path string, seen edit.Snapshot, value string) error {
 		if err != nil {
 			return fmt.Errorf("%s is a broken symlink: %w", path, err)
 		}
+	}
+	if crashReports != nil {
+		line.WriteString("crash_reports = " + strconv.FormatBool(*crashReports) + "\n")
 	}
 	return edit.WriteFileIfUnchanged(target, seen, []byte(text+line.String()))
 }

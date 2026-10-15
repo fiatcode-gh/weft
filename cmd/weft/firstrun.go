@@ -42,7 +42,7 @@ func firstRun(in io.Reader, out io.Writer, cfgPath, home string, seen edit.Snaps
 		return "", err
 	}
 	value := userconfig.GraphValue(abs, home)
-	if err := userconfig.SaveGraph(cfgPath, seen, value); err != nil {
+	if err := userconfig.SaveFirstRun(cfgPath, seen, value, nil); err != nil {
 		if errors.Is(err, edit.ErrChanged) {
 			return "", fmt.Errorf("%s changed while weft was asking; graph not saved", cfgPath)
 		}
