@@ -266,6 +266,21 @@ func TestVimEscRules(t *testing.T) {
 			t.Fatalf("esc after a change must confirm: exit %v mode %v", res.Exit, e.mode)
 		}
 	})
+	t.Run("esc clears a pending count and does not exit", func(t *testing.T) {
+		e := vimEditor(nil, "a\n", 0)
+		vimType(e, "2")
+		if len(e.vim.pending) != 1 {
+			t.Fatalf("pending %q, want the count", e.vim.pending)
+		}
+		res, _ := e.Update(escKey)
+		if res.Exit || len(e.vim.pending) != 0 || vimModeOf(e) != vimNormal {
+			t.Fatalf("esc: exit %v pending %q mode %v", res.Exit, e.vim.pending, vimModeOf(e))
+		}
+		vimType(e, "j")
+		if got := e.buf.Cursor(); got != (buffer.Pos{}) {
+			t.Fatalf("the cleared count still applied: cursor %v", got)
+		}
+	})
 	t.Run("insert esc closes the strip and leaves insert", func(t *testing.T) {
 		e := vimEditor(loadFixture(t), "x\n", 0)
 		vimType(e, "A")
@@ -511,6 +526,9 @@ func TestEditorVimStatusGolden(t *testing.T) {
 	}
 	var out []string
 	out = append(out, "normal: "+last())
+	vimType(e, "2g")
+	out = append(out, "pending 2g: "+last())
+	e.Update(escKey)
 	vimType(e, "i")
 	out = append(out, "insert: "+last())
 	teatest.RequireEqualOutput(t, []byte(strings.Join(out, "\n")))

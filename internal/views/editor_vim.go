@@ -1,6 +1,7 @@
 package views
 
 import (
+	"math"
 	"strings"
 	"unicode"
 
@@ -23,6 +24,12 @@ type vimState struct {
 	mode    vimMode
 	pending []string // tokens of the command being typed
 	insMark int      // undo depth before the change that entered insert mode
+
+	// lastFind is the last f F t T, which ; and , repeat.
+	lastFind struct {
+		kind byte
+		char string
+	}
 }
 
 // vimAlias maps the arrow and home/end keys to the motions they stand for in
@@ -112,14 +119,29 @@ func (e *EditorView) vimRun(c vimCmd) (EditorResult, tea.Cmd) {
 	b := e.buf
 	cur := b.Cursor()
 	switch c.key {
-	case "h":
-		q, _ := b.StepLeft(cur, 1)
-		b.MoveTo(q, false)
-		e.goalOK = false
-	case "l":
-		q, _ := b.StepRight(cur, 1)
-		b.MoveTo(q, false)
-		e.goalOK = false
+	case "j", "k":
+		dir := 1
+		if c.key == "k" {
+			dir = -1
+		}
+		for range max(c.count, 1) {
+			before := b.Cursor()
+			e.moveRows(dir, 1, false)
+			if b.Cursor() == before {
+				break
+			}
+		}
+	case "ctrl+d", "ctrl+u":
+		rows, dir := c.count, 1
+		if rows == 0 {
+			rows = max(1, e.textHeight()/2)
+		}
+		if c.key == "ctrl+u" {
+			dir = -1
+		}
+		sr := e.cursorScreenRow()
+		e.moveRows(dir, rows, false)
+		e.scrollCursorTo(sr)
 	case "i", "a", "I", "A", "o", "O":
 		mark := b.UndoMark()
 		switch c.key {
@@ -140,6 +162,14 @@ func (e *EditorView) vimRun(c vimCmd) (EditorResult, tea.Cmd) {
 		e.history(b.Undo(), "nothing to undo")
 	case "ctrl+r":
 		e.history(b.Redo(), "nothing to redo")
+	default:
+		if q, _, ok := e.vimMotion(c, false); ok {
+			b.MoveTo(q, false)
+			e.goalOK = false
+			if c.key == "$" {
+				e.goalX, e.goalOK = math.MaxInt32, true
+			}
+		}
 	}
 	return EditorResult{}, nil
 }
