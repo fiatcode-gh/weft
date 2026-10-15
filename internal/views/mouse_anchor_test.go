@@ -2,12 +2,35 @@ package views
 
 import (
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
 )
+
+// pinMtimes gives every file of a's graph one fixed modification time and
+// reindexes, so lists sorted by mtime (the picker) order ties by name the same
+// way in every clone. A plain clone stamps files as it copies them, and two
+// clones made at different moments can then sort differently.
+func pinMtimes(t *testing.T, a *App) {
+	t.Helper()
+	err := filepath.WalkDir(a.graphPath, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		return os.Chtimes(p, paletteNow, paletteNow)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.reindex(); err != nil {
+		t.Fatal(err)
+	}
+}
 
 // anchorCase is a list panel a click can land on while the list overflows.
 type anchorCase struct {
@@ -35,6 +58,7 @@ func anchorCases() []anchorCase {
 		return func(t *testing.T) *App {
 			cfg.now = paletteNow
 			a := bootApp(t, cfg)
+			pinMtimes(t, a)
 			resize(a, w, h)
 			a.Update(key(section))
 			if !a.sidebarFocused() {
@@ -47,6 +71,7 @@ func anchorCases() []anchorCase {
 		return func(t *testing.T) *App {
 			cfg.now = paletteNow
 			a := bootApp(t, cfg)
+			pinMtimes(t, a)
 			resize(a, 100, 30)
 			a.Update(key(k))
 			if a.active == nil {
