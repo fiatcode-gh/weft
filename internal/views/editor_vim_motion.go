@@ -1,6 +1,11 @@
 package views
 
-import "github.com/fiatcode-gh/weft/v2/internal/buffer"
+import (
+	"unicode"
+	"unicode/utf8"
+
+	"github.com/fiatcode-gh/weft/v2/internal/buffer"
+)
 
 // motionKind is how an operator reads a motion's range (LD8).
 type motionKind int
@@ -12,9 +17,10 @@ const (
 )
 
 // vimMotion evaluates motion c from the cursor. forOp selects the operator
-// forms: logical j/k and l reaching the line end here; task 08 adds the
-// w/W and cw special cases. j, k, ctrl+d and ctrl+u are display-row moves
-// that vimRun makes itself, so without forOp they have no target here.
+// forms: logical j/k, l reaching the line end (and succeeding on an empty
+// line, so s works there), and the w/W and cw rules of LD8. j, k, ctrl+d and
+// ctrl+u are display-row moves that vimRun makes itself, so without forOp
+// they have no target here.
 func (e *EditorView) vimMotion(c vimCmd, forOp bool) (target buffer.Pos, kind motionKind, ok bool) {
 	b := e.buf
 	cur := b.Cursor()
@@ -25,8 +31,11 @@ func (e *EditorView) vimMotion(c vimCmd, forOp bool) (target buffer.Pos, kind mo
 		return q, motionExclusive, got > 0
 	case "l":
 		q, got := b.StepRight(cur, n)
-		return q, motionExclusive, got > 0
+		return q, motionExclusive, got > 0 || forOp
 	case "w", "W":
+		if forOp {
+			return e.vimOpWord(c, n)
+		}
 		q := b.WordStart(cur, n, c.key == "W")
 		return q, motionExclusive, q != cur
 	case "b", "B":
@@ -114,4 +123,48 @@ func flipFind(kind byte) byte {
 		return 'T'
 	}
 	return 't'
+}
+
+// graphemeBlank reports whether the grapheme at p is a blank (space, tab or
+// the line end), the class that w and cw treat differently.
+func (e *EditorView) graphemeBlank(p buffer.Pos) bool {
+	line := e.buf.Line(p.Line)
+	if p.Col >= len(line) {
+		return true
+	}
+	r, _ := utf8.DecodeRuneInString(line[p.Col:])
+	return unicode.IsSpace(r)
+}
+
+// vimOpWord is w or W (key of c) as an operator motion (LD8). A final step
+// onto a later line ends at the end of the line it left. cw/cW on a
+// non-blank is ce/cE: the end of the word under the cursor, then n-1 more
+// word ends.
+func (e *EditorView) vimOpWord(c vimCmd, n int) (buffer.Pos, motionKind, bool) {
+	b := e.buf
+	cur := b.Cursor()
+	big := c.key == "W"
+	if c.op == "c" && !e.graphemeBlank(cur) {
+		word, ok := b.WordObject(cur, 1, false, big)
+		if !ok {
+			return cur, motionInclusive, false
+		}
+		last, _ := b.StepLeft(word.End, 1)
+		if n > 1 {
+			last = b.WordEnd(last, n-1, big)
+		}
+		return last, motionInclusive, true
+	}
+	p := cur
+	for i := range n {
+		q := b.WordStart(p, 1, big)
+		if q == p {
+			break
+		}
+		if i == n-1 && q.Line > p.Line {
+			q = b.LineEnd(p)
+		}
+		p = q
+	}
+	return p, motionExclusive, p != cur
 }

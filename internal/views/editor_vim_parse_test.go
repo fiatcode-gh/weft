@@ -9,7 +9,7 @@ func TestVimParseModes(t *testing.T) {
 			t.Errorf("parseVim(%q) = %+v, %v; want key %q done", k, c, st, k)
 		}
 	}
-	bad := [][]string{{"z"}, {"Q"}, {"d"}, {"esc"}, {"enter"}, {" "}, {"h", "l"}, {"i", "x"}}
+	bad := [][]string{{"z"}, {"Q"}, {"esc"}, {"enter"}, {" "}, {"h", "l"}, {"i", "x"}}
 	for _, toks := range bad {
 		if _, st := parseVim(toks, false); st != vimBad {
 			t.Errorf("parseVim(%q) = %v; want vimBad", toks, st)

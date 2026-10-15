@@ -40,6 +40,18 @@ var vimMotionKeys = map[string]bool{
 var vimSimple = map[string]bool{
 	"i": true, "a": true, "I": true, "A": true, "o": true, "O": true,
 	"u": true, "ctrl+r": true,
+	"x": true, "X": true, "s": true, "S": true, "J": true,
+	"p": true, "P": true, "D": true, "C": true,
+}
+
+// vimOperators are the keys that take a motion, an object or themselves.
+var vimOperators = map[string]bool{"d": true, "c": true, "y": true, ">": true, "<": true}
+
+// vimObjectOpener maps the character after i or a to the key an object is
+// stored under: the brackets are named by their opener.
+var vimObjectOpener = map[string]string{
+	"w": "w", "W": "W", `"`: `"`, "'": "'", "p": "p",
+	"(": "(", ")": "(", "b": "(", "[": "[", "]": "[", "{": "{", "}": "{",
 }
 
 // vimFindKeys are the motions that take one character token.
@@ -52,46 +64,106 @@ func vimArgToken(tok string) bool {
 	return n == len(tok) && r != utf8.RuneError && !unicode.IsControl(r)
 }
 
-// parseVim reads the tokens typed so far. visual selects the visual-mode
-// table.
-func parseVim(tokens []string, visual bool) (vimCmd, vimParse) {
-	var c vimCmd
-	i := 0
+// vimDigits reads a run of count digits from tokens[i:] into *n and returns
+// the index after it. A 0 continues a count but never starts one.
+func vimDigits(tokens []string, i int, n *int) int {
 	for ; i < len(tokens); i++ {
 		t := tokens[i]
-		if len(t) != 1 || t[0] < '0' || t[0] > '9' || (t[0] == '0' && c.count == 0) {
+		if len(t) != 1 || t[0] < '0' || t[0] > '9' || (t[0] == '0' && *n == 0) {
 			break
 		}
-		c.count = min(c.count*10+int(t[0]-'0'), vimMaxCount)
+		*n = min(*n*10+int(t[0]-'0'), vimMaxCount)
 	}
-	if i == len(tokens) {
-		return vimCmd{}, vimMore
-	}
+	return i
+}
+
+// vimMotionTokens reads the motion at tokens[i:]: a one-token motion, `gg`
+// or a find with its character. next is the index after it.
+func vimMotionTokens(tokens []string, i int) (key, arg string, next int, st vimParse) {
 	t := tokens[i]
 	i++
 	switch {
 	case t == "g":
 		if i == len(tokens) {
-			return vimCmd{}, vimMore
+			return "", "", i, vimMore
 		}
 		if tokens[i] != "g" {
-			return vimCmd{}, vimBad
+			return "", "", i, vimBad
 		}
-		c.key = "gg"
-		i++
+		return "gg", "", i + 1, vimDone
 	case vimFindKeys[t]:
+		if i == len(tokens) {
+			return "", "", i, vimMore
+		}
+		if !vimArgToken(tokens[i]) {
+			return "", "", i, vimBad
+		}
+		return t, tokens[i], i + 1, vimDone
+	case vimMotionKeys[t]:
+		return t, "", i, vimDone
+	}
+	return "", "", i, vimBad
+}
+
+// vimOperand reads what follows operator op at tokens[i:]: the operator
+// again, a text object or a motion. ctrl+d and ctrl+u scroll; no operator
+// takes them.
+func vimOperand(tokens []string, i int, op string) (key, arg string, next int, st vimParse) {
+	t := tokens[i]
+	switch {
+	case t == op:
+		return op, "", i + 1, vimDone
+	case t == "i" || t == "a":
+		if i+1 == len(tokens) {
+			return "", "", i + 1, vimMore
+		}
+		open, ok := vimObjectOpener[tokens[i+1]]
+		if !ok {
+			return "", "", i + 1, vimBad
+		}
+		return t + open, "", i + 2, vimDone
+	case t == "ctrl+d" || t == "ctrl+u":
+		return "", "", i + 1, vimBad
+	}
+	return vimMotionTokens(tokens, i)
+}
+
+// parseVim reads the tokens typed so far. visual selects the visual-mode
+// table.
+func parseVim(tokens []string, visual bool) (vimCmd, vimParse) {
+	var c vimCmd
+	i := vimDigits(tokens, 0, &c.count)
+	if i == len(tokens) {
+		return vimCmd{}, vimMore
+	}
+	var st vimParse
+	switch t := tokens[i]; {
+	case vimOperators[t]:
+		c.op = t
+		var n int
+		i = vimDigits(tokens, i+1, &n)
+		if n > 0 {
+			c.count = min(max(c.count, 1)*n, vimMaxCount)
+		}
 		if i == len(tokens) {
 			return vimCmd{}, vimMore
 		}
-		if !vimArgToken(tokens[i]) {
+		c.key, c.arg, i, st = vimOperand(tokens, i, t)
+	case t == "r":
+		if i+1 == len(tokens) {
+			return vimCmd{}, vimMore
+		}
+		if !vimArgToken(tokens[i+1]) {
 			return vimCmd{}, vimBad
 		}
-		c.key, c.arg = t, tokens[i]
-		i++
-	case vimMotionKeys[t], vimSimple[t]:
-		c.key = t
+		c.key, c.arg, i, st = t, tokens[i+1], i+2, vimDone
+	case vimSimple[t]:
+		c.key, i, st = t, i+1, vimDone
 	default:
-		return vimCmd{}, vimBad
+		c.key, c.arg, i, st = vimMotionTokens(tokens, i)
+	}
+	if st != vimDone {
+		return vimCmd{}, st
 	}
 	if i != len(tokens) {
 		return vimCmd{}, vimBad

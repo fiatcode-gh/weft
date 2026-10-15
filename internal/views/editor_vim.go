@@ -116,6 +116,12 @@ func (e *EditorView) vimNormalKey(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
 
 // vimRun executes one parsed normal-mode command.
 func (e *EditorView) vimRun(c vimCmd) (EditorResult, tea.Cmd) {
+	if alias, ok := vimShortcuts[c.key]; ok && c.op == "" {
+		c = vimCmd{count: c.count, op: alias[0], key: alias[1]}
+	}
+	if c.op != "" {
+		return EditorResult{}, e.vimOperate(c)
+	}
 	b := e.buf
 	cur := b.Cursor()
 	switch c.key {
@@ -158,6 +164,12 @@ func (e *EditorView) vimRun(c vimCmd) (EditorResult, tea.Cmd) {
 			b.OpenLine(true)
 		}
 		e.vimEnterInsert(mark)
+	case "r":
+		e.vimReplace(c)
+	case "J":
+		e.vimJoin(c)
+	case "p", "P":
+		e.vimPut(c)
 	case "u":
 		e.history(b.Undo(), "nothing to undo")
 	case "ctrl+r":
