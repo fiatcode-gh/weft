@@ -65,9 +65,6 @@ func Capture(v any) *Report {
 	for len(kept) > 0 && strings.HasPrefix(kept[0].Function, "runtime.") {
 		kept = kept[1:]
 	}
-	// Drop the frames below the panic site only when gopanic was found; the
-	// deferred function sits between gopanic and the panic site's caller
-	// chain, so nothing else to trim here.
 	for _, f := range kept {
 		r.frames = append(r.frames, toFrame(f))
 	}
@@ -91,7 +88,7 @@ func toFrame(f runtime.Frame) frame {
 		Module:   module,
 		Filename: file,
 		Lineno:   f.Line,
-		InApp:    strings.HasPrefix(module, appModule),
+		InApp:    module == "main" || strings.HasPrefix(module, appModule),
 	}
 }
 

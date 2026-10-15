@@ -91,7 +91,7 @@ weft can tell its author when it crashes. It is off unless you turn it on.
 
 - Only release binaries from GitHub Releases can report. A build from `go install` or `go build` never sends anything and never asks.
 - Only with `crash_reports = true` in the user config. First run asks `Send crash reports to the weft author? [y/N]` when the key is absent. To change your mind, edit the key.
-- One report holds the panic message, the stack trace, the weft version, the OS, the architecture and the Go version. It never holds your host name, your user name, the environment, page content or breadcrumbs.
+- One report holds the panic message, the stack trace, the weft version, the OS, the architecture and the Go version. weft adds nothing else: no host name, no user name, no environment, no breadcrumbs.
 - In the panic message weft replaces the graph folder with `<graph>` and your home folder with `~`. A panic message can still quote text, so it may hold a line or a name from your notes.
 - The report goes to the author's Bugsink at `errors.fiatcode.dev`. The server sees your IP address, as with any connection.
 - weft sends once, after the terminal is restored, and waits at most 2 seconds. It never retries. If the send fails, weft prints one line, `weft: crash report not sent: <reason>`.

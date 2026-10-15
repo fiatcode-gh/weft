@@ -31,10 +31,10 @@ const (
 
 type crashArm struct{}
 
-func updatePanics()           { panic(crashValue) }
-func viewPanics()             { panic(crashValue) }
-func panicCmd() tea.Msg       { panic(crashValue) }
-func mainPanics(graph string) { panic(crashValue) }
+func updatePanics()     { panic(crashValue) }
+func viewPanics()       { panic(crashValue) }
+func panicCmd() tea.Msg { panic(crashValue) }
+func mainPanics()       { panic(crashValue) }
 
 // crashValue is set by crashChild before any panic can fire.
 var crashValue string
@@ -88,8 +88,14 @@ func crashChild(where string) int {
 		filepath.Join(graph, "pages", "x.md"), filepath.Join(home, "elsewhere"))
 	rep.setGraph(graph)
 	rep.setConsent(cfg.CrashReports)
-	if where == "main" {
-		mainPanics(graph)
+	switch where {
+	case "main":
+		mainPanics()
+	case "muted":
+		rep.muted(mainPanics)
+	case "afterMuted":
+		rep.muted(func() {})
+		mainPanics()
 	}
 	out, err := os.Create(os.Getenv("WEFT_TEST_CRASH_OUT"))
 	if err != nil {
@@ -107,6 +113,7 @@ func crashChild(where string) int {
 type recordedReq struct {
 	path, auth string
 	body       []byte
+	restored   bool // the terminal had left the alt screen when the request arrived
 }
 
 // fakeSentry is a local endpoint that records requests and counts connections.
@@ -116,6 +123,8 @@ type fakeSentry struct {
 	reqs  []*recordedReq
 	conns int
 	code  int
+	// outPath is the child's terminal output file, read when a request arrives.
+	outPath string
 }
 
 func newFakeSentry(t *testing.T, code int) *fakeSentry {
@@ -123,8 +132,15 @@ func newFakeSentry(t *testing.T, code int) *fakeSentry {
 	f := &fakeSentry{code: code}
 	f.srv = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		// The child writes its terminal output straight to the file, so what
+		// it holds now is what the terminal had seen when the request arrived.
+		out, _ := os.ReadFile(f.outPath)
+		restored := false
+		if i := bytes.LastIndex(out, []byte(altScreenOn)); i >= 0 {
+			restored = bytes.Contains(out[i:], []byte(altScreenOf))
+		}
 		f.mu.Lock()
-		f.reqs = append(f.reqs, &recordedReq{r.URL.Path, r.Header.Get("X-Sentry-Auth"), body})
+		f.reqs = append(f.reqs, &recordedReq{r.URL.Path, r.Header.Get("X-Sentry-Auth"), body, restored})
 		f.mu.Unlock()
 		w.WriteHeader(f.code)
 		io.WriteString(w, `{"id":"0123456789abcdef0123456789abcdef"}`)
@@ -162,6 +178,7 @@ func runCrash(t *testing.T, where string, config *string, withDSN bool) (code in
 	xdg := t.TempDir()
 	graph = t.TempDir()
 	outPath := filepath.Join(t.TempDir(), "out.bin")
+	fake.outPath = outPath
 	if config != nil {
 		p := filepath.Join(xdg, "weft", "config.toml")
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
@@ -293,6 +310,9 @@ func TestCrashReports(t *testing.T) {
 				if !strings.Contains(strings.Join(fns, "\n"), w.fn) {
 					t.Errorf("frames lack %s: %v", w.fn, fns)
 				}
+				if w.where != "main" && !r.restored {
+					t.Error("report arrived before the terminal was restored")
+				}
 				if w.where == "update" {
 					t.Logf("recorded event body (fake key): %s", r.body)
 				}
@@ -306,10 +326,51 @@ func TestReporterMutedSendsNothing(t *testing.T) {
 	var errb bytes.Buffer
 	r := newReporter(fake.dsn(), crashRel, &errb)
 	r.setConsent(true)
-	r.mute()
-	r.send(nil)
+	r.muted(func() { r.send(captureForTest()) })
 	if _, conns := fake.snapshot(); conns != 0 {
 		t.Errorf("connections = %d, want 0", conns)
+	}
+}
+
+func TestCrashMutedPhase(t *testing.T) {
+	on := "crash_reports = true\n"
+	for _, tc := range []struct {
+		where string
+		sends int
+	}{
+		{"muted", 0},
+		{"afterMuted", 1},
+	} {
+		t.Run(tc.where, func(t *testing.T) {
+			code, stderr, _, reqs, conns, _, _ := runCrash(t, tc.where, &on, true)
+			if code != 2 {
+				t.Errorf("exit code = %d, want 2\nstderr:\n%s", code, stderr)
+			}
+			if !strings.Contains(stderr, "mainPanics") {
+				t.Errorf("stderr lacks the stack:\n%s", stderr)
+			}
+			if len(reqs) != tc.sends || (tc.sends == 0 && conns != 0) {
+				t.Errorf("requests = %d, connections = %d, want %d requests", len(reqs), conns, tc.sends)
+			}
+		})
+	}
+}
+
+func TestAbsGraph(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for in, want := range map[string]string{
+		".":                  wd,
+		"notes":              filepath.Join(wd, "notes"),
+		"notes/":             filepath.Join(wd, "notes"),
+		"/abs/graph/":        "/abs/graph",
+		"/abs/../abs/graph/": "/abs/graph",
+	} {
+		if got := absGraph(in); got != want {
+			t.Errorf("absGraph(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 

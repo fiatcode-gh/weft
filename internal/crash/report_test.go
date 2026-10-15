@@ -2,6 +2,7 @@ package crash
 
 import (
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -75,5 +76,15 @@ func TestReportString(t *testing.T) {
 	r := &Report{Value: "v", Stack: []byte("stack")}
 	if got := r.String(); got != "v\n\nstack" {
 		t.Fatalf("String = %q", got)
+	}
+}
+
+func TestToFrameMainModuleIsInApp(t *testing.T) {
+	f := toFrame(runtime.Frame{Function: "main.main", File: "/src/cmd/weft/main.go", Line: 7})
+	if !f.InApp || f.Module != "main" || f.Function != "main" {
+		t.Fatalf("frame = %+v", f)
+	}
+	if toFrame(runtime.Frame{Function: "net/http.(*Client).Do"}).InApp {
+		t.Fatal("net/http frame marked in-app")
 	}
 }

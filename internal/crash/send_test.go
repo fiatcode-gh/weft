@@ -240,3 +240,49 @@ func TestSendHangGivesUp(t *testing.T) {
 		t.Fatalf("elapsed %v", elapsed)
 	}
 }
+
+func TestTimeoutIsTwoSeconds(t *testing.T) {
+	if Timeout != 2*time.Second {
+		t.Fatalf("Timeout = %v, want 2s", Timeout)
+	}
+}
+
+func TestSendRequestHeaders(t *testing.T) {
+	var got http.Header
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Clone()
+		io.Copy(io.Discard, r.Body)
+	}))
+	defer srv.Close()
+	if err := Send(fakeDSN(t, srv.URL), capturePanic(panicHere), "v1.2.3", Scrub{}); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"Content-Type":  "application/x-sentry-envelope",
+		"X-Sentry-Auth": "Sentry sentry_version=7, sentry_client=weft/v1.2.3, sentry_key=" + testKey,
+	}
+	for k, v := range want {
+		if got.Get(k) != v {
+			t.Errorf("%s = %q, want %q", k, got.Get(k), v)
+		}
+	}
+	// Go adds these itself; anything else would be something weft chose to send.
+	automatic := map[string]bool{"User-Agent": true, "Accept-Encoding": true, "Content-Length": true}
+	for k := range got {
+		if _, ok := want[k]; !ok && !automatic[k] {
+			t.Errorf("unexpected header %s: %q", k, got.Values(k))
+		}
+	}
+}
+
+func TestScrubIgnoresUnusableGraph(t *testing.T) {
+	const v = "open notes/pages/notes.md and ./x.md in /root"
+	for _, graph := range []string{".", "notes", "notes/", "", "/"} {
+		if got := (Scrub{Graph: graph}).apply(v); got != v {
+			t.Errorf("Graph %q changed the value: %q", graph, got)
+		}
+	}
+	if got := (Scrub{Graph: "/g/notes"}).apply("open /g/notes/pages/a.md"); got != "open <graph>/pages/a.md" {
+		t.Errorf("absolute graph: %q", got)
+	}
+}

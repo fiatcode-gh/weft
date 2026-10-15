@@ -111,8 +111,11 @@ func main() {
 	}
 
 	if flag.Arg(0) == "doctor" {
-		rep.mute()
-		os.Exit(runDoctor(flag.Args()[1:], *graphFlag, os.Getenv("WEFT_GRAPH"), os.Stdout, os.Stderr))
+		var code int
+		rep.muted(func() {
+			code = runDoctor(flag.Args()[1:], *graphFlag, os.Getenv("WEFT_GRAPH"), os.Stdout, os.Stderr)
+		})
+		os.Exit(code)
 	}
 
 	choice, ucfg, seen, err := resolveGraph(*graphFlag, os.Getenv("WEFT_GRAPH"))
@@ -122,20 +125,20 @@ func main() {
 	}
 	if choice.path == "" {
 		interactive := term.IsTerminal(os.Stdin.Fd()) && term.IsTerminal(os.Stdout.Fd())
-		rep.mute()
-		choice, err = pickGraph(interactive, os.Stdin, os.Stdout, seen, asksCrashReports(rep.hasDSN(), ucfg))
+		rep.muted(func() {
+			choice, err = pickGraph(interactive, os.Stdin, os.Stdout, seen, asksCrashReports(rep.hasDSN(), ucfg))
+		})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "weft: %v\n", err)
 			os.Exit(2)
 		}
-		rep.unmute()
 	}
 	if err := validateGraphPath(choice); err != nil {
 		fmt.Fprintf(os.Stderr, "weft: %v\n", err)
 		os.Exit(2)
 	}
 	graphPath := choice.path
-	rep.setGraph(graphPath)
+	rep.setGraph(absGraph(graphPath))
 
 	lay, ok := loadLayout(graphPath, os.Stderr)
 	if !ok {

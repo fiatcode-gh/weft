@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -20,7 +21,7 @@ import (
 const Timeout = 2 * time.Second
 
 // DSN is a parsed Sentry-style DSN. Its fields are never printed.
-type DSN struct{ endpoint, key, raw string }
+type DSN struct{ endpoint, key string }
 
 // ParseDSN parses an http(s) DSN of the form scheme://key@host[/prefix]/<id>.
 // Errors are fixed strings and never contain the input.
@@ -50,15 +51,16 @@ func ParseDSN(s string) (DSN, error) {
 	return DSN{
 		endpoint: u.Scheme + "://" + u.Host + prefix + "/api/" + id + "/envelope/",
 		key:      key,
-		raw:      s,
 	}, nil
 }
 
 // Scrub names the paths removed from the panic value before sending.
 type Scrub struct{ Home, Graph string }
 
+// apply replaces the graph path and the home directory in v. A Graph that is
+// not absolute, or is the root, is ignored: it would match unrelated text.
 func (s Scrub) apply(v string) string {
-	if s.Graph != "" {
+	if filepath.IsAbs(s.Graph) && s.Graph != string(filepath.Separator) {
 		v = strings.ReplaceAll(v, s.Graph, "<graph>")
 	}
 	if s.Home != "" && s.Home != "/" {
@@ -169,7 +171,7 @@ func Send(d DSN, r *Report, release string, s Scrub) error {
 	if err != nil {
 		var ue *url.Error
 		if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &ue) && ue.Timeout()) {
-			return errors.New("no answer within 2s")
+			return fmt.Errorf("no answer within %s", Timeout)
 		}
 		if errors.As(err, &ue) {
 			return ue.Err

@@ -75,9 +75,9 @@ dependency.
 - Never add `tea.WithoutCatchPanics`: the terminal would stay in raw mode and
   nothing would print the stack.
 - A new `tea.Sequence` is unguarded (decision 3). A panic in it is not reported.
-- The DSN is public in every release binary (`go version -m`, `strings`).
-  Anyone can post junk events to the project. This is how Sentry and Bugsink
-  keys work, and Bugsink quotas bound it.
+- The DSN is public in every release binary: it is readable from the binary's
+  bytes (`strings`). Anyone can post junk events to the project. This is how
+  Sentry and Bugsink keys work, and Bugsink quotas bound it.
 - Ctrl+C or end of input at the crash question can leave the folder the user
   just confirmed creating. The config is not written. This amends decision 5 of
   `public-readiness.md`, "every write happens after the last answer".

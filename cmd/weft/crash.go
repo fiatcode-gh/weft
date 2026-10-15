@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -25,7 +26,7 @@ type reporter struct {
 	on      bool // the build has a usable DSN
 	version string
 	stderr  io.Writer
-	muted   bool   // weft doctor and first run report nothing
+	silent  bool   // inside muted: weft doctor and first run report nothing
 	graph   string // scrubbed from the panic value
 	consent bool
 	known   bool // consent was set from the loaded user config
@@ -41,18 +42,35 @@ func newReporter(dsn, version string, stderr io.Writer) *reporter {
 }
 
 func (r *reporter) hasDSN() bool         { return r.on }
-func (r *reporter) mute()                { r.muted = true }
-func (r *reporter) unmute()              { r.muted = false }
 func (r *reporter) setGraph(path string) { r.graph = path }
+
+// muted runs f, the weft doctor and first-run phases, which report nothing.
+// A panic in f skips the reset and stays silent; one after f returns reports.
+func (r *reporter) muted(f func()) {
+	r.silent = true
+	f()
+	r.silent = false
+}
 
 func (r *reporter) setConsent(on bool) {
 	r.consent, r.known = on, true
 }
 
+// absGraph is the graph path in the form crash.Scrub matches: absolute and
+// clean. It is empty when the working directory can't be resolved, which
+// Scrub ignores.
+func absGraph(path string) string {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return ""
+	}
+	return filepath.Clean(abs)
+}
+
 // send posts rep once when reporting is on and consented. A failure prints one
 // line; success prints nothing.
 func (r *reporter) send(rep *crash.Report) {
-	if r.muted || !r.on {
+	if r.silent || !r.on {
 		return
 	}
 	consent := r.consent
