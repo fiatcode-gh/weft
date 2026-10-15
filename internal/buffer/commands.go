@@ -104,15 +104,7 @@ func (b *Buffer) Cut() (text string, linewise bool) {
 		return text, false
 	}
 	l, col := b.cursor.Line, b.cursor.Col
-	var r Range
-	switch {
-	case l < len(b.lines)-1:
-		r = Range{Pos{l, 0}, Pos{l + 1, 0}}
-	case l > 0:
-		r = Range{Pos{l - 1, len(b.lines[l-1])}, Pos{l, len(b.lines[l])}}
-	default:
-		r = Range{Pos{0, 0}, Pos{0, len(b.lines[0])}}
-	}
+	r := b.lineSpan(l, l)
 	b.edit(func() {
 		b.replace(r, "")
 		nl := min(l, len(b.lines)-1)
