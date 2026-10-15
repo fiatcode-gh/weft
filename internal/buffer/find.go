@@ -28,6 +28,45 @@ func (b *Buffer) Find(query string) []Range {
 	return out
 }
 
+// Search finds the match of query nearest to from: the first starting
+// strictly after it, or with back the last starting strictly before it,
+// wrapping around the buffer (wrapped reports that). Find's matching rules;
+// it scans line by line and stops at the first hit.
+func (b *Buffer) Search(query string, from Pos, back bool) (r Range, wrapped, ok bool) {
+	m, valid := newMatcher(query)
+	if !valid || len(b.lines) == 0 {
+		return Range{}, false, false
+	}
+	n := len(b.lines)
+	from.Line = min(max(from.Line, 0), n-1)
+	var ms [][2]int
+	// Step k visits the cursor line first (only its matches past from count),
+	// then each other line in turn, and the cursor line once more on the way
+	// round, whole.
+	for k := 0; k <= n; k++ {
+		line := from.Line + k
+		if back {
+			line = from.Line - k
+		}
+		line = (line%n + n) % n
+		ms = m.appendIn(ms[:0], b.lines[line])
+		if back {
+			for i := len(ms) - 1; i >= 0; i-- {
+				if k > 0 || ms[i][0] < from.Col {
+					return Range{Pos{line, ms[i][0]}, Pos{line, ms[i][1]}}, from.Line-k < 0, true
+				}
+			}
+			continue
+		}
+		for _, x := range ms {
+			if k > 0 || x[0] > from.Col {
+				return Range{Pos{line, x[0]}, Pos{line, x[1]}}, from.Line+k >= n, true
+			}
+		}
+	}
+	return Range{}, false, false
+}
+
 // MatchIn returns the byte ranges of the non-overlapping matches of query in s under
 // Find's rules (smart case, simple folding, matches start at grapheme boundaries). An
 // empty query, or one containing "\n", returns nil.

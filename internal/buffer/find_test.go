@@ -181,3 +181,51 @@ func TestFindAllocationsDoNotGrowWithLines(t *testing.T) {
 		}
 	}
 }
+
+func TestSearch(t *testing.T) {
+	type res struct {
+		r       Range
+		wrapped bool
+		ok      bool
+	}
+	at := func(l, c, n int) Range { return Range{Pos{l, c}, Pos{l, c + n}} }
+	for _, tc := range []struct {
+		name    string
+		content string
+		query   string
+		from    Pos
+		back    bool
+		want    res
+	}{
+		{"forward mid-line", "ab ab ab", "ab", Pos{0, 1}, false, res{at(0, 3, 2), false, true}},
+		{"forward skips match at from", "ab ab ab", "ab", Pos{0, 3}, false, res{at(0, 6, 2), false, true}},
+		{"forward next line", "ab\nxx\nab", "ab", Pos{0, 0}, false, res{at(2, 0, 2), false, true}},
+		{"forward wraps", "ab xx\nxx ab", "ab", Pos{1, 3}, false, res{at(0, 0, 2), true, true}},
+		{"forward wraps onto from itself", "xx ab", "ab", Pos{0, 3}, false, res{at(0, 3, 2), true, true}},
+		{"back mid-line", "ab ab ab", "ab", Pos{0, 7}, true, res{at(0, 6, 2), false, true}},
+		{"back skips match at from", "ab ab ab", "ab", Pos{0, 6}, true, res{at(0, 3, 2), false, true}},
+		{"back previous line", "ab\nxx\nab", "ab", Pos{2, 0}, true, res{at(0, 0, 2), false, true}},
+		{"back last match of a line", "ab ab\nxx", "ab", Pos{1, 1}, true, res{at(0, 3, 2), false, true}},
+		{"back wraps", "ab xx\nxx ab", "ab", Pos{0, 0}, true, res{at(1, 3, 2), true, true}},
+		{"back wraps onto from itself", "ab xx", "ab", Pos{0, 0}, true, res{at(0, 0, 2), true, true}},
+		{"smart case folds", "xx Beta", "beta", Pos{0, 0}, false, res{at(0, 3, 4), false, true}},
+		{"smart case exact", "beta Beta", "Beta", Pos{0, 0}, false, res{at(0, 5, 4), false, true}},
+		{"folded multi-byte", "x éa\nÉa", "Éa", Pos{0, 0}, false, res{at(1, 0, len("Éa")), false, true}},
+		{"folded multi-byte lower", "xx Éa", "éa", Pos{0, 0}, false, res{at(0, 3, len("Éa")), false, true}},
+		{"grapheme start only", "e\u0301a", "\u0301", Pos{0, 0}, false, res{}},
+		{"crlf", "one\r\ntwo\r\none", "one", Pos{0, 0}, false, res{at(2, 0, 3), false, true}},
+		{"crlf back", "one\r\ntwo\r\none", "one", Pos{2, 0}, true, res{at(0, 0, 3), false, true}},
+		{"no match", "hello", "zzz", Pos{0, 0}, false, res{}},
+		{"no match back", "hello", "zzz", Pos{0, 2}, true, res{}},
+		{"empty query", "hello", "", Pos{0, 0}, false, res{}},
+		{"newline query", "a\nb", "a\nb", Pos{0, 0}, false, res{}},
+		{"one line only match", "xx ab xx", "ab", Pos{0, 0}, false, res{at(0, 3, 2), false, true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, wrapped, ok := New(tc.content).Search(tc.query, tc.from, tc.back)
+			if got := (res{r, wrapped, ok}); got != tc.want {
+				t.Fatalf("Search(%q, %v, back=%v) = %+v, want %+v", tc.query, tc.from, tc.back, got, tc.want)
+			}
+		})
+	}
+}

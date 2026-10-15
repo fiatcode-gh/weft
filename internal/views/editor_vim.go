@@ -43,6 +43,10 @@ type vimState struct {
 		kind byte
 		char string
 	}
+
+	// searchDir is the direction of the last `/` or `?` (+1, -1; 0 none yet),
+	// which n repeats and N reverses.
+	searchDir int
 }
 
 // vimAlias maps the arrow and home/end keys to the motions they stand for in
@@ -209,6 +213,12 @@ func (e *EditorView) vimExec(c vimCmd) (EditorResult, tea.Cmd) {
 		e.vimEnterInsert(mark)
 	case ":":
 		e.vimExOpen()
+	case "/":
+		e.vimOpenSearch(1)
+	case "?":
+		e.vimOpenSearch(-1)
+	case "n", "N":
+		e.vimSearchNext(c)
 	case "ZZ":
 		return e.vimExLine("x")
 	case "ZQ":
