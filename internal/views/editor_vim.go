@@ -28,6 +28,7 @@ type vimState struct {
 	pending []string   // tokens of the command being typed
 	insMark int        // undo depth before the change that entered insert mode
 	anchor  buffer.Pos // visual mode: the end of the selection that stays put
+	ex      *string    // the ex line's text; nil while it is closed
 
 	// Dot repeat (LD12): last is the change `.` repeats, rec the change whose
 	// insert session is open, replaying is set while `.` or a counted insert
@@ -76,6 +77,9 @@ func (e *EditorView) enableVim() {
 
 // vimUpdate handles one key of a vim-mode editor.
 func (e *EditorView) vimUpdate(msg tea.KeyPressMsg) (EditorResult, tea.Cmd) {
+	if e.vim.ex != nil {
+		return e.vimExKey(msg)
+	}
 	if e.prompt != nil || e.find != nil {
 		res, cmd := e.editKey(msg)
 		if e.prompt == nil && e.find == nil && e.vim.mode != vimInsert {
@@ -203,6 +207,12 @@ func (e *EditorView) vimExec(c vimCmd) (EditorResult, tea.Cmd) {
 			b.OpenLine(true)
 		}
 		e.vimEnterInsert(mark)
+	case ":":
+		e.vimExOpen()
+	case "ZZ":
+		return e.vimExLine("x")
+	case "ZQ":
+		return e.vimExLine("q!")
 	case "v":
 		e.vimStartVisual(vimVisual)
 	case "V":

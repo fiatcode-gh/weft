@@ -389,6 +389,9 @@ func (e *EditorView) Cursor() *tea.Cursor {
 	e.findSync()
 	e.syncReveal()
 	e.ensureVisible()
+	if e.vim != nil && e.vim.ex != nil {
+		return e.vimExCursor()
+	}
 	if f := e.find; f != nil {
 		_, x := f.barView(max(1, e.width-e.geo.Margin))
 		return tea.NewCursor(min(e.geo.Margin+x, max(0, e.width-1)), e.textHeight()+e.completer.rows()+1)

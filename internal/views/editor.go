@@ -141,6 +141,9 @@ func (e *EditorView) Paste(msg tea.PasteMsg) tea.Cmd {
 	if e.mode != editing {
 		return nil
 	}
+	if e.vim != nil && e.vim.ex != nil {
+		return nil
+	}
 	if e.prompt != nil {
 		return nil
 	}
@@ -644,6 +647,9 @@ func (e *EditorView) statusLine() string {
 			s += styleTitle.Render("[r]") + styleFaint.Render("eload · ")
 		}
 		return s + styleTitle.Render("[k]") + styleFaint.Render("eep editing")
+	}
+	if e.vim != nil && e.vim.ex != nil {
+		return e.vimExStatus()
 	}
 	mark := ""
 	if e.dirty() {

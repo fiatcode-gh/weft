@@ -42,7 +42,7 @@ var vimSimple = map[string]bool{
 	"u": true, "ctrl+r": true,
 	"x": true, "X": true, "s": true, "S": true, "J": true,
 	"p": true, "P": true, "D": true, "C": true, ".": true,
-	"v": true, "V": true,
+	"v": true, "V": true, ":": true,
 }
 
 // vimOperators are the keys that take a motion, an object or themselves.
@@ -162,6 +162,14 @@ func parseVim(tokens []string, visual bool) (vimCmd, vimParse) {
 			return vimCmd{}, vimMore
 		}
 		c.key, c.arg, i, st = vimOperand(tokens, i, t)
+	case t == "Z":
+		if i+1 == len(tokens) {
+			return vimCmd{}, vimMore
+		}
+		if next := tokens[i+1]; next != "Z" && next != "Q" {
+			return vimCmd{}, vimBad
+		}
+		c.key, i, st = t+tokens[i+1], i+2, vimDone
 	case t == "r":
 		if i+1 == len(tokens) {
 			return vimCmd{}, vimMore

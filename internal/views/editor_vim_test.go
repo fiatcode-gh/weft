@@ -540,5 +540,8 @@ func TestEditorVimStatusGolden(t *testing.T) {
 	e.Update(escKey)
 	vimType(e, "V")
 	out = append(out, "visual line: "+last())
+	e.Update(escKey)
+	vimType(e, ":wq")
+	out = append(out, "ex: "+last())
 	teatest.RequireEqualOutput(t, []byte(strings.Join(out, "\n")))
 }
