@@ -23,6 +23,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Journals are named by their filename stem: `2026_10_12` with the default layout, not `2026-10-12`. `[[2026-10-12]]` no longer opens the journal. Migration: link journals as `[[2026_10_12]]` (the form Logseq and the `weft-worklog` skill already write); search the graph for `\[\[\d{4}-\d{2}-\d{2}` to find old links.
 - A page that shares a journal's name no longer wins `[[name]]`; the journal does. Migration: reach the page as `[[pages/name]]`. `Alpha` and `alpha` in different files no longer share backlinks.
 - The mouse is on: a plain drag no longer selects terminal text and the wheel scrolls weft instead of sending arrow keys. Migration: hold Shift while dragging (Option in iTerm2), or press `m` to turn the mouse off until weft quits.
+- The Go module path is now `github.com/fiatcode-gh/weft/v3`. Migration: install with `go install github.com/fiatcode-gh/weft/v3/cmd/weft@latest`; code importing weft's packages changes `/v2` to `/v3`.
 
 ### Added
 

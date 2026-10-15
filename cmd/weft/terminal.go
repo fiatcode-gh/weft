@@ -8,7 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/fiatcode-gh/weft/v2/internal/render"
+	"github.com/fiatcode-gh/weft/v3/internal/render"
 )
 
 // probeSequences are written by Bubble Tea v2.0.10 on its own; weft v2.5

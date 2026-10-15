@@ -9,9 +9,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/fiatcode-gh/weft/v2/internal/graph"
-	"github.com/fiatcode-gh/weft/v2/internal/layout"
-	"github.com/fiatcode-gh/weft/v2/internal/render"
+	"github.com/fiatcode-gh/weft/v3/internal/graph"
+	"github.com/fiatcode-gh/weft/v3/internal/layout"
+	"github.com/fiatcode-gh/weft/v3/internal/render"
 )
 
 // perfReadKeyMS is the bound for one read-view key plus a frame on a

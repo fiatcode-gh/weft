@@ -12,7 +12,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/fiatcode-gh/weft/v2/internal/buffer"
+	"github.com/fiatcode-gh/weft/v3/internal/buffer"
 )
 
 const findFixture = "foo 1\nbar\nfoo 2\nfoo 3\n"

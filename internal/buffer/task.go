@@ -3,7 +3,7 @@ package buffer
 import (
 	"strings"
 
-	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v3/internal/graph"
 )
 
 // taskBlock is the task block (graph.TaskBlockAt) owning the cursor line.

@@ -6,7 +6,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/fiatcode-gh/weft/v2/internal/search"
+	"github.com/fiatcode-gh/weft/v3/internal/search"
 )
 
 // MarkdownLinkRe matches a markdown link or image: group 1 is "!" for an

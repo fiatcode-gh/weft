@@ -10,7 +10,7 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/fiatcode-gh/weft/v2/internal/layout"
+	"github.com/fiatcode-gh/weft/v3/internal/layout"
 )
 
 func TestBuildIndex(t *testing.T) {

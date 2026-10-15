@@ -9,9 +9,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/fiatcode-gh/weft/v2/internal/edit"
-	"github.com/fiatcode-gh/weft/v2/internal/graph"
-	"github.com/fiatcode-gh/weft/v2/internal/search"
+	"github.com/fiatcode-gh/weft/v3/internal/edit"
+	"github.com/fiatcode-gh/weft/v3/internal/graph"
+	"github.com/fiatcode-gh/weft/v3/internal/search"
 )
 
 var (

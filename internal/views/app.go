@@ -11,12 +11,12 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/fiatcode-gh/weft/v2/internal/edit"
-	"github.com/fiatcode-gh/weft/v2/internal/graph"
-	"github.com/fiatcode-gh/weft/v2/internal/layout"
-	"github.com/fiatcode-gh/weft/v2/internal/merge"
-	"github.com/fiatcode-gh/weft/v2/internal/search"
-	syncpkg "github.com/fiatcode-gh/weft/v2/internal/sync"
+	"github.com/fiatcode-gh/weft/v3/internal/edit"
+	"github.com/fiatcode-gh/weft/v3/internal/graph"
+	"github.com/fiatcode-gh/weft/v3/internal/layout"
+	"github.com/fiatcode-gh/weft/v3/internal/merge"
+	"github.com/fiatcode-gh/weft/v3/internal/search"
+	syncpkg "github.com/fiatcode-gh/weft/v3/internal/sync"
 )
 
 // indexLoadedMsg carries the result of an asynchronous graph.BuildIndex

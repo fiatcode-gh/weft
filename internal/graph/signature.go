@@ -5,7 +5,7 @@ import (
 	"hash/maphash"
 	"io/fs"
 
-	"github.com/fiatcode-gh/weft/v2/internal/layout"
+	"github.com/fiatcode-gh/weft/v3/internal/layout"
 )
 
 // Signature identifies the walked state of a graph: every indexed .md

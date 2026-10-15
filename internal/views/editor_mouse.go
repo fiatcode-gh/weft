@@ -1,6 +1,6 @@
 package views
 
-import "github.com/fiatcode-gh/weft/v2/internal/buffer"
+import "github.com/fiatcode-gh/weft/v3/internal/buffer"
 
 // mouseReady reports whether the editor takes the mouse: it is editing, with
 // no find bar or date prompt owning the keys. It then clears the notice like a

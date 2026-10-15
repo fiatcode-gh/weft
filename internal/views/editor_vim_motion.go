@@ -4,7 +4,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/fiatcode-gh/weft/v2/internal/buffer"
+	"github.com/fiatcode-gh/weft/v3/internal/buffer"
 )
 
 // motionKind is how an operator reads a motion's range (LD8).

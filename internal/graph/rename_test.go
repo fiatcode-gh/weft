@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fiatcode-gh/weft/v2/internal/layout"
+	"github.com/fiatcode-gh/weft/v3/internal/layout"
 )
 
 // vaultPage returns the page of the read-only obsidian-vault fixture that

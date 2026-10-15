@@ -6,7 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/colorprofile"
 
-	"github.com/fiatcode-gh/weft/v2/internal/render"
+	"github.com/fiatcode-gh/weft/v3/internal/render"
 )
 
 // NO_COLOR drops colour, never attributes: every screen keeps something bold

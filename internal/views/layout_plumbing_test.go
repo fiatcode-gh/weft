@@ -8,7 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/fiatcode-gh/weft/v2/internal/layout"
+	"github.com/fiatcode-gh/weft/v3/internal/layout"
 )
 
 // layoutApp builds an App over a temp graph whose config is cfg ("" = no

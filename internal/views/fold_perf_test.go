@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fiatcode-gh/weft/v2/internal/graph"
-	"github.com/fiatcode-gh/weft/v2/internal/layout"
-	"github.com/fiatcode-gh/weft/v2/internal/render"
+	"github.com/fiatcode-gh/weft/v3/internal/graph"
+	"github.com/fiatcode-gh/weft/v3/internal/layout"
+	"github.com/fiatcode-gh/weft/v3/internal/render"
 )
 
 // perfFoldMS is the bound for a Tab or z once the page's row map is built, on

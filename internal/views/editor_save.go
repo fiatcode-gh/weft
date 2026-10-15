@@ -3,8 +3,8 @@ package views
 import (
 	"errors"
 
-	"github.com/fiatcode-gh/weft/v2/internal/edit"
-	"github.com/fiatcode-gh/weft/v2/internal/merge"
+	"github.com/fiatcode-gh/weft/v3/internal/edit"
+	"github.com/fiatcode-gh/weft/v3/internal/merge"
 )
 
 const (

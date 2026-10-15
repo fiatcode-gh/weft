@@ -10,7 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/fiatcode-gh/weft/v2/internal/buffer"
+	"github.com/fiatcode-gh/weft/v3/internal/buffer"
 )
 
 var backspaceKey = tea.KeyPressMsg{Code: tea.KeyBackspace}

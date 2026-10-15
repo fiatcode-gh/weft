@@ -11,7 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/sahilm/fuzzy"
 
-	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v3/internal/graph"
 )
 
 // pickerChoice is one page row. key is both what the row shows (and fuzzy

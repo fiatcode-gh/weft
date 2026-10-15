@@ -7,8 +7,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
-	"github.com/fiatcode-gh/weft/v2/internal/buffer"
-	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v3/internal/buffer"
+	"github.com/fiatcode-gh/weft/v3/internal/graph"
 )
 
 var ctrlR = tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl}

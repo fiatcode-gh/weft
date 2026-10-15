@@ -26,11 +26,11 @@ tar -xzf weft_<version>_<os>_<arch>.tar.gz weft
 install weft ~/.local/bin/
 ```
 
-Or install with Go 1.26+ (works from v2.5.1 on; earlier versions use the old
-`git.fiatcode.dev` module path):
+Or install with Go 1.26+ (v3.0.0 and later; for v2 use
+`go install github.com/fiatcode-gh/weft/v2/cmd/weft@v2.5.1`):
 
 ```bash
-go install github.com/fiatcode-gh/weft/v2/cmd/weft@latest
+go install github.com/fiatcode-gh/weft/v3/cmd/weft@latest
 ```
 
 Or build from source (Go 1.26+):

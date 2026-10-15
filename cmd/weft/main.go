@@ -13,11 +13,11 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/fiatcode-gh/weft/v2/internal/doctor"
-	"github.com/fiatcode-gh/weft/v2/internal/layout"
-	"github.com/fiatcode-gh/weft/v2/internal/render"
-	"github.com/fiatcode-gh/weft/v2/internal/userconfig"
-	"github.com/fiatcode-gh/weft/v2/internal/views"
+	"github.com/fiatcode-gh/weft/v3/internal/doctor"
+	"github.com/fiatcode-gh/weft/v3/internal/layout"
+	"github.com/fiatcode-gh/weft/v3/internal/render"
+	"github.com/fiatcode-gh/weft/v3/internal/userconfig"
+	"github.com/fiatcode-gh/weft/v3/internal/views"
 )
 
 // Version is set at build time via -ldflags "-X main.Version=...". For users

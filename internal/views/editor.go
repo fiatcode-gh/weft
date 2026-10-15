@@ -7,10 +7,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/fiatcode-gh/weft/v2/internal/buffer"
-	"github.com/fiatcode-gh/weft/v2/internal/edit"
-	"github.com/fiatcode-gh/weft/v2/internal/graph"
-	"github.com/fiatcode-gh/weft/v2/internal/render"
+	"github.com/fiatcode-gh/weft/v3/internal/buffer"
+	"github.com/fiatcode-gh/weft/v3/internal/edit"
+	"github.com/fiatcode-gh/weft/v3/internal/graph"
+	"github.com/fiatcode-gh/weft/v3/internal/render"
 )
 
 // clashPrompt is the state behind the confirmingClash mode.

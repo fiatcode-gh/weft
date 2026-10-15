@@ -8,7 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/fiatcode-gh/weft/v2/internal/buffer"
+	"github.com/fiatcode-gh/weft/v3/internal/buffer"
 )
 
 // vimMode is the modal state of a vim-mode editor.

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v3/internal/graph"
 )
 
 // Agenda is the overlay listing open tasks that are overdue, due today or due

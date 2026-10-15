@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/fiatcode-gh/weft/v2/internal/graph"
+	"github.com/fiatcode-gh/weft/v3/internal/graph"
 )
 
 // Chunk starts. A live-preview chunk is a run of source lines rendered on its

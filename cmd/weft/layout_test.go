@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fiatcode-gh/weft/v2/internal/userconfig"
+	"github.com/fiatcode-gh/weft/v3/internal/userconfig"
 )
 
 func TestMain(m *testing.M) {

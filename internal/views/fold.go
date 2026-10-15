@@ -1,7 +1,7 @@
 package views
 
 import (
-	"github.com/fiatcode-gh/weft/v2/internal/render"
+	"github.com/fiatcode-gh/weft/v3/internal/render"
 )
 
 // foldStore is the read view's per-page state that outlives a PageView: the

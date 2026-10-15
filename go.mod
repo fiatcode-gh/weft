@@ -1,4 +1,4 @@
-module github.com/fiatcode-gh/weft/v2
+module github.com/fiatcode-gh/weft/v3
 
 go 1.26.3
 

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fiatcode-gh/weft/v2/internal/edit"
-	"github.com/fiatcode-gh/weft/v2/internal/graph"
-	"github.com/fiatcode-gh/weft/v2/internal/render"
+	"github.com/fiatcode-gh/weft/v3/internal/edit"
+	"github.com/fiatcode-gh/weft/v3/internal/graph"
+	"github.com/fiatcode-gh/weft/v3/internal/render"
 )
 
 const onThisDayPreviewLines = 2

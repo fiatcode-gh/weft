@@ -10,9 +10,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/fiatcode-gh/weft/v2/internal/edit"
-	"github.com/fiatcode-gh/weft/v2/internal/layout"
-	syncpkg "github.com/fiatcode-gh/weft/v2/internal/sync"
+	"github.com/fiatcode-gh/weft/v3/internal/edit"
+	"github.com/fiatcode-gh/weft/v3/internal/layout"
+	syncpkg "github.com/fiatcode-gh/weft/v3/internal/sync"
 )
 
 var oldInstant = time.Unix(1_000_000_000, 0)

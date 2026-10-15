@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fiatcode-gh/weft/v2/internal/graph"
-	"github.com/fiatcode-gh/weft/v2/internal/layout"
+	"github.com/fiatcode-gh/weft/v3/internal/graph"
+	"github.com/fiatcode-gh/weft/v3/internal/layout"
 )
 
 // fixturePath returns the absolute path to the shared testdata graph fixture.

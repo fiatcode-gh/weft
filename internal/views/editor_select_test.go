@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	uv "github.com/charmbracelet/ultraviolet"
 
-	"github.com/fiatcode-gh/weft/v2/internal/buffer"
+	"github.com/fiatcode-gh/weft/v3/internal/buffer"
 )
 
 const selectFixture = "alpha beta gamma\nsecond line here\nthird\n"
