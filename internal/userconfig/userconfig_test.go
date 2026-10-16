@@ -57,6 +57,10 @@ func TestLoad(t *testing.T) {
 		{name: "wrong type", body: new("editor = 1\n"), errPart: "editor"},
 		{name: "bad toml", body: new("editor = \"vim\n"), errPart: "toml"},
 		{name: "table", body: new("[editor]\nx = 1\n"), errPart: "editor"},
+		{name: "crash reports true", body: new("crash_reports = true\n"), want: Config{Editor: Modeless, CrashReports: true, CrashReportsSet: true}},
+		{name: "crash reports false", body: new("crash_reports = false\n"), want: Config{Editor: Modeless, CrashReportsSet: true}},
+		{name: "crash reports string", body: new("crash_reports = \"yes\"\n"), errPart: `crash_reports: "yes" must be true or false`},
+		{name: "crash reports int", body: new("crash_reports = 1\n"), errPart: `crash_reports: 1 must be true or false`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -177,7 +181,7 @@ func TestGraphValue(t *testing.T) {
 	}
 }
 
-func TestSaveGraph(t *testing.T) {
+func TestSaveFirstRun(t *testing.T) {
 	setup := func(t *testing.T) (path, home string) {
 		t.Helper()
 		xdg, home := t.TempDir(), t.TempDir()
@@ -202,7 +206,7 @@ func TestSaveGraph(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := SaveGraph(path, snap, "~/notes"); err != nil {
+		if err := SaveFirstRun(path, snap, "~/notes", nil); err != nil {
 			t.Fatal(err)
 		}
 		if got, want := read(t, path), seed+"graph = \"~/notes\"\n"; got != want {
@@ -221,7 +225,7 @@ func TestSaveGraph(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := SaveGraph(path, snap, "/srv/g"); err != nil {
+		if err := SaveFirstRun(path, snap, "/srv/g", nil); err != nil {
 			t.Fatal(err)
 		}
 		if got, want := read(t, path), "editor = \"vim\"\ngraph = \"/srv/g\"\n"; got != want {
@@ -231,7 +235,7 @@ func TestSaveGraph(t *testing.T) {
 
 	t.Run("creates file and folder", func(t *testing.T) {
 		path, _ := setup(t)
-		if err := SaveGraph(path, edit.Snapshot{}, "/srv/g"); err != nil {
+		if err := SaveFirstRun(path, edit.Snapshot{}, "/srv/g", nil); err != nil {
 			t.Fatal(err)
 		}
 		if got, want := read(t, path), "graph = \"/srv/g\"\n"; got != want {
@@ -261,7 +265,7 @@ func TestSaveGraph(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := SaveGraph(path, snap, "~/notes"); err != nil {
+		if err := SaveFirstRun(path, snap, "~/notes", nil); err != nil {
 			t.Fatal(err)
 		}
 		fi, err := os.Lstat(path)
@@ -282,9 +286,9 @@ func TestSaveGraph(t *testing.T) {
 		if err := os.Symlink(missing, path); err != nil {
 			t.Skipf("symlink unsupported: %v", err)
 		}
-		err := SaveGraph(path, edit.Snapshot{}, "/srv/g")
+		err := SaveFirstRun(path, edit.Snapshot{}, "/srv/g", nil)
 		if err == nil || !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "broken") {
-			t.Fatalf("SaveGraph error = %v, want broken-link error naming %s", err, path)
+			t.Fatalf("SaveFirstRun error = %v, want broken-link error naming %s", err, path)
 		}
 		if got, rerr := os.Readlink(path); rerr != nil || got != missing {
 			t.Errorf("link = %q, %v; want unchanged %q", got, rerr, missing)
@@ -303,8 +307,8 @@ func TestSaveGraph(t *testing.T) {
 		}
 		outside := "editor = \"modeless\"\n# edited elsewhere\n"
 		writeConfig(t, path, outside)
-		if err := SaveGraph(path, snap, "/srv/g"); !errors.Is(err, edit.ErrChanged) {
-			t.Fatalf("SaveGraph error = %v, want ErrChanged", err)
+		if err := SaveFirstRun(path, snap, "/srv/g", nil); !errors.Is(err, edit.ErrChanged) {
+			t.Fatalf("SaveFirstRun error = %v, want ErrChanged", err)
 		}
 		if got := read(t, path); got != outside {
 			t.Errorf("file = %q, want the outside bytes %q", got, outside)
@@ -314,8 +318,8 @@ func TestSaveGraph(t *testing.T) {
 	t.Run("refuses a file that appeared", func(t *testing.T) {
 		path, _ := setup(t)
 		writeConfig(t, path, "editor = \"vim\"\n")
-		if err := SaveGraph(path, edit.Snapshot{}, "/srv/g"); !errors.Is(err, edit.ErrChanged) {
-			t.Fatalf("SaveGraph error = %v, want ErrChanged", err)
+		if err := SaveFirstRun(path, edit.Snapshot{}, "/srv/g", nil); !errors.Is(err, edit.ErrChanged) {
+			t.Fatalf("SaveFirstRun error = %v, want ErrChanged", err)
 		}
 		if got := read(t, path); got != "editor = \"vim\"\n" {
 			t.Errorf("file = %q, want it untouched", got)
@@ -325,12 +329,59 @@ func TestSaveGraph(t *testing.T) {
 	t.Run("round-trip escaping", func(t *testing.T) {
 		path, _ := setup(t)
 		value := "/tmp/a \"q\" \\ é"
-		if err := SaveGraph(path, edit.Snapshot{}, value); err != nil {
+		if err := SaveFirstRun(path, edit.Snapshot{}, value, nil); err != nil {
 			t.Fatal(err)
 		}
 		cfg, _, err := Load()
 		if err != nil || cfg.Graph != filepath.Clean(value) {
 			t.Errorf("Load() = %+v, %v; want Graph %q", cfg, err, filepath.Clean(value))
+		}
+	})
+
+	t.Run("crash reports true", func(t *testing.T) {
+		path, _ := setup(t)
+		seed := "editor = \"vim\"\n"
+		writeConfig(t, path, seed)
+		_, snap, err := Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := SaveFirstRun(path, snap, "~/notes", new(true)); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := read(t, path), seed+"graph = \"~/notes\"\ncrash_reports = true\n"; got != want {
+			t.Errorf("file = %q, want %q", got, want)
+		}
+		cfg, _, err := Load()
+		if err != nil || !cfg.CrashReports || !cfg.CrashReportsSet {
+			t.Errorf("Load() = %+v, %v; want CrashReports and CrashReportsSet", cfg, err)
+		}
+	})
+
+	t.Run("crash reports false", func(t *testing.T) {
+		path, _ := setup(t)
+		if err := SaveFirstRun(path, edit.Snapshot{}, "/srv/g", new(false)); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := read(t, path), "graph = \"/srv/g\"\ncrash_reports = false\n"; got != want {
+			t.Errorf("file = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("refuses changed file with crash answer", func(t *testing.T) {
+		path, _ := setup(t)
+		writeConfig(t, path, "editor = \"vim\"\n")
+		_, snap, err := Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		outside := "editor = \"modeless\"\n# edited elsewhere\n"
+		writeConfig(t, path, outside)
+		if err := SaveFirstRun(path, snap, "/srv/g", new(true)); !errors.Is(err, edit.ErrChanged) {
+			t.Fatalf("SaveFirstRun error = %v, want ErrChanged", err)
+		}
+		if got := read(t, path); got != outside {
+			t.Errorf("file = %q, want the outside bytes %q", got, outside)
 		}
 	})
 }

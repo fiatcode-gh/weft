@@ -93,6 +93,9 @@ func initDebugLog(val string) (io.Closer, error) {
 }
 
 func main() {
+	rep := newReporter(crashDSN, resolvedVersion(), os.Stderr)
+	defer rep.recoverMain()
+
 	graphFlag := flag.String("graph", "", "path to Logseq graph (overrides $WEFT_GRAPH)")
 	versionFlag := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
@@ -108,17 +111,23 @@ func main() {
 	}
 
 	if flag.Arg(0) == "doctor" {
-		os.Exit(runDoctor(flag.Args()[1:], *graphFlag, os.Getenv("WEFT_GRAPH"), os.Stdout, os.Stderr))
+		var code int
+		rep.muted(func() {
+			code = runDoctor(flag.Args()[1:], *graphFlag, os.Getenv("WEFT_GRAPH"), os.Stdout, os.Stderr)
+		})
+		os.Exit(code)
 	}
 
-	choice, seen, err := resolveGraph(*graphFlag, os.Getenv("WEFT_GRAPH"))
+	choice, ucfg, seen, err := resolveGraph(*graphFlag, os.Getenv("WEFT_GRAPH"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "weft: %v\n", err)
 		os.Exit(2)
 	}
 	if choice.path == "" {
 		interactive := term.IsTerminal(os.Stdin.Fd()) && term.IsTerminal(os.Stdout.Fd())
-		choice, err = pickGraph(interactive, os.Stdin, os.Stdout, seen)
+		rep.muted(func() {
+			choice, err = pickGraph(interactive, os.Stdin, os.Stdout, seen, asksCrashReports(rep.hasDSN(), ucfg))
+		})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "weft: %v\n", err)
 			os.Exit(2)
@@ -129,6 +138,7 @@ func main() {
 		os.Exit(2)
 	}
 	graphPath := choice.path
+	rep.setGraph(graphPath)
 
 	lay, ok := loadLayout(graphPath, os.Stderr)
 	if !ok {
@@ -139,6 +149,7 @@ func main() {
 	if !ok {
 		os.Exit(2)
 	}
+	rep.setConsent(cfg.CrashReports)
 
 	debugLog, err := initDebugLog(os.Getenv("WEFT_DEBUG"))
 	if err != nil {
@@ -156,9 +167,8 @@ func main() {
 	app := views.New(graphPath, lay, resolvedVersion())
 	app.SetVimEditor(cfg.Editor == userconfig.Vim)
 
-	if _, err := tea.NewProgram(app, programOptions(os.Stdout)...).Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "weft: %v\n", err)
-		os.Exit(1)
+	if code := rep.runUI(app, programOptions(os.Stdout)...); code != 0 {
+		os.Exit(code)
 	}
 }
 
@@ -167,23 +177,23 @@ type graphChoice struct{ path, source string }
 
 // resolveGraph picks --graph, else $WEFT_GRAPH, else the user config's graph
 // key. It reads the user config only when flagVal and envVal are both empty;
-// seen is that read's snapshot (zero otherwise). An empty path means no
-// source named a graph.
-func resolveGraph(flagVal, envVal string) (graphChoice, edit.Snapshot, error) {
+// seen is that read's snapshot and cfg the loaded config (both zero
+// otherwise). An empty path means no source named a graph.
+func resolveGraph(flagVal, envVal string) (graphChoice, userconfig.Config, edit.Snapshot, error) {
 	switch {
 	case flagVal != "":
-		return graphChoice{flagVal, "--graph"}, edit.Snapshot{}, nil
+		return graphChoice{flagVal, "--graph"}, userconfig.Config{}, edit.Snapshot{}, nil
 	case envVal != "":
-		return graphChoice{envVal, "$WEFT_GRAPH"}, edit.Snapshot{}, nil
+		return graphChoice{envVal, "$WEFT_GRAPH"}, userconfig.Config{}, edit.Snapshot{}, nil
 	}
 	cfg, seen, err := userconfig.Load()
 	if err != nil {
-		return graphChoice{}, edit.Snapshot{}, err
+		return graphChoice{}, userconfig.Config{}, edit.Snapshot{}, err
 	}
 	if cfg.Graph == "" {
-		return graphChoice{}, seen, nil
+		return graphChoice{}, cfg, seen, nil
 	}
-	return graphChoice{cfg.Graph, userconfig.Path()}, seen, nil
+	return graphChoice{cfg.Graph, userconfig.Path()}, cfg, seen, nil
 }
 
 // validateGraphPath reports whether the chosen graph is an accessible
@@ -254,7 +264,7 @@ func runDoctor(doctorArgs []string, globalFlag, envGraph string, stdout, stderr 
 	}
 	choice := graphChoice{*graphFlag, "--graph"}
 	if choice.path == "" {
-		choice, _, err = resolveGraph(globalFlag, envGraph)
+		choice, _, _, err = resolveGraph(globalFlag, envGraph)
 		if err != nil {
 			fmt.Fprintf(stderr, "weft: %v\n", err)
 			return 2

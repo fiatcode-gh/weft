@@ -18,14 +18,15 @@ import (
 var errNoAnswer = errors.New("no graph folder chosen; nothing was saved")
 
 // pickGraph is main's no-graph branch. On a terminal (interactive) with a known user config
-// path and home folder it runs firstRun; otherwise it returns noGraphError() and touches nothing.
-func pickGraph(interactive bool, in io.Reader, out io.Writer, seen edit.Snapshot) (graphChoice, error) {
+// path and home folder it runs firstRun, which also asks the crash-reports question when
+// askCrash is set; otherwise it returns noGraphError() and touches nothing.
+func pickGraph(interactive bool, in io.Reader, out io.Writer, seen edit.Snapshot, askCrash bool) (graphChoice, error) {
 	cfgPath := userconfig.Path()
 	home, _ := os.UserHomeDir()
 	if !interactive || cfgPath == "" || home == "" {
 		return graphChoice{}, noGraphError()
 	}
-	path, err := firstRun(in, out, cfgPath, home, seen)
+	path, err := firstRun(in, out, cfgPath, home, seen, askCrash)
 	if err != nil {
 		return graphChoice{}, err
 	}
@@ -33,23 +34,62 @@ func pickGraph(interactive bool, in io.Reader, out io.Writer, seen edit.Snapshot
 }
 
 // firstRun asks for the graph folder until a usable one is chosen, creates it after a yes,
-// saves it as the user config's graph key (guarded against seen) and returns the folder.
-func firstRun(in io.Reader, out io.Writer, cfgPath, home string, seen edit.Snapshot) (string, error) {
+// then (when askCrash is set) asks whether to send crash reports. It saves the graph, and the
+// answer when asked, in one guarded write against seen and returns the folder. End of input
+// at either question saves nothing.
+func firstRun(in io.Reader, out io.Writer, cfgPath, home string, seen edit.Snapshot, askCrash bool) (string, error) {
 	r := bufio.NewReader(in)
 	fmt.Fprint(out, "weft keeps your notes in a folder, the graph.\n")
 	abs, err := chooseFolder(r, out, home)
 	if err != nil {
 		return "", err
 	}
+	var crashReports *bool
+	if askCrash {
+		yes, err := askCrashReports(r, out)
+		if err != nil {
+			return "", err
+		}
+		crashReports = &yes
+	}
 	value := userconfig.GraphValue(abs, home)
-	if err := userconfig.SaveGraph(cfgPath, seen, value); err != nil {
+	if err := userconfig.SaveFirstRun(cfgPath, seen, value, crashReports); err != nil {
 		if errors.Is(err, edit.ErrChanged) {
 			return "", fmt.Errorf("%s changed while weft was asking; graph not saved", cfgPath)
 		}
 		return "", fmt.Errorf("save graph to %s: %w", cfgPath, err)
 	}
-	fmt.Fprintf(out, "Saved graph = %q to %s\n", value, cfgPath)
+	if crashReports != nil {
+		fmt.Fprintf(out, "Saved graph = %q and crash_reports = %t to %s\n", value, *crashReports, cfgPath)
+	} else {
+		fmt.Fprintf(out, "Saved graph = %q to %s\n", value, cfgPath)
+	}
 	return abs, nil
+}
+
+// asksCrashReports reports whether first run asks the crash-reports question: only a
+// build with a DSN, and only while the user config has no crash_reports key.
+func asksCrashReports(hasDSN bool, cfg userconfig.Config) bool {
+	return hasDSN && !cfg.CrashReportsSet
+}
+
+// askCrashReports explains what a report holds, then asks until it gets a yes or a no.
+// Enter means no.
+func askCrashReports(r *bufio.Reader, out io.Writer) (bool, error) {
+	fmt.Fprint(out, "Crash reports hold the panic message, stack trace, weft version, OS, architecture and Go version.\n")
+	for {
+		fmt.Fprint(out, "Send crash reports to the weft author? [y/N]: ")
+		answer, err := readAnswer(r, out)
+		if err != nil {
+			return false, err
+		}
+		switch strings.ToLower(answer) {
+		case "", "n", "no":
+			return false, nil
+		case "y", "yes":
+			return true, nil
+		}
+	}
 }
 
 // chooseFolder loops until the user names a folder that exists or was created.

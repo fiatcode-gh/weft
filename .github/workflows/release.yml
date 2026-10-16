@@ -49,3 +49,5 @@ jobs:
           args: release --clean --release-notes=${{ runner.temp }}/notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Secret, so Actions masks it; baked into the binary via goreleaser ldflags.
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}

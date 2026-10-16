@@ -19,7 +19,10 @@ builds:
     # main.Version is what `weft -version` prints; keep the tag's "v" prefix
     # so release binaries match what `go install` users see.
     ldflags:
-      - -s -w -X main.Version={{ .Tag }}
+      # The crash-report DSN comes from the SENTRY_DSN repository secret; empty
+      # (fork, local snapshot, missing secret) builds a binary with reporting
+      # off. -trimpath keeps runner paths out of reported frames.
+      - -s -w -X main.Version={{ .Tag }} -X main.crashDSN={{ envOrDefault "SENTRY_DSN" "" }}
 
 checksum:
   name_template: checksums.txt

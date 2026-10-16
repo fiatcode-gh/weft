@@ -99,6 +99,7 @@ func TestResolveGraph(t *testing.T) {
 		wantSource string // "" = the config path
 		wantErr    bool
 		wantSeen   bool // snapshot must equal the config file
+		wantCfg    userconfig.Config
 	}{
 		{name: "flag only", flag: "/f", wantPath: "/f", wantSource: "--graph"},
 		{name: "env only", env: "/e", wantPath: "/e", wantSource: "$WEFT_GRAPH"},
@@ -111,6 +112,7 @@ func TestResolveGraph(t *testing.T) {
 		{name: "malformed config not read when env set", config: "bogus = 1\n", env: "/e", wantPath: "/e", wantSource: "$WEFT_GRAPH"},
 		{name: "malformed config with nothing set", config: "bogus = 1\n", wantErr: true},
 		{name: "tilde expands against HOME", config: "graph = \"~/g\"\n", wantPath: filepath.Join(home, "g"), wantSeen: true},
+		{name: "config with crash_reports, no graph", config: "crash_reports = true\n", wantPath: "", wantSeen: true, wantCfg: userconfig.Config{CrashReports: true, CrashReportsSet: true}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -122,7 +124,7 @@ func TestResolveGraph(t *testing.T) {
 				cfgPath = userconfig.Path()
 			}
 
-			got, seen, err := resolveGraph(tc.flag, tc.env)
+			got, ucfg, seen, err := resolveGraph(tc.flag, tc.env)
 
 			if tc.wantErr {
 				if err == nil || !strings.Contains(err.Error(), cfgPath) {
@@ -149,6 +151,9 @@ func TestResolveGraph(t *testing.T) {
 			}
 			if seen != wantSnap {
 				t.Errorf("snapshot = %+v, want %+v", seen, wantSnap)
+			}
+			if ucfg.CrashReports != tc.wantCfg.CrashReports || ucfg.CrashReportsSet != tc.wantCfg.CrashReportsSet {
+				t.Errorf("crash config = %v/%v, want %v/%v", ucfg.CrashReports, ucfg.CrashReportsSet, tc.wantCfg.CrashReports, tc.wantCfg.CrashReportsSet)
 			}
 		})
 	}

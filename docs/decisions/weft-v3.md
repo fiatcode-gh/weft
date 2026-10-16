@@ -2,7 +2,7 @@
 
 weft v3 turns weft from a reader of a graph that other tools write into the
 author's daily tool for journaling, tasks and a personal knowledge base, and
-makes it usable by people who are not the author. It was built as 13 units
+makes it usable by people who are not the author. It was built as 14 units
 (some split into parts), each with its own record in this folder.
 
 Why: before v3 the editor was the Bubbles `textarea` (no undo, selection or
@@ -75,6 +75,7 @@ Order as shipped. Each unit's record holds its own decisions.
     `mouse.md`)
 12. Vim mode (`vim-mode.md`)
 13. Public readiness (`public-readiness.md`)
+14. Crash reports (`crash-reports.md`)
 
 ## Traps
 

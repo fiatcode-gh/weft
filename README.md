@@ -43,7 +43,7 @@ go build ./cmd/weft
 
 ## Getting started
 
-1. Run `weft`. It asks `Notes folder [~/notes]:`. Press Enter for `~/notes`, or type any folder. An existing Logseq graph or Obsidian vault works (an Obsidian vault needs the layout file, see Configuration). If the folder does not exist, weft asks `Create …? [Y/n]`. weft saves your choice as `graph = "…"` in the user config (it prints the path), and later runs open that folder straight away. `Ctrl+C` or `Ctrl+D` at a prompt quits and saves nothing.
+1. Run `weft`. It asks `Notes folder [~/notes]:`. Press Enter for `~/notes`, or type any folder. An existing Logseq graph or Obsidian vault works (an Obsidian vault needs the layout file, see Configuration). If the folder does not exist, weft asks `Create …? [Y/n]`. Release builds then ask `Send crash reports to the weft author? [y/N]`; Enter means no (see Crash reports under Configuration). Builds from source never ask. weft saves your choice as `graph = "…"` in the user config, and your answer as `crash_reports`, next to it (it prints the path), and later runs open that folder straight away. `Ctrl+C` or `Ctrl+D` at a prompt quits and saves nothing.
 2. weft opens on today's journal (`.` brings you back to it from anywhere). Press `e` to write, `Ctrl+S` to save and `Esc` to leave the editor. The journal file is created on the first save.
 3. To link a page, type `[[` in the editor, pick or type a page name, and save. In the read view, `n` moves to the link and `Enter` follows it. A new page has no file yet: press `e` there, write and save to create it. `Ctrl+P` finds any page.
 4. Press `?` to see every key. Press `:` to list every action and run one.
@@ -71,17 +71,31 @@ Your own settings, apart from any graph's layout, live in `$XDG_CONFIG_HOME/weft
 |-----|---------|---------|
 | `editor` | `"modeless"` | `"modeless"` is the editor as it has always been. `"vim"` turns on vim mode in the in-app editor (see Vim mode). |
 | `graph` | none | The graph folder: an absolute path or one that starts with `~/`. Anything else is an error. |
+| `crash_reports` | `false` | `true` sends a crash report when weft crashes (release builds only; see Crash reports). |
 
 ```toml
 editor = "vim"
 graph = "~/notes"
+crash_reports = true
 ```
 
-weft writes this file only on first run: it appends the `graph` line and keeps everything else in the file. If the file changed while weft was asking for the folder, weft saves nothing and exits with status 2. There is no key to switch modes while weft runs; edit the file and start weft again.
+weft writes this file only on first run: it appends the `graph` line and, in release builds, `crash_reports`, and keeps everything else in the file. If the file changed while weft was asking, weft saves nothing and exits with status 2. There is no key to switch modes while weft runs; edit the file and start weft again.
 
-A problem stops weft with exit status 2 and a message that names the file, for example `weft: /home/you/.config/weft/config.toml: editor: "emacs" must be "modeless" or "vim"`. The problems are: the file cannot be read, a TOML syntax error, an unknown key, an unknown `editor` value, and a bad `graph` value (for example `graph: "notes" must be an absolute path or start with ~/`). A missing file is the defaults.
+A problem stops weft with exit status 2 and a message that names the file, for example `weft: /home/you/.config/weft/config.toml: editor: "emacs" must be "modeless" or "vim"`. The problems are: the file cannot be read, a TOML syntax error, an unknown key, an unknown `editor` value, a bad `graph` value (for example `graph: "notes" must be an absolute path or start with ~/`), and a `crash_reports` value that is not `true` or `false`. A missing file is the defaults.
 
-`weft doctor` reads this file only to find the graph, when no flag or environment variable names one. It ignores `editor`.
+`weft doctor` reads this file only to find the graph, when no flag or environment variable names one. It ignores `editor` and `crash_reports`.
+
+### Crash reports
+
+weft can tell its author when it crashes. It is off unless you turn it on.
+
+- Only release binaries from GitHub Releases can report. A build from `go install` or `go build` never sends anything and never asks.
+- Only with `crash_reports = true` in the user config. First run asks `Send crash reports to the weft author? [y/N]` when the key is absent. To change your mind, edit the key.
+- One report holds the panic message, the stack trace, the weft version, the OS, the architecture and the Go version. weft adds nothing else: no host name, no user name, no environment, no breadcrumbs.
+- In the panic message weft replaces the graph folder with `<graph>` and your home folder with `~`. A panic message can still quote text, so it may hold a line or a name from your notes.
+- The report goes to the author's Bugsink at `errors.fiatcode.dev`. The server sees your IP address, as with any connection.
+- weft sends once, after the terminal is restored, and waits at most 2 seconds. It never retries. If the send fails, weft prints one line, `weft: crash report not sent: <reason>`.
+- Nothing is sent from `weft doctor` or during first run.
 
 ### Graph config (.weft/config.toml)
 
@@ -164,7 +178,7 @@ Two warnings come from page names. A name clash: several pages share a name, and
 
 ### Exit codes
 
-- `weft`: `0` quit normally. `1` the terminal UI failed. `2` weft could not start: no graph, a bad graph path, a bad graph or user config, ripgrep missing, the debug log cannot open, or first run ended without a choice or could not save. `Ctrl+C` at a first-run prompt ends weft by the interrupt (shells show 130).
+- `weft`: `0` quit normally. `1` the terminal UI failed or crashed. `2` weft could not start: no graph, a bad graph path, a bad graph or user config, ripgrep missing, the debug log cannot open, or first run ended without a choice or could not save. A crash outside the UI exits `2` like any Go panic. `Ctrl+C` at a first-run prompt ends weft by the interrupt (shells show 130).
 - `weft doctor`: `0` the graph is clean, `1` findings exist, `2` operational error (bad graph path, no graph set, bad config file, missing ripgrep, failed scan).
 
 ## Keys

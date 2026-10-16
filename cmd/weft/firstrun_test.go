@@ -23,8 +23,13 @@ func frEnv(t *testing.T) (home, cfgPath string) {
 
 func runFirstRun(t *testing.T, input, home, cfgPath string, seen edit.Snapshot) (string, string, error) {
 	t.Helper()
+	return runFirstRunAsk(t, input, home, cfgPath, seen, false)
+}
+
+func runFirstRunAsk(t *testing.T, input, home, cfgPath string, seen edit.Snapshot, askCrash bool) (string, string, error) {
+	t.Helper()
 	var out bytes.Buffer
-	got, err := firstRun(strings.NewReader(input), &out, cfgPath, home, seen)
+	got, err := firstRun(strings.NewReader(input), &out, cfgPath, home, seen, askCrash)
 	return got, out.String(), err
 }
 
@@ -313,7 +318,7 @@ func TestPickGraphNotInteractive(t *testing.T) {
 	_, cfg := frEnv(t)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Dir(filepath.Dir(cfg)))
 	var out bytes.Buffer
-	_, err := pickGraph(false, strings.NewReader("\n\n"), &out, edit.Snapshot{})
+	_, err := pickGraph(false, strings.NewReader("\n\n"), &out, edit.Snapshot{}, true)
 	if err == nil || err.Error() != noGraphError().Error() {
 		t.Fatalf("err = %v, want %v", err, noGraphError())
 	}
@@ -327,11 +332,158 @@ func TestPickGraphNoHome(t *testing.T) {
 	t.Setenv("HOME", "")
 	t.Setenv("XDG_CONFIG_HOME", "")
 	var out bytes.Buffer
-	_, err := pickGraph(true, strings.NewReader("\n\n"), &out, edit.Snapshot{})
+	_, err := pickGraph(true, strings.NewReader("\n\n"), &out, edit.Snapshot{}, true)
 	if err == nil || err.Error() != noGraphError().Error() {
 		t.Fatalf("err = %v, want %v", err, noGraphError())
 	}
 	if out.Len() != 0 {
 		t.Errorf("output = %q", out.String())
+	}
+}
+
+func TestFirstRunCrashDefaultNo(t *testing.T) {
+	home, cfg := frEnv(t)
+	_, out, err := runFirstRunAsk(t, "\n\n\n", home, cfg, edit.Snapshot{}, true)
+	t.Logf("transcript:\n%s", out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := readCfg(t, cfg); c != "graph = \"~/notes\"\ncrash_reports = false\n" {
+		t.Fatalf("config = %q", c)
+	}
+	if n := strings.Count(out, "Crash reports hold the panic message, stack trace, weft version, OS, architecture and Go version.\n"); n != 1 {
+		t.Errorf("explanation count = %d, output %q", n, out)
+	}
+	if n := strings.Count(out, "Send crash reports to the weft author? [y/N]: "); n != 1 {
+		t.Errorf("question count = %d, output %q", n, out)
+	}
+	if want := "Saved graph = \"~/notes\" and crash_reports = false to " + cfg; !strings.Contains(out, want) {
+		t.Errorf("output lacks %q: %q", want, out)
+	}
+}
+
+func TestFirstRunCrashYes(t *testing.T) {
+	home, cfg := frEnv(t)
+	if _, _, err := runFirstRunAsk(t, "\n\ny\n", home, cfg, edit.Snapshot{}, true); err != nil {
+		t.Fatal(err)
+	}
+	if c := readCfg(t, cfg); c != "graph = \"~/notes\"\ncrash_reports = true\n" {
+		t.Fatalf("config = %q", c)
+	}
+}
+
+func TestFirstRunCrashReasks(t *testing.T) {
+	home, cfg := frEnv(t)
+	_, out, err := runFirstRunAsk(t, "\n\nmaybe\nYES\n", home, cfg, edit.Snapshot{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(out, "Send crash reports to the weft author? [y/N]: "); n != 2 {
+		t.Errorf("question count = %d, output %q", n, out)
+	}
+	if n := strings.Count(out, "Crash reports hold"); n != 1 {
+		t.Errorf("explanation count = %d", n)
+	}
+	if c := readCfg(t, cfg); c != "graph = \"~/notes\"\ncrash_reports = true\n" {
+		t.Fatalf("config = %q", c)
+	}
+}
+
+func TestFirstRunCrashEOF(t *testing.T) {
+	home, cfg := frEnv(t)
+	_, _, err := runFirstRunAsk(t, "\n\n", home, cfg, edit.Snapshot{}, true)
+	if !errors.Is(err, errNoAnswer) {
+		t.Fatalf("err = %v, want errNoAnswer", err)
+	}
+	mustNotExist(t, cfg)
+}
+
+func TestFirstRunNoDSNNoQuestion(t *testing.T) {
+	home, cfg := frEnv(t)
+	_, out, err := runFirstRunAsk(t, "\n\n", home, cfg, edit.Snapshot{}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(strings.ToLower(out), "crash reports") {
+		t.Errorf("output mentions crash reports: %q", out)
+	}
+	if c := readCfg(t, cfg); c != "graph = \"~/notes\"\n" {
+		t.Fatalf("config = %q", c)
+	}
+}
+
+func TestFirstRunCrashConfigChanged(t *testing.T) {
+	home, cfg := frEnv(t)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Dir(filepath.Dir(cfg)))
+	if err := os.MkdirAll(filepath.Dir(cfg), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfg, []byte("editor = \"vim\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, seen, err := userconfig.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	outside := "editor = \"modeless\"\n# edited elsewhere\n"
+	if err := os.WriteFile(cfg, []byte(outside), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = runFirstRunAsk(t, "\n\n\n", home, cfg, seen, true)
+	if err == nil || err.Error() != cfg+" changed while weft was asking; graph not saved" {
+		t.Fatalf("err = %v", err)
+	}
+	if c := readCfg(t, cfg); c != outside {
+		t.Fatalf("config overwritten: %q", c)
+	}
+}
+
+func TestFirstRunCrashKeepsExistingKeys(t *testing.T) {
+	home, cfg := frEnv(t)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Dir(filepath.Dir(cfg)))
+	seed := "editor = \"vim\"\n"
+	if err := os.MkdirAll(filepath.Dir(cfg), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfg, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, seen, err := userconfig.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := runFirstRunAsk(t, "\n\n\n", home, cfg, seen, true); err != nil {
+		t.Fatal(err)
+	}
+	if c := readCfg(t, cfg); c != seed+"graph = \"~/notes\"\ncrash_reports = false\n" {
+		t.Fatalf("config = %q", c)
+	}
+	got, _, err := userconfig.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Editor != userconfig.Vim || got.Graph != filepath.Join(home, "notes") || got.CrashReports || !got.CrashReportsSet {
+		t.Fatalf("loaded %+v", got)
+	}
+}
+
+func TestAsksCrashReports(t *testing.T) {
+	cases := []struct {
+		name   string
+		hasDSN bool
+		cfg    userconfig.Config
+		want   bool
+	}{
+		{"dsn, unset", true, userconfig.Config{}, true},
+		{"no dsn, unset", false, userconfig.Config{}, false},
+		{"dsn, set true", true, userconfig.Config{CrashReports: true, CrashReportsSet: true}, false},
+		{"dsn, set false", true, userconfig.Config{CrashReportsSet: true}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := asksCrashReports(tc.hasDSN, tc.cfg); got != tc.want {
+				t.Errorf("asksCrashReports = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
