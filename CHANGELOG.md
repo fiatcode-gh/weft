@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-10-16
+
+weft v3: a weft-owned editor with undo, selection, find and a live preview, tags as page links, task dates and an agenda, a calendar, capture and a journal template, folding and heading links, a configurable layout for Obsidian-style notes, a page tree, live reload, page rename, a command palette, a sidebar, mouse support, an opt-in vim mode, a first-run prompt and opt-in crash reports. Read the Breaking list before upgrading: each entry has a migration note.
+
 ### Breaking
 
 - `j`/`k`, the arrow keys, `Ctrl+D`/`Ctrl+U` and `g`/`G` move a row cursor in the read view; the page scrolls when the cursor reaches the window edge. Migration: none to read a page; the cursor row is what `e` and `Tab` act on.
