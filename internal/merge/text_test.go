@@ -21,6 +21,9 @@ func TestText(t *testing.T) {
 		{"empty base, theirs adds text", "", "", "y", "y", false, []int{1}},
 		{"CRLF, no state change", "a\r\nb", "a\r\nb\r\nm", "t\r\na\r\nb", "t\r\na\r\nb\r\nm", false, []int{1, 2, 3, 4}},
 		{"CRLF both append", "a\r\nb", "a\r\nb\r\nm", "a\r\nb\r\nt", "a\r\nb\r\nm\r\nt", false, []int{0, 1, 2, 4}},
+		{"lone CR ends the text, kept", "x\nabc\r", "x\nabc\r", "y\nabc\r", "y\nabc\r", false, []int{0, 1, 2}},
+		{"lone CR ends CRLF text, kept", "x\r\nabc\r", "x\r\nabc\r", "y\r\nabc\r", "y\r\nabc\r", false, []int{0, 1, 2}},
+		{"mixed terminators, final newline removed", "a\nb\n", "a\nb", "a\nb\nc\r\n", "a\nb\nc", false, []int{0, 1, 3}},
 		{"overlapping edit conflicts", "a\nb\nc", "a\nX\nc", "a\nY\nc", "", true, nil},
 	}
 	for _, tt := range tests {

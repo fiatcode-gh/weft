@@ -72,7 +72,9 @@ func (b *Buffer) SetTaskStamp(kind graph.StampKind, date string) (changed, ok bo
 		}
 		b.edit(func() {
 			b.replace(Range{Pos{idx, 0}, Pos{idx, len(old)}}, text)
-			cur.Col = min(cur.Col, len(text))
+			if cur.Line == idx {
+				cur.Col = min(cur.Col, len(text))
+			}
 			b.cursor, b.hasAnchor = cur, false
 		})
 		return true, true

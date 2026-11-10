@@ -165,6 +165,17 @@ func TestSetTaskStampCursor(t *testing.T) {
 	}
 }
 
+func TestSetTaskStampRewriteKeepsCursorOnOtherLine(t *testing.T) {
+	const title = "- TODO a long task title that runs well past the stamp line width"
+	b := stampBuf(title+"\n  SCHEDULED: <2026-05-25 Mon>", 0, 50)
+	if changed, ok := b.SetTaskStamp(graph.StampScheduled, "2026-05-26"); !changed || !ok {
+		t.Fatalf("SetTaskStamp = (%v,%v)", changed, ok)
+	}
+	if want := (Pos{0, 50}); b.cursor != want {
+		t.Errorf("cursor %v, want %v", b.cursor, want)
+	}
+}
+
 func TestSetTaskStampCRLF(t *testing.T) {
 	b := stampBuf("- TODO x\r\n- y\r\n", 0, 0)
 	b.SetTaskStamp(graph.StampScheduled, "2026-05-25")
