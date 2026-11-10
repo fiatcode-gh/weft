@@ -9,28 +9,40 @@ import "strings"
 // terminator never changes a line count).
 func Text(base, mine, theirs string) Result {
 	baseNL, mineNL, theirsNL := hasFinalNewline(base), hasFinalNewline(mine), hasFinalNewline(theirs)
-	keep := theirsNL
+	keep, decider := theirsNL, theirs
 	if mineNL != baseNL {
-		keep = mineNL
+		keep, decider = mineNL, mine
 	}
 
-	res := Lines(terminated(base), terminated(mine), terminated(theirs))
+	res := Lines(base+terminatorIfMissing(base), mine+terminatorIfMissing(mine), theirs+terminatorIfMissing(theirs))
 	if res.Conflict || keep || res.Text == "" {
 		return res
 	}
-	res.Text = strings.TrimSuffix(strings.TrimSuffix(res.Text, "\n"), "\r")
+	// Remove the terminator Text added to the final line: its "\n" and any "\r" before it,
+	// except a "\r" that is the deciding input's own last byte (content, not terminator).
+	res.Text = strings.TrimSuffix(res.Text, "\n")
+	if terminator(decider) == "\r\n" || !strings.HasSuffix(decider, "\r") {
+		res.Text = strings.TrimSuffix(res.Text, "\r")
+	}
 	return res
 }
 
 func hasFinalNewline(s string) bool { return strings.HasSuffix(s, "\n") }
 
-// terminated appends a line terminator to a non-empty s lacking one, matching s's last line break.
-func terminated(s string) string {
+// terminatorIfMissing is the line terminator Text appends to s: none for an
+// empty s or one already ending in "\n", else s's last line break ("\r\n" or "\n").
+func terminatorIfMissing(s string) string {
 	if s == "" || hasFinalNewline(s) {
-		return s
+		return ""
 	}
+	return terminator(s)
+}
+
+// terminator is the line break s's last "\n" uses: "\r\n" when that "\n" follows
+// a "\r", else "\n".
+func terminator(s string) string {
 	if i := strings.LastIndexByte(s, '\n'); i > 0 && s[i-1] == '\r' {
-		return s + "\r\n"
+		return "\r\n"
 	}
-	return s + "\n"
+	return "\n"
 }
