@@ -4,17 +4,15 @@
 package sync
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 )
 
 // syncTimeout bounds every individual git invocation so a hung command (dead
-// network, credential prompt on a non-interactive process) can't block the
+// network, stalled transport) can't block the
 // async sync goroutine forever. Overridable so tests can force a deadline.
 var syncTimeout = 2 * time.Minute
 
@@ -31,14 +29,7 @@ type Result struct {
 // Run performs commit -> pull --rebase -> push against repoDir. now is the
 // commit-timestamp source, injected so callers (and tests) stay deterministic.
 func Run(repoDir string, now time.Time) Result {
-	run := func(args ...string) (string, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), syncTimeout)
-		defer cancel()
-		cmd := exec.CommandContext(ctx, "git", args...)
-		cmd.Dir = repoDir
-		out, err := cmd.CombinedOutput()
-		return string(out), err
-	}
+	run := newGitRunner(repoDir)
 	// Preflight: must be inside a git work tree.
 	if out, err := run("rev-parse", "--is-inside-work-tree"); err != nil {
 		return Result{Stage: "preflight", Output: out, Err: err}
@@ -71,7 +62,7 @@ func Run(repoDir string, now time.Time) Result {
 	}
 
 	// Commit local changes, if any.
-	status, err := run("status", "--porcelain")
+	status, err := run("--no-optional-locks", "status", "--porcelain")
 	if err != nil {
 		return failWith("status", status, err)
 	}

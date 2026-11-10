@@ -92,7 +92,11 @@ an intentional UI change, run with `-update` and visually diff the golden before
   for the `S` keybind (async, reported via a status-bar hint, failure output
   appended to `weft.log` under the user cache dir, per `internal/views/logpath.go`);
   the read-only `Status` reports whether the work tree
-  is dirty or ahead of upstream, driving the status-bar `●` indicator. Never
+  is dirty or ahead of upstream, driving the status-bar `●` indicator. Both run git
+  through `newGitRunner` (`git.go`): per-call timeout that kills git's whole process
+  group, `GIT_TERMINAL_PROMPT=0`, ssh `BatchMode=yes` unless the user set
+  `GIT_SSH_COMMAND`/`GIT_SSH`/`core.sshCommand`, no controlling terminal on unix, and
+  `--no-optional-locks` on status so the user's own git commands never hit `index.lock`. Never
   edits a conflicted tree — conflicts bail to the shell.
 - `internal/views/` — Bubble Tea models: `app` (root), `page`, `picker`, `search`,
   `backlinks`, `todos`, `agenda`, `calendar`, `onthisday`, `tree`, `sidebar`, `capture`, `help`, `palette`, `editor` (in-app markdown editor). `sidebar.go` is the left sidebar (`1`-`5`, `|`): it hosts one instance of the tree, linked-only backlinks, todos, agenda and calendar panels, owns the page-width split (`pageWidth`), routes keys while focused (after overlays, before the action table), and refreshes its panels after every index change and page change through the `App.Update` wrapper (`syncSidebar`). `actions.go` is the read-view action table (`readActions`): each key's action, its help row and whether the palette (`palette.go`, `:`) lists it; a new read-view key is a table entry, never a case in `App.Update` (`TestReadViewKeysOnlyThroughTable`, `TestActionsHaveHelpRows` enforce it). Mouse messages are a case in `App.update` that only calls `mouse.go`; list panels take their window from `listBox.window`/`groupWindow`. Editor, prompt and panel keys stay in their own `Update` and the hand-written `editorHelp`/`findHelp` groups. `mouse.go` handles mouse messages: one funnel in key-routing order, every effect through the key's code path; list hit-testing goes through `rowMap` on `listBox`; keys reach list panels through `sendKey`, which drops a click's window anchor. `editor_mouse.go` is the editor's click and wheel. `reload.go` is live reload: the 2 s poll tick (`App.pollTick`, injected in tests), change detection against `diskSig`, and the editor refresh. The backlinks
