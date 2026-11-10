@@ -1,6 +1,7 @@
 package buffer
 
 import (
+	"math/rand"
 	"strings"
 	"testing"
 )
@@ -325,7 +326,7 @@ func TestReplaceAllOneStepMinimal(t *testing.T) {
 		t.Fatalf("edits = %d", len(g.edits))
 	}
 	e := g.edits[0]
-	if e.removed != orig+"\n" || e.inserted != "CHANGED\n" {
+	if e.removed.String() != orig+"\n" || e.inserted.String() != "CHANGED\n" {
 		t.Fatalf("recorded %q → %q", e.removed, e.inserted)
 	}
 	if !b.Undo() || !b.EqualString(old) {
@@ -619,4 +620,84 @@ func TestUndoMarkSquash(t *testing.T) {
 			t.Fatal("Squash must not touch redo")
 		}
 	})
+}
+
+func TestUndoLoneCRBeforeLineBreak(t *testing.T) {
+	const orig = "a\rb"
+	b := New(orig)
+	at(b, 0, 3)
+	b.Backspace()
+	b.Break()
+	b.Insert("\n")
+	b.SelectAll()
+	b.Delete()
+
+	for b.Undo() {
+	}
+	if b.String() != orig {
+		t.Fatalf("after undoing everything got %q, want %q", b.String(), orig)
+	}
+}
+
+// Replaying history must rebuild the exact lines: "a\r" ended by "\n" and "a" ended by
+// "\r\n" share their bytes, but later entries address columns of the former.
+func TestUndoRedoRoundTripRandomWithLoneCR(t *testing.T) {
+	pieces := []string{"a", "b", " ", "\r", "\n", "\r\n", "\r\r", "é"}
+	rng := rand.New(rand.NewSource(1))
+	text := func() string {
+		var sb strings.Builder
+		for n := rng.Intn(6); n > 0; n-- {
+			sb.WriteString(pieces[rng.Intn(len(pieces))])
+		}
+		return sb.String()
+	}
+	for run := 0; run < 300; run++ {
+		orig := text() + text()
+		b := New(orig)
+		var before []string // before[i]: the text before undo group i
+		for step := 0; step < 25; step++ {
+			prev, groups := b.String(), len(b.undo)
+			l := rng.Intn(b.Len())
+			b.MoveTo(Pos{l, rng.Intn(len(b.Line(l)) + 1)}, false)
+			if rng.Intn(3) == 0 {
+				l := rng.Intn(b.Len())
+				b.MoveTo(Pos{l, rng.Intn(len(b.Line(l)) + 1)}, true)
+			}
+			switch rng.Intn(5) {
+			case 0:
+				b.Insert(text())
+			case 1:
+				b.Backspace()
+			case 2:
+				b.Delete()
+			case 3:
+				b.Insert("\n")
+			case 4:
+				b.ReplaceAll(text() + text())
+			}
+			b.Break()
+			if len(b.undo) > groups {
+				before = append(before, prev)
+			}
+		}
+		final := b.String()
+		if len(before) != len(b.undo) {
+			t.Fatalf("run %d: %d undo groups for %d recorded steps", run, len(b.undo), len(before))
+		}
+		for i := len(before) - 1; i >= 0; i-- {
+			if !b.Undo() || b.String() != before[i] {
+				t.Fatalf("run %d: undo group %d gave %q, want %q", run, i, b.String(), before[i])
+			}
+		}
+		for b.Undo() {
+		}
+		if b.String() != orig {
+			t.Fatalf("run %d: undid everything to %q, want %q", run, b.String(), orig)
+		}
+		for b.Redo() {
+		}
+		if b.String() != final {
+			t.Fatalf("run %d: redid everything to %q, want %q", run, b.String(), final)
+		}
+	}
 }

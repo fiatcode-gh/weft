@@ -11,10 +11,10 @@ const (
 	coalesceDelete
 )
 
-// edit is one replacement: removed and inserted carry exact terminators.
+// edit is one replacement: removed and inserted carry exact lines and terminators.
 type edit struct {
 	at                Pos
-	removed, inserted string
+	removed, inserted chunk
 }
 
 type state struct {
@@ -95,8 +95,9 @@ func (b *Buffer) replace(r Range, raw string) {
 		b.beginGroup()
 		defer b.endGroup()
 	}
-	b.pending.edits = append(b.pending.edits, edit{at: r.Start, removed: b.raw(r), inserted: raw})
-	b.splice(r, raw)
+	inserted := parseChunk(raw)
+	b.pending.edits = append(b.pending.edits, edit{at: r.Start, removed: b.cut(r), inserted: inserted})
+	b.splice(r, inserted)
 	b.version++
 }
 
@@ -297,7 +298,7 @@ func (b *Buffer) Undo() bool {
 	b.undo = b.undo[:len(b.undo)-1]
 	for i := len(g.edits) - 1; i >= 0; i-- {
 		e := g.edits[i]
-		b.splice(Range{e.at, endPos(e.at, e.inserted)}, e.removed)
+		b.splice(Range{e.at, e.inserted.end(e.at)}, e.removed)
 	}
 	b.setState(g.before)
 	b.redo = append(b.redo, g)
@@ -313,7 +314,7 @@ func (b *Buffer) Redo() bool {
 	g := b.redo[len(b.redo)-1]
 	b.redo = b.redo[:len(b.redo)-1]
 	for _, e := range g.edits {
-		b.splice(Range{e.at, endPos(e.at, e.removed)}, e.inserted)
+		b.splice(Range{e.at, e.removed.end(e.at)}, e.inserted)
 	}
 	b.setState(g.after)
 	b.undo = append(b.undo, g)
