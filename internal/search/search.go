@@ -4,7 +4,6 @@
 package search
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -114,30 +113,48 @@ func batches(files []string) [][]string {
 	return out
 }
 
+// rgData is rg's encoding of arbitrary data: {"text":...} when it is valid
+// UTF-8, otherwise {"bytes":"<base64>"}.
+type rgData struct {
+	Text  string `json:"text"`
+	Bytes []byte `json:"bytes"`
+}
+
+func (d rgData) String() string {
+	if d.Text != "" {
+		return d.Text
+	}
+	return string(d.Bytes)
+}
+
+// parseJSON decodes rg's newline-delimited JSON records into hits. Records are
+// split on newlines rather than scanned with a bounded buffer, so a single
+// huge matching line (a pasted base64 image) cannot abort the parse; records
+// that fail to decode are skipped.
 func parseJSON(b []byte) ([]Hit, error) {
 	var out []Hit
-	sc := bufio.NewScanner(bytes.NewReader(b))
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for sc.Scan() {
+	for len(b) > 0 {
+		var line []byte
+		line, b, _ = bytes.Cut(b, []byte{'\n'})
 		var env struct {
 			Type string `json:"type"`
 			Data struct {
-				Path       struct{ Text string } `json:"path"`
-				Lines      struct{ Text string } `json:"lines"`
-				LineNumber int                   `json:"line_number"`
+				Path       rgData `json:"path"`
+				Lines      rgData `json:"lines"`
+				LineNumber int    `json:"line_number"`
 				Submatches []struct {
 					Start int `json:"start"`
 					End   int `json:"end"`
 				} `json:"submatches"`
 			} `json:"data"`
 		}
-		if err := json.Unmarshal(sc.Bytes(), &env); err != nil {
+		if err := json.Unmarshal(line, &env); err != nil {
 			continue
 		}
 		if env.Type != "match" {
 			continue
 		}
-		ctx := strings.TrimRight(env.Data.Lines.Text, "\r\n")
+		ctx := strings.TrimRight(env.Data.Lines.String(), "\r\n")
 		// Strip leading whitespace from indented bullets so list rows line
 		// up. Match spans are byte offsets into the *original* line, so we
 		// also shift them by the number of bytes we trimmed.
@@ -161,14 +178,11 @@ func parseJSON(b []byte) ([]Hit, error) {
 			spans = append(spans, Span{Start: start, End: end})
 		}
 		out = append(out, Hit{
-			FilePath: env.Data.Path.Text,
+			FilePath: env.Data.Path.String(),
 			Line:     env.Data.LineNumber,
 			Context:  ctx,
 			Matches:  spans,
 		})
-	}
-	if err := sc.Err(); err != nil {
-		return out, fmt.Errorf("scan rg output: %w", err)
 	}
 	return out, nil
 }
