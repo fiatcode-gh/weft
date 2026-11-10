@@ -301,7 +301,10 @@ func (p *Preview) factsOf(text string) *chunkFacts {
 	}
 	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if d, ok := n.(*ast.LinkReferenceDefinition); ok && entering {
-			if s := serialiseDefinition(d); !strings.ContainsFunc(s, func(r rune) bool { return r >= 0xE000 && r <= 0xE01F }) {
+			// A tag or wiki link in the title became a sentinel; the title is
+			// never drawn, so the definition rides along without it. A
+			// sentinel in the label or destination changes the link itself.
+			if s := serialiseDefinition(d, !hasSentinel(string(d.Title))); !hasSentinel(s) {
 				f.refs = append(f.refs, s)
 			}
 		}
@@ -311,9 +314,13 @@ func (p *Preview) factsOf(text string) *chunkFacts {
 	return f
 }
 
-func serialiseDefinition(d *ast.LinkReferenceDefinition) string {
+func hasSentinel(s string) bool {
+	return strings.ContainsFunc(s, func(r rune) bool { return r >= 0xE000 && r <= 0xE01F })
+}
+
+func serialiseDefinition(d *ast.LinkReferenceDefinition, withTitle bool) string {
 	s := "[" + string(d.Label) + "]: <" + string(d.Destination) + ">"
-	if d.Title != nil {
+	if withTitle && d.Title != nil {
 		s += ` "` + strings.ReplaceAll(string(d.Title), `"`, `\"`) + `"`
 	}
 	return s
