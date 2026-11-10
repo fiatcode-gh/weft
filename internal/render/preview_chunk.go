@@ -22,6 +22,8 @@ var (
 	html1Re       = regexp.MustCompile(`(?i)^ {0,3}<(script|pre|style|textarea)([ \t>]|$)`)
 	html1EndRe    = regexp.MustCompile(`(?i)</(script|pre|style|textarea)>`)
 	html4Re       = regexp.MustCompile(`^ {0,3}<![A-Za-z]`)
+	html6Re       = regexp.MustCompile(`(?i)^ {0,3}</?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:[ \t]|/?>|$)`)
+	html7Re       = regexp.MustCompile(`^ {0,3}(?:<([A-Za-z][A-Za-z0-9-]*)(?:[ \t]+[A-Za-z_:][A-Za-z0-9_.:-]*(?:[ \t]*=[ \t]*(?:[^ \t"'=<>` + "`" + `]+|'[^']*'|"[^"]*"))?)*[ \t]*/?>|</([A-Za-z][A-Za-z0-9-]*)[ \t]*>)[ \t]*$`)
 )
 
 // chunkState carries the forward pass between lines. It holds only values, so
@@ -31,7 +33,8 @@ type chunkState struct {
 	logFence, qFence, mFence graph.FenceState
 	gmFence                  byte // marker of the open CommonMark fence; 0 = none
 	gmLen                    int
-	html                     uint8 // open HTML block type 1-5; 0 = none
+	html                     uint8 // open HTML block type 1-7; 0 = none
+	stepped                  bool  // stepBlocks has seen a line
 	top                      byte  // last top-level block: bullet marker, '1' ordered, '?' empty item, 0 other
 	prevBlank, lastHTML      bool
 	lastDef, sawCR           bool
@@ -149,7 +152,7 @@ func (c *chunkState) quiescent() bool {
 }
 
 // stepBlocks tracks the CommonMark structure of a kept line: top-level
-// fences, HTML blocks 1-5, HTML and definition-list adjacency, and the kind of
+// fences, HTML blocks 1-7, HTML and definition-list adjacency, and the kind of
 // the last top-level block.
 func (c *chunkState) stepBlocks(line string) {
 	tl := strings.TrimLeft(line, " ")
@@ -183,6 +186,12 @@ func (c *chunkState) stepBlocks(line string) {
 				c.html = 5
 			case html4Re.MatchString(line) && !strings.Contains(tl[3:], ">"):
 				c.html = 4
+			case html6Re.MatchString(line):
+				c.html = 6
+			case (c.prevBlank || !c.stepped) && html7Starts(line):
+				// Type 7 cannot interrupt a paragraph, so it only opens where
+				// none can be running: after a blank line or at the start.
+				c.html = 7
 			}
 		}
 	}
@@ -199,17 +208,24 @@ func (c *chunkState) stepBlocks(line string) {
 	case !blank && col0 && c.prevBlank && !linkRefDefRe.MatchString(line) && !paraLike(line):
 		c.lastDef = false
 	}
-	if !blank && col0 && c.gmFence == 0 {
-		m := bulletMarker(line)
-		ordered := orderedRe.MatchString(line)
+	// An ordered item indented up to three spaces is still a top-level item.
+	// An indented bullet may be nested, and a wrong bullet would start a chunk
+	// the full document does not, so only column 0 sets a bullet; for an
+	// indented line only an ordered marker counts, which merges at worst.
+	if !blank && c.gmFence == 0 && (col0 || indent <= 3 && tl[0] != '\t') {
+		m := bulletMarker(tl)
+		if !col0 {
+			m = 0
+		}
+		ordered := orderedRe.MatchString(tl)
 		switch {
-		case (m != 0 || ordered) && strings.Trim(listContent(line), " \t") == "":
+		case (m != 0 || ordered) && strings.Trim(listContent(tl), " \t") == "":
 			c.top = '?'
 		case m != 0:
 			c.top = m
 		case ordered:
 			c.top = '1'
-		case c.prevBlank:
+		case col0 && c.prevBlank:
 			c.top = 0
 		}
 	}
@@ -221,6 +237,7 @@ func (c *chunkState) stepBlocks(line string) {
 		c.lastStyled = isRule(line) || atxHeadingRe.MatchString(line) || setextRe.MatchString(line)
 	}
 	c.prevBlank = blank
+	c.stepped = true
 }
 
 // htmlEnds reports whether line closes the open HTML block.
@@ -236,6 +253,22 @@ func (c *chunkState) htmlEnds(line string) bool {
 		return strings.Contains(line, ">")
 	case 5:
 		return strings.Contains(line, "]]>")
+	case 6, 7:
+		return blankLine(line)
 	}
 	return false
+}
+
+// html7Starts reports whether line is a lone open or closing tag that is not
+// one of the type 1 names, which opens an HTML block of CommonMark type 7.
+func html7Starts(line string) bool {
+	m := html7Re.FindStringSubmatch(line)
+	if m == nil {
+		return false
+	}
+	switch strings.ToLower(m[1] + m[2]) {
+	case "script", "style", "pre", "textarea":
+		return false
+	}
+	return true
 }
