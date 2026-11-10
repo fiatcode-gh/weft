@@ -239,6 +239,27 @@ func TestStatusBarTruncatesLongLeft(t *testing.T) {
 	}
 }
 
+// TestStatusBarLeavesBottomRightCellBlank pins the blank last column: the
+// status line is the screen's last row, and a changing bottom-right cell
+// leaves stale glyphs in kitty (see statusBar).
+func TestStatusBarLeavesBottomRightCellBlank(t *testing.T) {
+	a := bootApp(t)
+	a.Update(tea.WindowSizeMsg{Width: 40, Height: 24})
+	cases := map[string]func(){
+		"help":     func() { a.hint, a.unsynced = "", false },
+		"unsynced": func() { a.hint, a.unsynced = "", true },
+		"hint":     func() { a.hint = "✓ synced" },
+	}
+	for name, set := range cases {
+		set()
+		rows := strings.Split(plain(a.statusBar()), "\n")
+		line := []rune(rows[len(rows)-1])
+		if len(line) != 40 || line[39] != ' ' {
+			t.Errorf("%s: status line %q: want 40 cells ending in a blank", name, string(line))
+		}
+	}
+}
+
 // runewidthLen counts visible cells in a single line, ignoring nothing
 // (callers strip ANSI first, with plain).
 func runewidthLen(s string) int {
