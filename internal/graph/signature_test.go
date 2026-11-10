@@ -133,6 +133,62 @@ func TestScanSignatureChanges(t *testing.T) {
 	}
 }
 
+func TestScanSignatureFollowsSymlinkedPage(t *testing.T) {
+	dir, lay := sigTree(t)
+	target := filepath.Join(t.TempDir(), "real.md")
+	if err := os.WriteFile(target, []byte("- linked\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(target, sigEpoch, sigEpoch); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(dir, "pages", "Linked.md")); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+	before := mustScan(t, dir, lay)
+
+	if err := os.WriteFile(target, []byte("- linked, edited\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(target, sigEpoch.Add(time.Hour), sigEpoch.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	if after := mustScan(t, dir, lay); after == before {
+		t.Error("signature did not change after editing a symlinked page's target")
+	}
+	idx, err := BuildIndex(dir, lay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, ok := idx.PageAt(filepath.Join(dir, "pages", "Linked.md"))
+	if !ok {
+		t.Fatal("symlinked page not indexed")
+	}
+	if want := sigEpoch.Add(time.Hour); !p.ModTime.Equal(want) {
+		t.Errorf("ModTime = %v, want the target's %v", p.ModTime, want)
+	}
+}
+
+func TestBrokenSymlinkedPageTolerated(t *testing.T) {
+	dir, lay := sigTree(t)
+	link := filepath.Join(dir, "pages", "Broken.md")
+	if err := os.Symlink(filepath.Join(t.TempDir(), "gone.md"), link); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+
+	if _, err := ScanSignature(dir, lay); err != nil {
+		t.Fatalf("ScanSignature: %v", err)
+	}
+	idx, err := BuildIndex(dir, lay)
+	if err != nil {
+		t.Fatalf("BuildIndex: %v", err)
+	}
+	if _, ok := idx.PageAt(filepath.Join(dir, "pages", "Alpha.md")); !ok {
+		t.Error("walk aborted: healthy page missing")
+	}
+}
+
 func TestScanSignatureIgnoresUnwalked(t *testing.T) {
 	dir, lay := sigTree(t)
 	before := mustScan(t, dir, lay)

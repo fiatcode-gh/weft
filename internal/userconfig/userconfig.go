@@ -161,8 +161,8 @@ func GraphValue(abs, home string) string {
 // longer matches seen. seen must come from a Load whose config had no graph
 // key, and no crash_reports key when crashReports is non-nil; appending at the
 // end is then always a top-level key, since the parser rejects tables. A
-// symlinked config is written through to its target so the link survives; a
-// dangling link is an error and nothing is written.
+// symlinked config is written through to its target so the link survives (edit's
+// write resolves it); a dangling link is an error and nothing is written.
 func SaveFirstRun(path string, seen edit.Snapshot, graph string, crashReports *bool) error {
 	var line bytes.Buffer
 	if err := toml.NewEncoder(&line).Encode(struct {
@@ -174,15 +174,8 @@ func SaveFirstRun(path string, seen edit.Snapshot, graph string, crashReports *b
 	if text != "" && !strings.HasSuffix(text, "\n") {
 		text += "\n"
 	}
-	target := path
-	if fi, err := os.Lstat(path); err == nil && fi.Mode()&os.ModeSymlink != 0 {
-		target, err = filepath.EvalSymlinks(path)
-		if err != nil {
-			return fmt.Errorf("%s is a broken symlink: %w", path, err)
-		}
-	}
 	if crashReports != nil {
 		line.WriteString("crash_reports = " + strconv.FormatBool(*crashReports) + "\n")
 	}
-	return edit.WriteFileIfUnchanged(target, seen, []byte(text+line.String()))
+	return edit.WriteFileIfUnchanged(path, seen, []byte(text+line.String()))
 }
