@@ -175,20 +175,58 @@ func (b *Buffer) Terminator(i int) string {
 	}
 }
 
-// raw returns the exact bytes of r, terminators included.
-func (b *Buffer) raw(r Range) string {
-	if r.Start.Line == r.End.Line {
-		return b.lines[r.Start.Line][r.Start.Col:r.End.Col]
-	}
+// chunk is text as the buffer holds it: line texts and their CRLF flags (the last
+// line is unterminated). History stores chunks instead of raw bytes: a line "a\r"
+// ended by "\n" and a line "a" ended by "\r\n" have the same bytes but are different
+// lines, and later history entries address columns of the real ones.
+type chunk struct {
+	texts []string
+	crlf  []bool
+}
+
+// parseChunk is parseRaw as a chunk.
+func parseChunk(raw string) chunk {
+	texts, flags := parseRaw(raw)
+	return chunk{texts, flags}
+}
+
+// String returns the bytes of c, terminators included.
+func (c chunk) String() string {
 	var sb strings.Builder
-	sb.WriteString(b.lines[r.Start.Line][r.Start.Col:])
-	sb.WriteString(b.Terminator(r.Start.Line))
-	for i := r.Start.Line + 1; i < r.End.Line; i++ {
-		sb.WriteString(b.lines[i])
-		sb.WriteString(b.Terminator(i))
+	for i, t := range c.texts {
+		sb.WriteString(t)
+		if i < len(c.texts)-1 {
+			if c.crlf[i] {
+				sb.WriteString("\r\n")
+			} else {
+				sb.WriteByte('\n')
+			}
+		}
 	}
-	sb.WriteString(b.lines[r.End.Line][:r.End.Col])
 	return sb.String()
+}
+
+// end is the position after inserting c at at.
+func (c chunk) end(at Pos) Pos {
+	last := len(c.texts) - 1
+	if last == 0 {
+		return Pos{at.Line, at.Col + len(c.texts[0])}
+	}
+	return Pos{at.Line + last, len(c.texts[last])}
+}
+
+// cut returns the exact lines of r, terminators included.
+func (b *Buffer) cut(r Range) chunk {
+	if r.Start.Line == r.End.Line {
+		return chunk{[]string{b.lines[r.Start.Line][r.Start.Col:r.End.Col]}, []bool{false}}
+	}
+	n := r.End.Line - r.Start.Line + 1
+	c := chunk{make([]string, n), make([]bool, n)}
+	copy(c.texts, b.lines[r.Start.Line:r.End.Line+1])
+	copy(c.crlf, b.crlf[r.Start.Line:r.End.Line])
+	c.texts[0] = c.texts[0][r.Start.Col:]
+	c.texts[n-1] = c.texts[n-1][:r.End.Col]
+	return c
 }
 
 func (b *Buffer) clampPos(p Pos) Pos {
@@ -214,10 +252,10 @@ func endPos(at Pos, raw string) Pos {
 	return Pos{at.Line + n, len(raw) - strings.LastIndexByte(raw, '\n') - 1}
 }
 
-// splice replaces r with raw without recording history. Terminators of raw are
-// kept; the range's end line keeps its own terminator.
-func (b *Buffer) splice(r Range, raw string) {
-	texts, flags := parseRaw(raw)
+// splice replaces r with c without recording history. Terminators of c are kept; the
+// range's end line keeps its own terminator. c is not modified.
+func (b *Buffer) splice(r Range, c chunk) {
+	texts, flags := slices.Clone(c.texts), slices.Clone(c.crlf)
 	head := b.lines[r.Start.Line][:r.Start.Col]
 	tail := b.lines[r.End.Line][r.End.Col:]
 	last := len(texts) - 1
