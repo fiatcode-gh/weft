@@ -407,6 +407,64 @@ func TestReadSnapshot(t *testing.T) {
 	})
 }
 
+func TestWriteFileIfUnchangedSymlink(t *testing.T) {
+	t.Run("writes through to the target and keeps the link", func(t *testing.T) {
+		dir := t.TempDir()
+		target := filepath.Join(dir, "elsewhere", "real.md")
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(target, []byte("old\n"), 0o640); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(dir, "pages", "link.md")
+		if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, link); err != nil {
+			t.Skipf("symlink unsupported: %v", err)
+		}
+		seen, _ := ReadSnapshot(link)
+
+		if err := WriteFileIfUnchanged(link, seen, []byte("new\n")); err != nil {
+			t.Fatal(err)
+		}
+
+		if fi, err := os.Lstat(link); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("page is no longer a symlink: %v, %v", fi, err)
+		}
+		if got, _ := os.ReadFile(target); string(got) != "new\n" {
+			t.Errorf("target = %q, want new content", got)
+		}
+		if fi, _ := os.Stat(target); fi.Mode().Perm() != 0o640 {
+			t.Errorf("target mode = %v, want 0640 preserved", fi.Mode().Perm())
+		}
+		if left, _ := filepath.Glob(filepath.Join(dir, "*", ".weft-*.tmp")); len(left) != 0 {
+			t.Errorf("temp files left behind: %v", left)
+		}
+	})
+	t.Run("dangling link errors and is left alone", func(t *testing.T) {
+		dir := t.TempDir()
+		missing := filepath.Join(dir, "gone.md")
+		link := filepath.Join(dir, "link.md")
+		if err := os.Symlink(missing, link); err != nil {
+			t.Skipf("symlink unsupported: %v", err)
+		}
+
+		err := WriteFileIfUnchanged(link, Snapshot{}, []byte("new\n"))
+
+		if err == nil {
+			t.Fatal("want an error for a dangling link")
+		}
+		if got, rerr := os.Readlink(link); rerr != nil || got != missing {
+			t.Errorf("link = %q, %v; want unchanged %q", got, rerr, missing)
+		}
+		if _, serr := os.Stat(missing); !errors.Is(serr, os.ErrNotExist) {
+			t.Errorf("target should not be created (stat err %v)", serr)
+		}
+	})
+}
+
 func TestWriteFileIfUnchanged(t *testing.T) {
 	t.Run("unchanged writes", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "a.md")

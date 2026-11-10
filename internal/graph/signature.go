@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"hash/maphash"
 	"io/fs"
+	"os"
+	"path/filepath"
 
 	"github.com/fiatcode-gh/weft/v3/internal/layout"
 )
@@ -19,13 +21,24 @@ type Signature uint64
 func ScanSignature(graphPath string, lay layout.Layout) (Signature, error) {
 	var sb sigBuilder
 	err := walkGraph(graphPath, lay, func(string, ...any) {}, func(rel string, d fs.DirEntry) {
-		info, err := d.Info()
+		info, err := statPage(graphPath, rel, d)
 		sb.add(rel, info, err)
 	})
 	if err != nil {
 		return 0, err
 	}
 	return sb.sum(), nil
+}
+
+// statPage stats a walked page. fs.DirEntry.Info describes a symlink itself,
+// so a symlinked page is stat'ed through the link: its size and modification
+// time are the target's, which is what an edit to the target changes. A
+// broken link fails the stat like any other unreadable file.
+func statPage(graphPath, rel string, d fs.DirEntry) (fs.FileInfo, error) {
+	if d.Type()&fs.ModeSymlink != 0 {
+		return os.Stat(filepath.Join(graphPath, filepath.FromSlash(rel)))
+	}
+	return d.Info()
 }
 
 // Signature is the signature of the walk this index was built from.

@@ -76,7 +76,7 @@ func BuildIndex(graphPath string, lay layout.Layout) (*Index, error) {
 		if day, ok := lay.Journal(rel); ok {
 			meta.Name, meta.IsJournal, meta.Date = stem, true, day
 		}
-		info, err := d.Info()
+		info, err := statPage(graphPath, rel, d)
 		sb.add(rel, info, err)
 		if err == nil {
 			meta.ModTime = info.ModTime()

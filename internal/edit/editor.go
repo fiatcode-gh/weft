@@ -98,12 +98,21 @@ const defaultFileMode os.FileMode = 0o644
 // created by this process and renamed over the original) — acceptable for a
 // single-user local graph, which is weft's only caller.
 //
-// path is assumed to be a regular file (the only kind weft's callers pass) —
-// renaming over a symlink replaces the link, not its target. No fsync is done:
+// A symlink at path is resolved first, so the temp file and the rename act on
+// the link's target: the link survives and the target gets the new content
+// (the graph walk indexes symlinked pages). A dangling link is an error and
+// nothing is written. No fsync is done:
 // rename guarantees atomicity against a process crash, which is the failure
 // this protects against; durability against power loss is out of scope for a
 // local notes TUI.
 func writeFile(path string, data []byte) error {
+	if fi, err := os.Lstat(path); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		resolved, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return fmt.Errorf("%s is a broken symlink: %w", path, err)
+		}
+		path = resolved
+	}
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
