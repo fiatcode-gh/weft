@@ -1109,6 +1109,13 @@ func (a *App) centerOverlay(content string) string {
 // When the page title is too long to fit alongside the right segment, the
 // left segment is truncated with an ellipsis. Without this clamp the bar
 // overflowed the terminal width and wrapped onto a second line.
+//
+// The last column stays blank. The status line is the screen's bottom row,
+// and Bubble Tea's renderer writes the bottom-right cell with autowrap off,
+// then moves left relative to the last column. kitty leaves its cursor one
+// column past the edge after that write, so the move lands one column short
+// and leaves stale glyphs behind (a sync dot, a clipped "? help"). A blank
+// last cell never changes, so the renderer never writes it.
 func (a *App) statusBar() string {
 	left := a.page.StatusLine()
 	var right string
@@ -1134,18 +1141,18 @@ func (a *App) statusBar() string {
 		width = lipgloss.Width(left) + 2 + lipgloss.Width(right)
 	}
 	rightW := lipgloss.Width(right)
-	// Reserve at least one space between left and right.
-	leftBudget := width - rightW - 1
+	// Reserve one space between left and right, and the blank last column.
+	leftBudget := width - rightW - 2
 	if leftBudget < 1 {
 		leftBudget = 1
 	}
 	left = clamp(left, leftBudget)
 	rule := ruleRow(width)
-	gap := width - lipgloss.Width(left) - rightW
+	gap := width - lipgloss.Width(left) - rightW - 1
 	if gap < 1 {
 		gap = 1
 	}
-	return rule + "\n" + left + strings.Repeat(" ", gap) + right
+	return rule + "\n" + left + strings.Repeat(" ", gap) + right + " "
 }
 
 // ruleRow is the faint horizontal rule above the bottom status line, shared by

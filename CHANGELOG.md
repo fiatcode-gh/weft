@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- The status bar no longer leaves stale glyphs at its right end in kitty (a sync dot after syncing, a clipped `? help`). The bar now keeps its last column blank.
+
 ## [3.0.0] - 2026-10-16
 
 weft v3: a weft-owned editor with undo, selection, find and a live preview, tags as page links, task dates and an agenda, a calendar, capture and a journal template, folding and heading links, a configurable layout for Obsidian-style notes, a page tree, live reload, page rename, a command palette, a sidebar, mouse support, an opt-in vim mode, a first-run prompt and opt-in crash reports. Read the Breaking list before upgrading: each entry has a migration note.
