@@ -49,3 +49,11 @@ func TestResolveLinkKeysHeadingsWithHeadingKey(t *testing.T) {
 		t.Errorf("ResolveLink(Nest#%s) unresolved, but HeadingKey(%q) = %q", key, hs[0].Text, key)
 	}
 }
+
+func TestResolveLinkFindsCRLFSetextHeading(t *testing.T) {
+	idx := buildTempIndex(t, map[string]string{"Doc.md": "Intro\r\n=====\r\n\r\ntext\r\n"})
+	got, ok := idx.ResolveLink("Doc#Intro")
+	if !ok || got.Page.Name != "Doc" || got.Heading != "Intro" {
+		t.Errorf("ResolveLink(Doc#Intro) = {%v %q}, %v; want Doc/Intro", got.Page, got.Heading, ok)
+	}
+}

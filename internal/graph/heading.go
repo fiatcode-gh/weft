@@ -47,9 +47,9 @@ func Headings(body string) []Heading {
 	for i, line := range lines {
 		next, hasNext := "", i+1 < len(lines)
 		if hasNext {
-			next = lines[i+1]
+			next = strings.TrimSuffix(lines[i+1], "\r")
 		}
-		if h, ok := st.step(i, line, next, hasNext); ok {
+		if h, ok := st.step(i, strings.TrimSuffix(line, "\r"), next, hasNext); ok {
 			out = append(out, h)
 		}
 	}
