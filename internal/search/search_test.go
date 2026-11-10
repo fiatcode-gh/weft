@@ -102,23 +102,124 @@ func TestParseJSONStripsTrailingCR(t *testing.T) {
 	}
 }
 
-// TestParseJSONSurfacesScannerOverflow guards against silent truncation: a
-// single rg output line longer than the scanner's buffer cap (a pasted log
-// blob inside any note, for instance) must abort with an error, not just
-// stop scanning and quietly drop every hit after it.
-func TestParseJSONSurfacesScannerOverflow(t *testing.T) {
-	// arrange — one line over the 1MB scanner cap, then a valid match
+// TestParseJSONHandlesLineOverOneMiB guards against dropped hits: a single rg
+// output record longer than 1 MiB (a pasted base64 image inside a note, for
+// instance) must neither error nor hide the hits that follow it.
+func TestParseJSONHandlesLineOverOneMiB(t *testing.T) {
+	// arrange — one record over 1 MiB, then a valid match
 	huge := `{"type":"match","data":{"path":{"text":"pages/A.md"},"lines":{"text":"` +
 		strings.Repeat("x", 1100*1024) + `"},"line_number":1,"submatches":[]}}`
 	valid := `{"type":"match","data":{"path":{"text":"pages/B.md"},"lines":{"text":"hit"},"line_number":2,"submatches":[{"start":0,"end":3}]}}`
 	input := []byte(huge + "\n" + valid + "\n")
 
 	// act
-	_, err := parseJSON(input)
+	hits, err := parseJSON(input)
 
-	// assert — truncation must be an error, not silently missing hits
-	if err == nil {
-		t.Fatal("scanner overflow was swallowed; hits after the long line are silently dropped")
+	// assert
+	if err != nil {
+		t.Fatalf("parseJSON err: %v", err)
+	}
+	if len(hits) != 2 || hits[1].FilePath != "pages/B.md" || hits[1].Context != "hit" {
+		t.Fatalf("hits = %d, want both the long line and the later hit: %+v", len(hits), hits)
+	}
+}
+
+// TestParseJSONDecodesBase64Bytes covers rg's {"bytes":"<base64>"} encoding,
+// which it uses in place of {"text":...} for non-UTF-8 data.
+func TestParseJSONDecodesBase64Bytes(t *testing.T) {
+	// arrange — "caf\xe9 hit\n" (Latin-1) and path "pages/\xffA.md"
+	input := []byte(`{"type":"match","data":{"path":{"bytes":"cGFnZXMv/0EubWQ="},"lines":{"bytes":"Y2Fm6SBoaXQK"},"line_number":4,"submatches":[{"match":{"text":"hit"},"start":5,"end":8}]}}` + "\n")
+
+	// act
+	hits, err := parseJSON(input)
+
+	// assert
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 1 {
+		t.Fatalf("hits = %d, want 1", len(hits))
+	}
+	if hits[0].FilePath != "pages/\xffA.md" {
+		t.Errorf("FilePath = %q, want pages/\\xffA.md", hits[0].FilePath)
+	}
+	if hits[0].Context != "caf\xe9 hit" {
+		t.Errorf("Context = %q, want %q", hits[0].Context, "caf\xe9 hit")
+	}
+	if len(hits[0].Matches) != 1 || hits[0].Matches[0] != (Span{Start: 5, End: 8}) {
+		t.Errorf("Matches = %+v, want [{5 8}]", hits[0].Matches)
+	}
+}
+
+func TestRunAndMentionsSurviveHugeLine(t *testing.T) {
+	skipIfNoRipgrep(t)
+
+	// arrange — a >1 MiB matching line, then a normal hit in the same file
+	tmp := t.TempDir()
+	writePage(t, tmp, "Note.md", "alpha "+strings.Repeat("A", 1200*1024)+"\nsecond alpha line\n")
+	files := graphFiles(t, tmp)
+
+	// act
+	runHits, runErr := Run(files, "alpha")
+	mentionHits, mentionErr := Mentions(files, "alpha")
+
+	// assert
+	if runErr != nil || mentionErr != nil {
+		t.Fatalf("Run err: %v, Mentions err: %v", runErr, mentionErr)
+	}
+	for name, hits := range map[string][]Hit{"Run": runHits, "Mentions": mentionHits} {
+		if len(hits) != 2 || hits[1].Context != "second alpha line" {
+			t.Errorf("%s hits = %d, want the huge line and the later hit", name, len(hits))
+		}
+	}
+}
+
+func TestRunReturnsContextAndSpansForLatin1Line(t *testing.T) {
+	skipIfNoRipgrep(t)
+
+	// arrange — a Latin-1 (non-UTF-8) line; rg reports it as bytes, not text
+	tmp := t.TempDir()
+	writePage(t, tmp, "Note.md", "caf\xe9 needle\n")
+
+	// act
+	hits, err := Run(graphFiles(t, tmp), "needle")
+
+	// assert
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 1 {
+		t.Fatalf("hits = %d, want 1", len(hits))
+	}
+	if hits[0].Context != "caf\xe9 needle" {
+		t.Errorf("Context = %q, want %q", hits[0].Context, "caf\xe9 needle")
+	}
+	if len(hits[0].Matches) != 1 || hits[0].Matches[0] != (Span{Start: 5, End: 11}) {
+		t.Errorf("Matches = %+v, want [{5 11}]", hits[0].Matches)
+	}
+}
+
+func TestRunReturnsUsableFilePathForNonUTF8Name(t *testing.T) {
+	skipIfNoRipgrep(t)
+
+	// arrange — a page whose filename is not valid UTF-8
+	tmp := t.TempDir()
+	name := "bad\xffname.md"
+	writePage(t, tmp, name, "needle here\n")
+
+	// act
+	hits, err := Run(graphFiles(t, tmp), "needle")
+
+	// assert
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 1 {
+		t.Fatalf("hits = %d, want 1", len(hits))
+	}
+	want := filepath.Join(tmp, "pages", name)
+	if hits[0].FilePath != want {
+		t.Errorf("FilePath = %q, want %q", hits[0].FilePath, want)
 	}
 }
 
