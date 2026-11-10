@@ -24,7 +24,11 @@ func graphHeadings(body string) []levelAt {
 }
 
 func scannerHeadings(body string) []levelAt {
-	src := strLines(strings.Split(body, "\n"))
+	lines := strings.Split(body, "\n")
+	for i, l := range lines {
+		lines[i] = strings.TrimSuffix(l, "\r") // the buffer keeps terminators off the line text
+	}
+	src := strLines(lines)
 	sc := NewScanner()
 	var out []levelAt
 	for i := range src {
@@ -42,6 +46,8 @@ func TestGraphHeadingsAgreeWithScanner(t *testing.T) {
 		"list continuation": "- a\n  text\n  ---\n- b\nPara\n---\n> quote\n---\n1. one\n   more\n   ===\n",
 		"rule and setext":   "text\n***\n\ntext\n- - -\n\nTitle\n=\nTitle2\n--\n",
 		"tilde fence":       "~~~\n# no\n```\n# no\n~~~\n# yes\n",
+		"crlf":              "One\r\n===\r\n\r\nTwo\r\n---\r\n# h\r\n```\r\n# no\r\n```\r\n",
+		"fence grammar":     "```x``` inline\n# yes\n```js\n# no\n```bash\n# no\n```\n# yes2\n````\n# no\n```\n# no\n````\n# yes3\n",
 	}
 	files, err := filepath.Glob("../../testdata/fixture-graph/*/*.md")
 	if err != nil || len(files) == 0 {

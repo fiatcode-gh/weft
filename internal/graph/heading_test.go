@@ -22,6 +22,12 @@ func TestHeadings(t *testing.T) {
 		{"setext", "One\n===\n\nTwo\n---\n", []Heading{
 			{Line: 0, Under: true, Level: 1, Text: "One"}, {Line: 3, Under: true, Level: 2, Text: "Two"},
 		}},
+		{"setext crlf", "One\r\n=====\r\n\r\nTwo\r\n---\r\n", []Heading{
+			{Line: 0, Under: true, Level: 1, Text: "One"}, {Line: 3, Under: true, Level: 2, Text: "Two"},
+		}},
+		{"atx crlf", "## b\r\n", []Heading{{Line: 0, Level: 2, Text: "b"}}},
+		{"inline triple backticks is no fence", "```x``` y\n# yes\n", []Heading{{Line: 1, Level: 1, Text: "yes"}}},
+		{"info string does not close a fence", "```\n```js\n# no\n```\n# yes\n", []Heading{{Line: 4, Level: 1, Text: "yes"}}},
 		{"list continuation is not setext", "- item\n  text\n  ---\n", nil},
 		{"table delimiter", "a | b\n---|---\n1 | 2\n", nil},
 		{"fence", "```\n# no\n```\n# yes\n", []Heading{{Line: 3, Level: 1, Text: "yes"}}},

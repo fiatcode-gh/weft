@@ -202,13 +202,13 @@ func classify(st *scanState, idx int, line, next string, hasNext bool) LineInfo 
 		info.Indent = indent
 		switch {
 		case !wasOpen:
-			m := graph.FenceDelimiterRe.FindString(line)
+			m := graph.FenceDelimiterRe.FindStringSubmatchIndex(line)
 			st.opener = idx
 			st.strip = 0
-			for _, c := range displayCells(line[:len(m)-3]) {
+			for _, c := range displayCells(line[:m[2]]) {
 				st.strip += c.w
 			}
-			if f := strings.Fields(line[len(m):]); len(f) > 0 {
+			if f := strings.Fields(line[m[3]:]); len(f) > 0 {
 				st.lang = f[0]
 			} else {
 				st.lang = ""
