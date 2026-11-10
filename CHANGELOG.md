@@ -6,8 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-11-10
+
+A patch release of bug fixes, none breaking.
+
 ### Fixed
 
+- Undo no longer crashes weft, losing unsaved edits, after an edit leaves a lone carriage return (`\r`) at the end of a line.
+- A line starting with inline triple-backtick code (```` ```code``` text ````) no longer hides the rest of the page from the index (TODOs, agenda, backlinks), and a ```` ```js ```` line inside a code block no longer closes it. Code fences follow the CommonMark rules.
+- Setext headings (text underlined with `===` or `---`) in CRLF files now work with heading links, folding and the outline.
+- Sync (`S`) stops at its timeout even when ssh or a remote helper hangs, never shows a git or ssh password prompt on weft's screen (it fails with the reason in `weft.log`), and the background status check no longer makes your own git commands fail with `index.lock: File exists`.
+- Saving a page that is a symlink writes the link's target and keeps the link, and editing that target outside weft triggers live reload.
+- Search no longer fails on a matching line over 1 MiB (which also emptied the unlinked references), and shows hits in non-UTF-8 lines and file names.
+- Live preview matches the read view for link definitions whose title holds a tag or wiki link, ordered lists indented one to three spaces, and code fences inside `<details>`-style HTML blocks.
+- Changing an existing scheduled or deadline date (`Alt+S` / `Alt+E`) no longer moves the cursor on the task's first line.
+- A save that merges with an outside change keeps a final lone `\r`.
+- Moving to another page right after saving and leaving the editor no longer scrolls that page to the edited page's line.
+- Opening a backlink of a page that has no file yet lands on the link, as it does for existing pages.
 - The status bar no longer leaves stale glyphs at its right end in kitty (a sync dot after syncing, a clipped `? help`). The bar now keeps its last column blank.
 
 ## [3.0.0] - 2026-10-16
