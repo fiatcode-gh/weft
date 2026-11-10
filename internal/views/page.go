@@ -493,10 +493,18 @@ func (p *PageView) FollowCursor() string {
 }
 
 // FocusLinkTo positions the link cursor on the first link whose target resolves
-// to name and scrolls it into view. No-op when the page has no such link.
+// to name — or, for a page with no file, spells name case-insensitively, the
+// key BacklinksTo files an unresolved reference under — and scrolls it into
+// view. No-op when the page has no such link.
 func (p *PageView) FocusLinkTo(name string) {
 	for i, l := range p.result.Links {
-		if d, ok := p.idx.ResolveLink(l.Target); ok && d.Page.Key == name {
+		hit := false
+		if d, ok := p.idx.ResolveLink(l.Target); ok {
+			hit = d.Page.Key == name
+		} else {
+			hit = strings.EqualFold(l.Target, name)
+		}
+		if hit {
 			if l.Start >= 0 && l.Start <= len(p.result.Styled) && len(p.full) > 0 {
 				p.revealFull(p.fullRowOf(l.Start))
 			}

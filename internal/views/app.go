@@ -139,7 +139,11 @@ type App struct {
 
 	// pendingPlace is where the read view puts the line the editor's cursor
 	// was on, set on a saved exit and consumed by the reindex that follows.
+	// pendingPage is the page it was saved from: the placement applies only
+	// while that page is still on screen, so navigating before the reindex
+	// lands never carries it to another page.
 	pendingPlace *Anchor
+	pendingPage  string
 
 	// readFrom is where the read view stood when e opened the editor, so an
 	// exit that did not move restores it exactly (placeFromEditor).
@@ -628,7 +632,7 @@ func (a *App) exitPlacement(saved bool) (at Anchor, place, keep bool) {
 // applyPendingPlace moves the page on screen to the anchor an editor exit left
 // behind, once the page has been rebuilt.
 func (a *App) applyPendingPlace() {
-	if a.pendingPlace != nil && a.page != nil {
+	if a.pendingPlace != nil && a.page != nil && a.page.Page() == a.pendingPage {
 		a.placeFromEditor(*a.pendingPlace)
 	}
 	a.pendingPlace = nil
@@ -908,7 +912,7 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Reindex picks up the saved file; its indexLoadedMsg
 					// then places the anchor and refreshes the indicator.
 					if place {
-						a.pendingPlace = &at
+						a.pendingPlace, a.pendingPage = &at, a.page.Page()
 					} else {
 						a.readFrom = nil
 					}
